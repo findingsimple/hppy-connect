@@ -1,2 +1,16 @@
+# OS
 .DS_Store
+
+# Project
 /.scratch
+/bin/
+/coverage.*
+
+# Credentials
+*.yaml
+!*_test.yaml
+.env
+.env.*
+
+# Go
+/vendor/
