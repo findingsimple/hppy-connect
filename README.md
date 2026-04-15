@@ -7,6 +7,35 @@ CLI and MCP server for the HappyCo platform API. Built during the 2-day HappyCo 
 
 Both binaries share the same internal API client and configuration.
 
+## Architecture
+
+```
+                    ┌─────────────┐
+                    │  HappyCo    │
+                    │  GraphQL    │
+                    │  API        │
+                    └──────▲──────┘
+                           │
+                    ┌──────┴──────┐
+                    │  Shared Go  │
+                    │  API Client │
+                    │  (internal) │
+                    └──┬──────┬───┘
+                       │      │
+              ┌────────┘      └────────┐
+              │                        │
+        ┌─────▼─────┐          ┌──────▼──────┐
+        │  hppycli   │          │   hppymcp   │
+        │  (Cobra)   │          │   (MCP)     │
+        │            │          │             │
+        │ Developers │          │ AI Clients  │
+        │ Scripts    │          │ Claude      │
+        │ CI/CD      │          │ Cursor      │
+        └────────────┘          └─────────────┘
+```
+
+The shared API client in `internal/` handles authentication, Relay-style cursor pagination, retries with exponential backoff, and mid-pagination auth recovery. Both binaries are thin frontends over this shared logic.
+
 ## Installation
 
 ### From source
@@ -73,6 +102,10 @@ go install github.com/findingsimple/hppy-connect/cmd/hppymcp@latest
 |------|-------------|
 | `--config` | Path to config file (default `~/.hppycli.yaml`) |
 | `--output` | Output format: `text`, `json`, `csv`, `raw` (default `text`) |
+| `--email` | HappyCo email (overrides config file) |
+| `--account-id` | HappyCo account ID (overrides config file) |
+| `--endpoint` | GraphQL endpoint URL (overrides config file) |
+| `--debug` | Enable debug logging to stderr |
 
 ### List Filters
 
@@ -80,14 +113,42 @@ The `inspections list` and `workorders list` commands support these filter flags
 
 | Flag | Description |
 |------|-------------|
-| `--limit` | Maximum number of results (0 = default cap) |
-| `--status` | Filter by status (single value) |
+| `--limit` | Maximum number of results (0 = default cap of 1000) |
+| `--status` | Filter by status (see [Status Values](#status-values) below) |
 | `--property-id` | Filter by property ID |
 | `--unit-id` | Filter by unit ID (mutually exclusive with `--property-id`) |
 | `--created-after` | Filter by creation date (RFC 3339 or YYYY-MM-DD) |
 | `--created-before` | Filter by creation date (RFC 3339 or YYYY-MM-DD) |
 
 The `properties list` command only supports `--limit`.
+
+### Status Values
+
+| Entity | Valid Statuses |
+|--------|---------------|
+| Work Orders | `OPEN`, `ON_HOLD`, `COMPLETED` |
+| Inspections | `COMPLETE`, `EXPIRED`, `INCOMPLETE`, `SCHEDULED` |
+
+Status values are case-insensitive (e.g. `--status open` is normalised to `OPEN`).
+
+### Examples
+
+```bash
+# List open work orders for a property
+hppycli workorders list --property-id 225393 --status OPEN
+
+# Export inspections to CSV
+hppycli inspections list --output csv > inspections.csv
+
+# JSON output piped to jq
+hppycli workorders list --output json | jq '.items | length'
+
+# Filter by date range
+hppycli inspections list --created-after 2026-01-01 --created-before 2026-04-01
+
+# Raw GraphQL response for debugging
+hppycli workorders list --output raw
+```
 
 ## MCP Server Setup
 
@@ -105,17 +166,29 @@ The output is a JSON snippet to add to your client's MCP configuration. The serv
 
 ### MCP Tools
 
-The MCP server exposes tools for listing properties, units, inspections, and work orders, plus retrieving account details.
+| Tool | Description | Parameters |
+|------|-------------|------------|
+| `get_account` | Get authenticated account info (name, ID) | None |
+| `list_properties` | List all properties with name, address, creation date | `limit` |
+| `list_units` | List units within a property | `property_id` (required), `limit` |
+| `list_work_orders` | List work orders with optional filters | `property_id`, `unit_id`, `status`, `created_after`, `created_before`, `limit` |
+| `list_inspections` | List inspections with optional filters | `property_id`, `unit_id`, `status`, `created_after`, `created_before`, `limit` |
+
+Date parameters use ISO 8601 format (e.g. `2026-01-15T00:00:00Z`). Status values are the same as the CLI (see [Status Values](#status-values)).
 
 ### MCP Resources
 
-- `happyco://account` — current account information
-- `happyco://properties/{property_id}` — property details including address and unit count
+| URI | Description |
+|-----|-------------|
+| `happyco://account` | Current account information (name, ID) |
+| `happyco://properties/{property_id}` | Property details including address and unit count |
 
 ### MCP Prompts
 
-- `property_summary` — summarise units and open work orders for a property
-- `maintenance_report` — generate a maintenance status report with work orders and inspections
+| Prompt | Description | Parameters |
+|--------|-------------|------------|
+| `property_summary` | Summarise units and open work orders for a property | `property_id` (required) |
+| `maintenance_report` | Generate a maintenance status report with work orders and inspections | `property_id` (required), `days_back` (default: 30, max: 365) |
 
 ## Configuration
 
@@ -150,8 +223,8 @@ Flags > Environment variables > Config file > Defaults
 | Format | Description |
 |--------|-------------|
 | `text` | Human-readable table (default) |
-| `json` | JSON array |
-| `csv` | CSV with headers |
+| `json` | Structured JSON with `count`, `returned`, and `items` fields |
+| `csv` | CSV with headers (sanitised against formula injection) |
 | `raw` | Raw GraphQL JSON response |
 
 ```bash
@@ -168,15 +241,51 @@ hppycli workorders list --output csv
 - Auth tokens are stored in memory only (not persisted to disk)
 - All API communication uses HTTPS
 - `config show` masks the password in output
+- MCP server sanitises error messages — internal details (URLs, HTTP codes) are never exposed to AI clients
+- ID parameters are validated against a safe character set before use in API calls
+- CSV output is sanitised against formula injection (cells starting with `=`, `+`, `-`, `@`)
 
 ## Limitations
 
 - **Hackathon scope** — built in 2 days, not production-hardened
 - **Account login only** — requires non-SSO admin credentials (no OAuth/SSO support)
 - **No plugin auth** — single auth mechanism (email/password)
-- **No token refresh** — re-authenticates on each command invocation
 - **Read-only** — CLI and MCP server only query data (no create/update/delete)
 - **No offline mode** — requires network access to the HappyCo API
+
+## Troubleshooting
+
+### Authentication failures
+
+The client authenticates on first use and caches the token in memory (valid for ~1 hour). If a token expires mid-session, the client automatically re-authenticates — including during pagination. Permanent auth failures (bad credentials) trigger a 30-second cooldown to avoid hammering the API; transient errors (network issues, 500s) do not.
+
+```bash
+# Verify credentials work
+hppycli account
+
+# Check your config
+hppycli config show
+
+# Enable debug logging for request details
+hppycli workorders list --debug
+```
+
+### "missing required configuration"
+
+Run `hppycli config init` or set the environment variables `HAPPYCO_EMAIL`, `HAPPYCO_PASSWORD`, and `HAPPYCO_ACCOUNT_ID`.
+
+### Empty results
+
+- Check that `--property-id` or `--unit-id` values are correct
+- Verify the status filter matches the entity type (e.g. `OPEN` is a work order status, not an inspection status)
+- Try without filters to confirm data exists: `hppycli workorders list`
+
+### MCP server not responding
+
+- Verify the binary path in your MCP client config matches the actual location of `hppymcp`
+- Check that `~/.hppycli.yaml` exists and has valid credentials
+- Run `hppymcp` directly to see any startup errors: `hppymcp 2>/tmp/hppymcp.log`
+- Set `debug: true` in config to get detailed logging on stderr
 
 ## Development
 
