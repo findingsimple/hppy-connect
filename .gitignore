@@ -4,6 +4,8 @@
 # Project
 /.scratch
 /bin/
+/hppycli
+/hppymcp
 /coverage.*
 
 # Credentials
