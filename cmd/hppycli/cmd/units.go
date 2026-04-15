@@ -27,7 +27,7 @@ var unitsListCmd = &cobra.Command{
 		opts := models.ListOptions{Limit: limit}
 
 		if outputFormat == "raw" {
-			raw, err := apiClient.ListUnitsRaw(ctx, propertyID)
+			raw, err := apiClient.ListUnitsRaw(ctx, propertyID, limit)
 			if err != nil {
 				return fmt.Errorf("listing units: %w", err)
 			}

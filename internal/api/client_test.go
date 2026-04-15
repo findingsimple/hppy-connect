@@ -27,10 +27,12 @@ func newTestServer(t *testing.T, handler http.HandlerFunc) (*httptest.Server, *C
 	t.Helper()
 	srv := httptest.NewServer(handler)
 	t.Cleanup(srv.Close)
-	c := NewClient("test@example.com", "password", "12345",
-		withInsecureEndpoint(srv.URL),
+	c, err := NewClient("test@example.com", "password", "12345",
+		withInsecureHTTP(),
+		WithEndpoint(srv.URL),
 		withRetryBackoff(fastBackoff),
 	)
+	require.NoError(t, err)
 	// Pre-set a valid token so doQuery doesn't trigger login
 	c.authState.Store(&tokenState{
 		token:     "test-token",
@@ -85,8 +87,9 @@ func TestLoginSuccess(t *testing.T) {
 	srv := httptest.NewServer(loginSuccessHandler())
 	defer srv.Close()
 
-	c := NewClient("test@example.com", "password", "12345", withInsecureEndpoint(srv.URL))
-	err := c.EnsureAuth(context.Background())
+	c, err := NewClient("test@example.com", "password", "12345", withInsecureHTTP(), WithEndpoint(srv.URL))
+	require.NoError(t, err)
+	err = c.EnsureAuth(context.Background())
 	require.NoError(t, err)
 
 	state := c.getAuth()
@@ -100,8 +103,9 @@ func TestLoginFailureGraphqlError(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := NewClient("bad@example.com", "wrong", "12345", withInsecureEndpoint(srv.URL))
-	err := c.EnsureAuth(context.Background())
+	c, err := NewClient("bad@example.com", "wrong", "12345", withInsecureHTTP(), WithEndpoint(srv.URL))
+	require.NoError(t, err)
+	err = c.EnsureAuth(context.Background())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "auth_failed")
 }
@@ -112,8 +116,9 @@ func TestLoginFailureHttp429(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := NewClient("test@example.com", "password", "12345", withInsecureEndpoint(srv.URL))
-	err := c.EnsureAuth(context.Background())
+	c, err := NewClient("test@example.com", "password", "12345", withInsecureHTTP(), WithEndpoint(srv.URL))
+	require.NoError(t, err)
+	err = c.EnsureAuth(context.Background())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "rate_limited")
 }
@@ -124,8 +129,9 @@ func TestLoginFailureHttp500(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := NewClient("test@example.com", "password", "12345", withInsecureEndpoint(srv.URL))
-	err := c.EnsureAuth(context.Background())
+	c, err := NewClient("test@example.com", "password", "12345", withInsecureHTTP(), WithEndpoint(srv.URL))
+	require.NoError(t, err)
+	err = c.EnsureAuth(context.Background())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "api_error")
 }
@@ -136,8 +142,9 @@ func TestLoginFailureHttp400(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := NewClient("test@example.com", "password", "12345", withInsecureEndpoint(srv.URL))
-	err := c.EnsureAuth(context.Background())
+	c, err := NewClient("test@example.com", "password", "12345", withInsecureHTTP(), WithEndpoint(srv.URL))
+	require.NoError(t, err)
+	err = c.EnsureAuth(context.Background())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "auth_failed")
 	assert.Contains(t, err.Error(), "400")
@@ -160,11 +167,12 @@ func TestTokenRefresh(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := NewClient("test@example.com", "password", "12345", withInsecureEndpoint(srv.URL))
+	c, err := NewClient("test@example.com", "password", "12345", withInsecureHTTP(), WithEndpoint(srv.URL))
+	require.NoError(t, err)
 	// Set expired token
 	c.authState.Store(&tokenState{token: "old-token", expiresAt: time.Now().Add(-1 * time.Minute)})
 
-	err := c.EnsureAuth(context.Background())
+	err = c.EnsureAuth(context.Background())
 	require.NoError(t, err)
 	assert.Equal(t, "refreshed-token", c.getAuth().token)
 	assert.Equal(t, int32(1), atomic.LoadInt32(&loginCount))
@@ -188,7 +196,8 @@ func TestConcurrentAuth(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := NewClient("test@example.com", "password", "12345", withInsecureEndpoint(srv.URL))
+	c, err := NewClient("test@example.com", "password", "12345", withInsecureHTTP(), WithEndpoint(srv.URL))
+	require.NoError(t, err)
 
 	var wg sync.WaitGroup
 	for i := 0; i < 10; i++ {
@@ -822,7 +831,15 @@ func TestListPropertiesRawHonoursLimit(t *testing.T) {
 }
 
 func TestListUnitsRaw(t *testing.T) {
+	var receivedFilter map[string]interface{}
 	_, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Variables map[string]interface{} `json:"variables"`
+		}
+		json.NewDecoder(r.Body).Decode(&body)
+		pf, _ := body.Variables["propertiesFilter"].(map[string]interface{})
+		receivedFilter = pf
+
 		json.NewEncoder(w).Encode(gqlResponse(map[string]interface{}{
 			"account": map[string]interface{}{
 				"properties": map[string]interface{}{
@@ -844,9 +861,53 @@ func TestListUnitsRaw(t *testing.T) {
 		}))
 	})
 
-	raw, err := c.ListUnitsRaw(context.Background(), "prop-1")
+	raw, err := c.ListUnitsRaw(context.Background(), "prop-1", 0)
 	require.NoError(t, err)
 	require.NotNil(t, raw, "raw response should not be nil")
+
+	// Verify propertyId was forwarded correctly
+	require.NotNil(t, receivedFilter)
+	propIDs, ok := receivedFilter["propertyId"].([]interface{})
+	require.True(t, ok)
+	assert.Equal(t, "prop-1", propIDs[0])
+
+	// Verify raw response contains expected data
+	var parsed map[string]interface{}
+	require.NoError(t, json.Unmarshal(raw, &parsed))
+	acct := parsed["account"].(map[string]interface{})
+	require.NotNil(t, acct["properties"])
+}
+
+func TestListUnitsRawHonoursLimit(t *testing.T) {
+	var receivedFirst float64
+	_, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Variables map[string]interface{} `json:"variables"`
+		}
+		json.NewDecoder(r.Body).Decode(&body)
+		receivedFirst, _ = body.Variables["first"].(float64)
+		json.NewEncoder(w).Encode(gqlResponse(map[string]interface{}{
+			"account": map[string]interface{}{
+				"properties": map[string]interface{}{
+					"edges": []interface{}{
+						map[string]interface{}{
+							"node": map[string]interface{}{
+								"units": map[string]interface{}{
+									"count":    50,
+									"pageInfo": map[string]interface{}{"hasNextPage": false, "endCursor": ""},
+									"edges":    []interface{}{},
+								},
+							},
+						},
+					},
+				},
+			},
+		}))
+	})
+
+	_, err := c.ListUnitsRaw(context.Background(), "prop-1", 5)
+	require.NoError(t, err)
+	assert.Equal(t, float64(5), receivedFirst, "raw query should use limit as page size")
 }
 
 // --- Login Cooldown Tests ---
@@ -859,7 +920,8 @@ func TestLoginCooldownPreventsHammering(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := NewClient("bad@example.com", "wrong", "12345", withInsecureEndpoint(srv.URL))
+	c, err := NewClient("bad@example.com", "wrong", "12345", withInsecureHTTP(), WithEndpoint(srv.URL))
+	require.NoError(t, err)
 
 	// First attempt should actually call login
 	err1 := c.EnsureAuth(context.Background())
@@ -885,6 +947,99 @@ func TestPaginationEmptyResultMarshalEmptyArray(t *testing.T) {
 	data, err := json.Marshal(items)
 	require.NoError(t, err)
 	assert.Equal(t, "[]", string(data), "empty result should marshal to [] not null")
+}
+
+// --- rawPageFirst ---
+
+func TestRawPageFirst(t *testing.T) {
+	tests := []struct {
+		name  string
+		limit int
+		want  int
+	}{
+		{"zero returns pageSize", 0, pageSize},
+		{"negative returns pageSize", -1, pageSize},
+		{"small limit returns limit", 10, 10},
+		{"limit at boundary returns pageSize", pageSize, pageSize},
+		{"limit above boundary returns pageSize", 200, pageSize},
+		{"limit one below boundary returns limit", pageSize - 1, pageSize - 1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, rawPageFirst(tt.limit))
+		})
+	}
+}
+
+// --- HTTPS Enforcement ---
+
+func TestNewClientRejectsHTTPEndpoint(t *testing.T) {
+	_, err := NewClient("test@example.com", "password", "12345",
+		WithEndpoint("http://example.com"),
+	)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "https://")
+}
+
+func TestNewClientRejectsMalformedEndpoint(t *testing.T) {
+	_, err := NewClient("test@example.com", "password", "12345",
+		WithEndpoint("not-a-url"),
+	)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "https://")
+}
+
+func TestNewClientRejectsEmptyEndpoint(t *testing.T) {
+	_, err := NewClient("test@example.com", "password", "12345",
+		WithEndpoint(""),
+	)
+	require.Error(t, err)
+}
+
+func TestNewClientAcceptsHTTPSEndpoint(t *testing.T) {
+	c, err := NewClient("test@example.com", "password", "12345",
+		WithEndpoint("https://externalgraph.happyco.com"),
+	)
+	require.NoError(t, err)
+	assert.Equal(t, "https://externalgraph.happyco.com", c.endpoint)
+}
+
+func TestNewClientInsecureHTTPBypasses(t *testing.T) {
+	c, err := NewClient("test@example.com", "password", "12345",
+		withInsecureHTTP(),
+		WithEndpoint("http://localhost:8080"),
+	)
+	require.NoError(t, err)
+	assert.Equal(t, "http://localhost:8080", c.endpoint)
+}
+
+// --- Login Cooldown Expiry ---
+
+func TestLoginCooldownExpiresAndRetries(t *testing.T) {
+	var loginCount int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&loginCount, 1)
+		json.NewEncoder(w).Encode(gqlErrorResponse("Invalid credentials"))
+	}))
+	defer srv.Close()
+
+	c, err := NewClient("bad@example.com", "wrong", "12345", withInsecureHTTP(), WithEndpoint(srv.URL))
+	require.NoError(t, err)
+
+	// First attempt — hits the server
+	err1 := c.EnsureAuth(context.Background())
+	require.Error(t, err1)
+	assert.Equal(t, int32(1), atomic.LoadInt32(&loginCount))
+
+	// Simulate cooldown expiry by backdating lastLoginFail
+	c.mu.Lock()
+	c.lastLoginFail = time.Now().Add(-loginCooldown - time.Second)
+	c.mu.Unlock()
+
+	// Second attempt — cooldown expired, should hit the server again
+	err2 := c.EnsureAuth(context.Background())
+	require.Error(t, err2)
+	assert.Equal(t, int32(2), atomic.LoadInt32(&loginCount), "should retry login after cooldown expires")
 }
 
 // --- Helpers ---

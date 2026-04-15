@@ -8,9 +8,9 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"net/url"
 	"math/rand/v2"
 	"net/http"
+	"net/url"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -62,6 +62,7 @@ type Client struct {
 	authState      atomic.Pointer[tokenState]
 	mu             sync.Mutex
 	debug          bool
+	allowInsecure  bool          // testing only — bypasses HTTPS requirement
 	retryBackoff   []time.Duration
 	lastLoginFail  time.Time // protected by mu — prevents login hammering
 	lastLoginError error     // protected by mu — cached error during cooldown
@@ -76,19 +77,8 @@ func WithDebug(debug bool) Option {
 }
 
 // WithEndpoint overrides the default GraphQL endpoint.
-// Use withInsecureEndpoint in tests to bypass the HTTPS check.
+// Validation (HTTPS requirement) is deferred to NewClient.
 func WithEndpoint(endpoint string) Option {
-	return func(c *Client) {
-		u, err := url.Parse(endpoint)
-		if err == nil && u.Scheme != "https" {
-			log.Fatalf("endpoint %q must use https:// (credentials are transmitted)", endpoint)
-		}
-		c.endpoint = endpoint
-	}
-}
-
-// withInsecureEndpoint allows http:// endpoints (for testing only).
-func withInsecureEndpoint(endpoint string) Option {
 	return func(c *Client) { c.endpoint = endpoint }
 }
 
@@ -97,8 +87,14 @@ func withRetryBackoff(backoff []time.Duration) Option {
 	return func(c *Client) { c.retryBackoff = backoff }
 }
 
-// NewClient creates a new API client.
-func NewClient(email, password, accountID string, opts ...Option) *Client {
+// withInsecureHTTP opts out of the HTTPS requirement (for testing only).
+func withInsecureHTTP() Option {
+	return func(c *Client) { c.allowInsecure = true }
+}
+
+// NewClient creates a new API client. Returns an error if the endpoint
+// is not HTTPS (credentials are transmitted over this connection).
+func NewClient(email, password, accountID string, opts ...Option) (*Client, error) {
 	c := &Client{
 		endpoint:     defaultEndpoint,
 		httpClient:   &http.Client{Timeout: 30 * time.Second},
@@ -111,7 +107,15 @@ func NewClient(email, password, accountID string, opts ...Option) *Client {
 	for _, opt := range opts {
 		opt(c)
 	}
-	return c
+
+	if !c.allowInsecure {
+		u, err := url.Parse(c.endpoint)
+		if err != nil || u.Scheme != "https" || u.Host == "" {
+			return nil, fmt.Errorf("endpoint %q must be a valid https:// URL (credentials are transmitted)", c.endpoint)
+		}
+	}
+
+	return c, nil
 }
 
 // EnsureAuth is a public wrapper around ensureAuth for health checks.
@@ -278,6 +282,8 @@ func (c *Client) doQuery(ctx context.Context, query string, variables map[string
 	}
 	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
 		c.invalidateAuth()
+		// TODO: re-authenticate and retry once instead of aborting, so long-running
+		// paginations survive token expiry mid-loop.
 		return errAuth(fmt.Sprintf("HTTP %d", resp.StatusCode))
 	}
 	if resp.StatusCode >= 500 {
@@ -485,6 +491,10 @@ func fetchPageWithRetry[T any](
 	}
 }
 
+// effectiveCap translates a user-supplied limit into a pagination cap.
+// 0 = default cap (1,000); negative = no cap (fetch all); positive = use as cap.
+// Note: the CLI layer rejects negative limits. Negative values are intentionally
+// supported here for programmatic callers (e.g., MCP server) that want all results.
 func effectiveCap(limit int) int {
 	if limit == 0 {
 		return defaultCap
@@ -517,10 +527,10 @@ func (c *Client) ListPropertiesRaw(ctx context.Context, opts models.ListOptions)
 }
 
 // ListUnitsRaw returns the raw GraphQL response for the first page of units.
-func (c *Client) ListUnitsRaw(ctx context.Context, propertyID string) (json.RawMessage, error) {
+func (c *Client) ListUnitsRaw(ctx context.Context, propertyID string, limit int) (json.RawMessage, error) {
 	vars := map[string]interface{}{
 		"accountId":        c.accountID,
-		"first":            pageSize,
+		"first":            rawPageFirst(limit),
 		"propertiesFilter": map[string]interface{}{"propertyId": []string{propertyID}},
 	}
 	var raw json.RawMessage

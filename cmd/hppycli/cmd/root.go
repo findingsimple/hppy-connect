@@ -44,7 +44,9 @@ var rootCmd = &cobra.Command{
 	Short: "HappyCo CLI tool",
 	Long:  "Command-line interface for the HappyCo external GraphQL API.",
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-		// Skip config loading for commands that don't need the API client
+		// Skip config loading for commands that don't need the API client.
+		// Convention: all leaf commands that call the API must use RunE (not Run).
+		// Parent/grouping commands (RunE == nil) just show help and skip auth.
 		if cmd.Name() == "help" || cmd.Name() == "version" || cmd.RunE == nil {
 			return nil
 		}
@@ -103,7 +105,11 @@ Run 'hppycli config init' to create a config file, or set environment variables:
 		if cfg.Endpoint != "" {
 			opts = append(opts, api.WithEndpoint(cfg.Endpoint))
 		}
-		apiClient = api.NewClient(cfg.Email, cfg.Password, cfg.AccountID, opts...)
+		var err2 error
+		apiClient, err2 = api.NewClient(cfg.Email, cfg.Password, cfg.AccountID, opts...)
+		if err2 != nil {
+			return err2
+		}
 
 		return nil
 	},
