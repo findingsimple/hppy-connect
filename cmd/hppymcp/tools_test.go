@@ -199,7 +199,7 @@ func TestToolListProperties(t *testing.T) {
 		result := callTool(t, cs, "list_properties", nil)
 		assert.False(t, result.IsError)
 		text := toolText(t, result)
-		assert.Contains(t, text, `"properties": []`)
+		assert.Contains(t, text, `"properties":[]`)
 		assert.NotContains(t, text, "null")
 	})
 }
@@ -634,7 +634,7 @@ func TestBuildListOpts(t *testing.T) {
 	refStr := refTime.Format(time.RFC3339)
 
 	// Use work order statuses as the default for most tests.
-	woStatuses := validWorkOrderStatuses
+	woStatuses := models.ValidWorkOrderStatuses
 
 	tests := []struct {
 		name          string
@@ -705,7 +705,7 @@ func TestBuildListOpts(t *testing.T) {
 		{
 			name:       "inspection status accepted for inspections",
 			status:     "COMPLETE",
-			statuses:   validInspectionStatuses,
+			statuses:   models.ValidInspectionStatuses,
 			wantStatus: []string{"COMPLETE"},
 		},
 		{
@@ -736,7 +736,7 @@ func TestBuildListOpts(t *testing.T) {
 			name:         "date error does not leak Go internals",
 			createdAfter: "bad",
 			statuses:     woStatuses,
-			wantErr:      "(e.g. 2026-01-15T00:00:00Z)",
+			wantErr:      "(e.g. 2026-01-15T00:00:00Z or 2026-01-15)",
 		},
 		{
 			name:          "inverted date range rejected",
@@ -774,6 +774,24 @@ func TestBuildListOpts(t *testing.T) {
 			unitID:   "unit id with spaces",
 			statuses: woStatuses,
 			wantErr:  "unit_id contains invalid characters",
+		},
+		{
+			name:         "YYYY-MM-DD date accepted for created_after",
+			createdAfter: "2026-01-15",
+			statuses:     woStatuses,
+			wantAfter:    func() *time.Time { t := time.Date(2026, 1, 15, 0, 0, 0, 0, time.UTC); return &t }(),
+		},
+		{
+			name:          "YYYY-MM-DD date accepted for created_before",
+			createdBefore: "2026-04-01",
+			statuses:      woStatuses,
+			wantBefore:    func() *time.Time { t := time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC); return &t }(),
+		},
+		{
+			name:         "invalid calendar date rejected",
+			createdAfter: "2026-02-30",
+			statuses:     woStatuses,
+			wantErr:      "created_after must be ISO 8601 format",
 		},
 	}
 

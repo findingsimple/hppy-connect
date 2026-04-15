@@ -13,6 +13,10 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
+// toolTimeout is the maximum wall-clock duration for a single tool call,
+// preventing slow upstream APIs from holding semaphore slots indefinitely.
+const toolTimeout = 5 * time.Minute
+
 // sem limits concurrent pagination loops to 3.
 var sem = make(chan struct{}, 3)
 
@@ -85,6 +89,8 @@ func registerTools(server *mcp.Server, client apiClient, debug bool) {
 			Description: "List all properties for the authenticated HappyCo account, including name, address, and creation date",
 		},
 		wrapTool(debug, "list_properties", func(ctx context.Context, _ *mcp.CallToolRequest, input ListPropertiesInput) (*mcp.CallToolResult, any, error) {
+			ctx, cancel := context.WithTimeout(ctx, toolTimeout)
+			defer cancel()
 			if err := acquireSem(ctx, sem); err != nil {
 				return toolError(err), nil, nil
 			}
@@ -117,6 +123,8 @@ func registerTools(server *mcp.Server, client apiClient, debug bool) {
 				return toolInputError(err.Error()), nil, nil
 			}
 
+			ctx, cancel := context.WithTimeout(ctx, toolTimeout)
+			defer cancel()
 			if err := acquireSem(ctx, sem); err != nil {
 				return toolError(err), nil, nil
 			}
@@ -142,12 +150,14 @@ func registerTools(server *mcp.Server, client apiClient, debug bool) {
 			Description: "List work orders for the authenticated HappyCo account. Can filter by property, unit, date range, and status",
 		},
 		wrapTool(debug, "list_work_orders", func(ctx context.Context, _ *mcp.CallToolRequest, input ListWorkOrdersInput) (*mcp.CallToolResult, any, error) {
+			ctx, cancel := context.WithTimeout(ctx, toolTimeout)
+			defer cancel()
 			if err := acquireSem(ctx, sem); err != nil {
 				return toolError(err), nil, nil
 			}
 			defer releaseSem(sem)
 
-			opts, err := buildListOpts(input.PropertyID, input.UnitID, input.Status, input.CreatedAfter, input.CreatedBefore, input.Limit, validWorkOrderStatuses)
+			opts, err := buildListOpts(input.PropertyID, input.UnitID, input.Status, input.CreatedAfter, input.CreatedBefore, input.Limit, models.ValidWorkOrderStatuses)
 			if err != nil {
 				return toolInputError(err.Error()), nil, nil
 			}
@@ -171,12 +181,14 @@ func registerTools(server *mcp.Server, client apiClient, debug bool) {
 			Description: "List inspections for the authenticated HappyCo account. Can filter by property, unit, date range, and status",
 		},
 		wrapTool(debug, "list_inspections", func(ctx context.Context, _ *mcp.CallToolRequest, input ListInspectionsInput) (*mcp.CallToolResult, any, error) {
+			ctx, cancel := context.WithTimeout(ctx, toolTimeout)
+			defer cancel()
 			if err := acquireSem(ctx, sem); err != nil {
 				return toolError(err), nil, nil
 			}
 			defer releaseSem(sem)
 
-			opts, err := buildListOpts(input.PropertyID, input.UnitID, input.Status, input.CreatedAfter, input.CreatedBefore, input.Limit, validInspectionStatuses)
+			opts, err := buildListOpts(input.PropertyID, input.UnitID, input.Status, input.CreatedAfter, input.CreatedBefore, input.Limit, models.ValidInspectionStatuses)
 			if err != nil {
 				return toolInputError(err.Error()), nil, nil
 			}
@@ -259,9 +271,11 @@ func toolInputError(msg string) *mcp.CallToolResult {
 	}
 }
 
-// toolJSON marshals a value into a JSON text CallToolResult.
+// toolJSON marshals a value into a compact JSON text CallToolResult.
+// Compact JSON is used because MCP clients (LLMs) do not benefit from indentation
+// and large payloads can be significantly smaller without it.
 func toolJSON(v any) (*mcp.CallToolResult, any, error) {
-	data, err := json.MarshalIndent(v, "", "  ")
+	data, err := json.Marshal(v)
 	if err != nil {
 		log.Printf("[error] failed to marshal response: %v", err)
 		return &mcp.CallToolResult{
@@ -303,24 +317,18 @@ func validateID(name, value string) error {
 	return nil
 }
 
-// Status maps imported from models for single-source-of-truth.
-var (
-	validWorkOrderStatuses  = models.ValidWorkOrderStatuses
-	validInspectionStatuses = models.ValidInspectionStatuses
-)
-
 // buildListOpts maps common filter fields to models.ListOptions.
 // unit_id takes precedence over property_id (more specific scope).
 // validStatuses is the set of allowed status values for the calling tool.
 func buildListOpts(propertyID, unitID, status, createdAfter, createdBefore string, limit int, validStatuses map[string]bool) (models.ListOptions, error) {
-	opts := models.ListOptions{Limit: clampLimit(limit)}
-
 	if err := validateID("property_id", propertyID); err != nil {
-		return opts, err
+		return models.ListOptions{}, err
 	}
 	if err := validateID("unit_id", unitID); err != nil {
-		return opts, err
+		return models.ListOptions{}, err
 	}
+
+	opts := models.ListOptions{Limit: clampLimit(limit)}
 
 	if unitID != "" {
 		opts.LocationID = unitID
@@ -330,29 +338,44 @@ func buildListOpts(propertyID, unitID, status, createdAfter, createdBefore strin
 
 	statuses, err := models.ValidateStatus(status, validStatuses)
 	if err != nil {
-		return opts, err
+		return models.ListOptions{}, err
 	}
 	opts.Status = statuses
 
 	if createdAfter != "" {
-		t, err := time.Parse(time.RFC3339, createdAfter)
+		t, err := parseFlexibleDate(createdAfter)
 		if err != nil {
-			return opts, fmt.Errorf("created_after must be ISO 8601 format (e.g. 2026-01-15T00:00:00Z)")
+			return models.ListOptions{}, fmt.Errorf("created_after must be ISO 8601 format (e.g. 2026-01-15T00:00:00Z or 2026-01-15)")
 		}
 		opts.CreatedAfter = &t
 	}
 
 	if createdBefore != "" {
-		t, err := time.Parse(time.RFC3339, createdBefore)
+		t, err := parseFlexibleDate(createdBefore)
 		if err != nil {
-			return opts, fmt.Errorf("created_before must be ISO 8601 format (e.g. 2026-01-15T00:00:00Z)")
+			return models.ListOptions{}, fmt.Errorf("created_before must be ISO 8601 format (e.g. 2026-01-15T00:00:00Z or 2026-01-15)")
 		}
 		opts.CreatedBefore = &t
 	}
 
 	if err := models.ValidateDateRange(opts.CreatedAfter, opts.CreatedBefore); err != nil {
-		return opts, err
+		return models.ListOptions{}, err
 	}
 
 	return opts, nil
+}
+
+// parseFlexibleDate accepts both RFC3339 and YYYY-MM-DD formats.
+// YYYY-MM-DD dates are treated as midnight UTC.
+func parseFlexibleDate(s string) (time.Time, error) {
+	if t, err := time.Parse(time.RFC3339, s); err == nil {
+		return t, nil
+	}
+	if t, err := time.Parse("2006-01-02", s); err == nil {
+		if t.Format("2006-01-02") != s {
+			return time.Time{}, fmt.Errorf("%q is not a valid calendar date", s)
+		}
+		return t, nil
+	}
+	return time.Time{}, fmt.Errorf("%q is not a valid date", s)
 }

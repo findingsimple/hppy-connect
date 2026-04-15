@@ -98,9 +98,7 @@ Run 'hppycli config init' to create a config file, or set environment variables:
 		if cfg.Debug {
 			opts = append(opts, api.WithDebug(true))
 		}
-		if cfg.Endpoint != "" {
-			opts = append(opts, api.WithEndpoint(cfg.Endpoint))
-		}
+		opts = append(opts, api.WithEndpoint(cfg.Endpoint))
 		apiClient, err = api.NewClient(cfg.Email, cfg.Password, cfg.AccountID, opts...)
 		if err != nil {
 			return err

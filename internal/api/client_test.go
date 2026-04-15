@@ -496,16 +496,17 @@ func TestHttp400ReturnsNonRetryableError(t *testing.T) {
 }
 
 func TestHttp5xxReturnsRetryableApiError(t *testing.T) {
+	var attempts int32
 	_, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&attempts, 1)
 		w.WriteHeader(http.StatusInternalServerError)
 	})
 
 	_, err := c.GetAccount(context.Background())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "api_error")
-	var ae *apiError
-	require.True(t, errors.As(err, &ae))
-	assert.True(t, ae.Retryable)
+	// GetAccount retries transient errors; after exhausting retries, the error is terminal.
+	assert.GreaterOrEqual(t, atomic.LoadInt32(&attempts), int32(2), "should retry on 5xx")
 }
 
 func TestHttp429ReturnsRateLimited(t *testing.T) {
@@ -1517,6 +1518,93 @@ func TestLoginCooldownSkippedForTransientErrors(t *testing.T) {
 
 func TestHardMaxItems(t *testing.T) {
 	assert.Equal(t, 50000, hardMaxItems, "hard ceiling should be 50000")
+}
+
+// TestHardMaxItemsBehavioural verifies that pagination actually stops at the hard ceiling
+// even when hasNextPage is true and no cap is set.
+func TestHardMaxItemsBehavioural(t *testing.T) {
+	// Use a large page size to hit the ceiling faster in the test.
+	// The server always says hasNextPage=true with 100 items per page.
+	var pagesFetched int32
+	_, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&pagesFetched, 1)
+		json.NewEncoder(w).Encode(propertiesPage(999999, pageSize, true, fmt.Sprintf("cursor-%d", pagesFetched)))
+	})
+
+	// limit < 0 means "fetch all" — only hardMaxItems should stop it
+	items, _, err := c.ListProperties(context.Background(), models.ListOptions{Limit: -1})
+	require.NoError(t, err)
+	assert.Equal(t, hardMaxItems, len(items), "should stop at hardMaxItems")
+}
+
+// --- Stuck Cursor Detection ---
+
+func TestPaginationStuckCursorDetected(t *testing.T) {
+	_, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		// Always return hasNextPage=true with the same cursor
+		json.NewEncoder(w).Encode(propertiesPage(200, 10, true, "stuck-cursor"))
+	})
+
+	_, _, err := c.ListProperties(context.Background(), models.ListOptions{Limit: -1})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "pagination stuck")
+}
+
+// --- Null Data Guard ---
+
+func TestNullDataReturnsError(t *testing.T) {
+	_, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"data": nil,
+		})
+	})
+
+	_, err := c.GetAccount(context.Background())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "null data")
+}
+
+// --- doQueryWithRetry ---
+
+func TestDoQueryWithRetryRetriesTransientErrors(t *testing.T) {
+	var attempts int32
+	_, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		n := atomic.AddInt32(&attempts, 1)
+		if n < 3 {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		json.NewEncoder(w).Encode(gqlResponse(map[string]interface{}{
+			"account": map[string]interface{}{"id": "12345", "name": "Test"},
+		}))
+	})
+
+	acct, err := c.GetAccount(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, "12345", acct.ID)
+	assert.Equal(t, int32(3), atomic.LoadInt32(&attempts), "should retry twice before succeeding")
+}
+
+// --- Retry-After Header ---
+
+func TestRetryAfterHeaderParsed(t *testing.T) {
+	var attempts int32
+	_, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		n := atomic.AddInt32(&attempts, 1)
+		if n == 1 {
+			w.Header().Set("Retry-After", "1")
+			w.WriteHeader(http.StatusTooManyRequests)
+			return
+		}
+		json.NewEncoder(w).Encode(gqlResponse(map[string]interface{}{
+			"account": map[string]interface{}{"id": "12345", "name": "Test"},
+		}))
+	})
+
+	acct, err := c.GetAccount(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, "12345", acct.ID)
+	assert.Equal(t, int32(2), atomic.LoadInt32(&attempts))
 }
 
 // --- Helpers ---

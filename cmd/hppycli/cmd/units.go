@@ -20,8 +20,8 @@ var unitsListCmd = &cobra.Command{
 		propertyID, _ := cmd.Flags().GetString("property-id")
 		limit, _ := cmd.Flags().GetInt("limit")
 
-		if limit < 0 {
-			return fmt.Errorf("--limit must be a non-negative integer")
+		if err := validateLimit(limit); err != nil {
+			return err
 		}
 
 		opts := models.ListOptions{Limit: limit}

@@ -1,3 +1,5 @@
+// Package models defines the shared domain types and validation logic used
+// by both the CLI and MCP server binaries.
 package models
 
 import (
@@ -40,11 +42,13 @@ func ValidateDateRange(after, before *time.Time) error {
 	return nil
 }
 
+// Account represents a HappyCo business account.
 type Account struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
 }
 
+// Address represents a physical mailing address.
 type Address struct {
 	Line1      string `json:"line1"`
 	Line2      string `json:"line2"`
@@ -54,6 +58,7 @@ type Address struct {
 	PostalCode string `json:"postalCode"`
 }
 
+// Property represents a managed property (building, complex, etc.).
 type Property struct {
 	ID        string  `json:"id"`
 	Name      string  `json:"name"`
@@ -61,11 +66,13 @@ type Property struct {
 	Address   Address `json:"address"`
 }
 
+// Unit represents a rentable unit within a property.
 type Unit struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
 }
 
+// WorkOrder represents a maintenance work order.
 type WorkOrder struct {
 	ID                string             `json:"id"`
 	Status            string             `json:"status"`
@@ -110,6 +117,7 @@ type InspectionTemplate struct {
 	Name string `json:"name"`
 }
 
+// Inspection represents a property or unit inspection.
 type Inspection struct {
 	ID             string              `json:"id"`
 	Name           string              `json:"name"`
@@ -125,6 +133,8 @@ type Inspection struct {
 	TemplateV2     *InspectionTemplate `json:"templateV2"`
 }
 
+// ListOptions holds the shared filter and pagination parameters used by both
+// the CLI (via parseListFlags) and the MCP server (via buildListOpts).
 type ListOptions struct {
 	Limit         int
 	CreatedAfter  *time.Time

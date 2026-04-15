@@ -36,9 +36,10 @@ func sanitizeCell(s string) string {
 }
 
 // sanitizeCSVCell prefixes cells that start with formula-trigger characters to prevent
-// CSV injection when opened in spreadsheet software.
+// CSV injection when opened in spreadsheet software. Covers characters that Excel,
+// Google Sheets, and LibreOffice interpret as formula or DDE triggers.
 func sanitizeCSVCell(s string) string {
-	if len(s) > 0 && (s[0] == '=' || s[0] == '+' || s[0] == '-' || s[0] == '@') {
+	if len(s) > 0 && (s[0] == '=' || s[0] == '+' || s[0] == '-' || s[0] == '@' || s[0] == '\t' || s[0] == '\r' || s[0] == '|') {
 		return "'" + s
 	}
 	return s
@@ -84,6 +85,14 @@ func parseDate(s string) (time.Time, error) {
 	return time.Time{}, fmt.Errorf("%q is not a valid date (expected RFC3339 or YYYY-MM-DD)", s)
 }
 
+// validateLimit checks that a limit value is non-negative.
+func validateLimit(limit int) error {
+	if limit < 0 {
+		return fmt.Errorf("--limit must be a non-negative integer")
+	}
+	return nil
+}
+
 // addListFlags registers the common filter flags used by workorders and inspections.
 func addListFlags(cmd *cobra.Command, statusHelp string) {
 	cmd.Flags().String("property-id", "", "filter by property ID")
@@ -104,8 +113,8 @@ func parseListFlags(cmd *cobra.Command, validStatuses map[string]bool) (models.L
 	createdBefore, _ := cmd.Flags().GetString("created-before")
 	limit, _ := cmd.Flags().GetInt("limit")
 
-	if limit < 0 {
-		return models.ListOptions{}, fmt.Errorf("--limit must be a non-negative integer")
+	if err := validateLimit(limit); err != nil {
+		return models.ListOptions{}, err
 	}
 
 	opts := models.ListOptions{Limit: limit}

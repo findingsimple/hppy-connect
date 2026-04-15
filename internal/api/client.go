@@ -1,3 +1,5 @@
+// Package api provides a GraphQL client for the HappyCo external API,
+// handling authentication, token refresh, pagination, and retry logic.
 package api
 
 import (
@@ -12,6 +14,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -39,9 +42,10 @@ type tokenState struct {
 
 // apiError carries an error category to distinguish retryable from terminal errors.
 type apiError struct {
-	Category  string // auth_failed, not_found, invalid_input, rate_limited, api_error
-	Message   string
-	Retryable bool
+	Category   string // auth_failed, not_found, invalid_input, rate_limited, api_error
+	Message    string
+	Retryable  bool
+	RetryAfter time.Duration // from Retry-After header on 429 responses
 }
 
 func (e *apiError) Error() string {
@@ -53,6 +57,15 @@ func errAPI(msg string) error      { return &apiError{Category: "api_error", Mes
 func errAPIFatal(msg string) error { return &apiError{Category: "api_error", Message: msg} }
 func errRateLimited(msg string) error {
 	return &apiError{Category: "rate_limited", Message: msg, Retryable: true}
+}
+func errRateLimitedWithRetryAfter(msg, retryAfterHeader string) error {
+	e := &apiError{Category: "rate_limited", Message: msg, Retryable: true}
+	if retryAfterHeader != "" {
+		if secs, err := strconv.Atoi(strings.TrimSpace(retryAfterHeader)); err == nil && secs > 0 {
+			e.RetryAfter = time.Duration(secs) * time.Second
+		}
+	}
+	return e
 }
 
 const loginCooldown = 30 * time.Second
@@ -325,7 +338,7 @@ func (c *Client) doQuery(ctx context.Context, query string, variables map[string
 	}
 
 	if resp.StatusCode == http.StatusTooManyRequests {
-		return errRateLimited("API rate limited")
+		return errRateLimitedWithRetryAfter("API rate limited", resp.Header.Get("Retry-After"))
 	}
 	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
 		c.invalidateAuth()
@@ -346,6 +359,10 @@ func (c *Client) doQuery(ctx context.Context, query string, variables map[string
 		return errAPIFatal(gqlResp.Errors[0].Message)
 	}
 
+	if len(gqlResp.Data) == 0 || string(gqlResp.Data) == "null" {
+		return errAPIFatal("API returned null data")
+	}
+
 	if err := json.Unmarshal(gqlResp.Data, result); err != nil {
 		return errAPIFatal(fmt.Sprintf("parsing data: %v", err))
 	}
@@ -353,16 +370,67 @@ func (c *Client) doQuery(ctx context.Context, query string, variables map[string
 	return nil
 }
 
-// GetAccount returns the account details.
+// GetAccount returns the account details with retry for transient errors.
 func (c *Client) GetAccount(ctx context.Context) (*models.Account, error) {
 	vars := map[string]interface{}{
 		"accountId": c.accountID,
 	}
 	var resp accountResponse
-	if err := c.doQuery(ctx, getAccountQuery, vars, &resp); err != nil {
+	if err := c.doQueryWithRetry(ctx, getAccountQuery, vars, &resp); err != nil {
 		return nil, err
 	}
 	return &resp.Account, nil
+}
+
+// doQueryWithRetry wraps doQuery with the same retry logic used by paginated fetches.
+// Suitable for idempotent (read-only) queries like GetAccount.
+func (c *Client) doQueryWithRetry(ctx context.Context, query string, variables map[string]interface{}, result interface{}) error {
+	var lastErr error
+	authRetried := false
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		if err := ctx.Err(); err != nil {
+			return errAPIFatal(fmt.Sprintf("context cancelled: %v", err))
+		}
+
+		err := c.doQuery(ctx, query, variables, result)
+		if err == nil {
+			return nil
+		}
+		lastErr = err
+
+		var ae *apiError
+		if errors.As(err, &ae) {
+			if ae.Category == "auth_failed" && !authRetried {
+				authRetried = true
+				if _, authErr := c.ensureAuth(ctx); authErr != nil {
+					return err
+				}
+				attempt--
+				continue
+			}
+			if !ae.Retryable {
+				return err
+			}
+		}
+
+		if attempt < maxRetries-1 {
+			idx := min(attempt, len(c.retryBackoff)-1)
+			backoff := c.retryBackoff[idx]
+			if ae != nil && ae.RetryAfter > backoff {
+				backoff = ae.RetryAfter
+			}
+			jitter := time.Duration(rand.Int64N(int64(backoff/2))) - backoff/4
+			select {
+			case <-ctx.Done():
+				return errAPIFatal(fmt.Sprintf("context cancelled: %v", ctx.Err()))
+			case <-time.After(backoff + jitter):
+			}
+		}
+	}
+	return &apiError{
+		Category: "api_error",
+		Message:  fmt.Sprintf("query failed after %d retries: %v", maxRetries, lastErr),
+	}
 }
 
 // ListProperties returns properties for the account.
@@ -440,7 +508,11 @@ func paginate[T any](
 	fetchPage func(map[string]interface{}) (*connection[T], error),
 ) ([]T, int, error) {
 	cap := effectiveCap(opts.Limit)
-	allItems := make([]T, 0)
+	initialCap := pageSize
+	if cap > 0 && cap < initialCap {
+		initialCap = cap
+	}
+	allItems := make([]T, 0, initialCap)
 	var totalCount int
 	cursor := ""
 
@@ -491,6 +563,12 @@ func paginate[T any](
 
 		if !conn.PageInfo.HasNextPage {
 			return allItems, totalCount, nil
+		}
+
+		// Detect stuck cursor: if the server returns the same endCursor twice,
+		// pagination is not advancing and would loop until hardMaxItems.
+		if conn.PageInfo.EndCursor == cursor {
+			return allItems, totalCount, errAPIFatal("pagination stuck: server returned same cursor")
 		}
 		cursor = conn.PageInfo.EndCursor
 	}
@@ -549,6 +627,10 @@ func fetchPageWithRetry[T any](
 		if attempt < maxRetries-1 {
 			idx := min(attempt, len(c.retryBackoff)-1)
 			backoff := c.retryBackoff[idx]
+			// Honour Retry-After header from 429 responses
+			if ae != nil && ae.RetryAfter > backoff {
+				backoff = ae.RetryAfter
+			}
 			// Add jitter: ±25% of backoff
 			jitter := time.Duration(rand.Int64N(int64(backoff/2))) - backoff/4
 			select {
@@ -579,11 +661,11 @@ func effectiveCap(limit int) int {
 	return limit
 }
 
-// GetAccountRaw returns the raw GraphQL response for the account query.
+// GetAccountRaw returns the raw GraphQL response for the account query with retry.
 func (c *Client) GetAccountRaw(ctx context.Context) (json.RawMessage, error) {
 	vars := map[string]interface{}{"accountId": c.accountID}
 	var raw json.RawMessage
-	return raw, c.doQuery(ctx, getAccountQuery, vars, &raw)
+	return raw, c.doQueryWithRetry(ctx, getAccountQuery, vars, &raw)
 }
 
 // ListPropertiesRaw returns the raw GraphQL response for the first page of properties.

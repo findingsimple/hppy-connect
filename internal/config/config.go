@@ -1,6 +1,9 @@
+// Package config handles YAML config file loading with environment variable
+// and CLI flag overrides, enforcing secure file permissions.
 package config
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -10,6 +13,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// Config holds the unified application configuration loaded from YAML, env vars, and flags.
 type Config struct {
 	Email     string `yaml:"email" json:"email"`
 	Password  string `yaml:"password" json:"-"`
@@ -53,8 +57,12 @@ func LoadConfig(filePath string, envFunc func(string) string, flags map[string]s
 			if err != nil {
 				return nil, fmt.Errorf("reading config file: %w", err)
 			}
-			if err := yaml.Unmarshal(data, cfg); err != nil {
-				return nil, fmt.Errorf("parsing config file: %w", err)
+			if len(bytes.TrimSpace(data)) > 0 {
+				dec := yaml.NewDecoder(bytes.NewReader(data))
+				dec.KnownFields(true)
+				if err := dec.Decode(cfg); err != nil {
+					return nil, fmt.Errorf("parsing config file: %w", err)
+				}
 			}
 		}
 	}

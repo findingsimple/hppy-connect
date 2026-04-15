@@ -19,8 +19,8 @@ var propertiesListCmd = &cobra.Command{
 		ctx := cmd.Context()
 		limit, _ := cmd.Flags().GetInt("limit")
 
-		if limit < 0 {
-			return fmt.Errorf("--limit must be a non-negative integer")
+		if err := validateLimit(limit); err != nil {
+			return err
 		}
 
 		opts := models.ListOptions{Limit: limit}

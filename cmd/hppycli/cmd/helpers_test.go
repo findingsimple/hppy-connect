@@ -1,7 +1,11 @@
 package cmd
 
 import (
+	"bytes"
+	"encoding/json"
 	"math"
+	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -75,6 +79,9 @@ func TestSanitizeCSVCell(t *testing.T) {
 		{"plus prefix", "+1 555-1234", "'+1 555-1234"},
 		{"minus prefix", "-5 degrees", "'-5 degrees"},
 		{"at prefix", "@mention", "'@mention"},
+		{"tab prefix", "\tcell", "'\tcell"},
+		{"carriage return prefix", "\rcell", "'\rcell"},
+		{"pipe prefix", "|cmd", "'|cmd"},
 		{"empty string", "", ""},
 		{"safe number", "42", "42"},
 	}
@@ -336,4 +343,119 @@ func TestParseListFlagsNegativeLimit(t *testing.T) {
 	_, err := parseListFlags(cmd, map[string]bool{})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "--limit must be a non-negative integer")
+}
+
+// --- printOutput ---
+
+// captureStdout captures stdout output from a function.
+func captureStdout(t *testing.T, fn func()) string {
+	t.Helper()
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
+	old := os.Stdout
+	os.Stdout = w
+	fn()
+	w.Close()
+	os.Stdout = old
+	var buf bytes.Buffer
+	buf.ReadFrom(r)
+	return buf.String()
+}
+
+func TestPrintOutputText(t *testing.T) {
+	origFormat := outputFormat
+	defer func() { outputFormat = origFormat }()
+	outputFormat = "text"
+
+	data := outputData{
+		Headers: []string{"ID", "NAME"},
+		Rows:    [][]string{{"p1", "Sunset Apartments"}, {"p2", "Oakwood Estates"}},
+		Items:   nil,
+		Count:   2,
+	}
+
+	out := captureStdout(t, func() {
+		err := printOutput(data)
+		require.NoError(t, err)
+	})
+
+	assert.Contains(t, out, "ID")
+	assert.Contains(t, out, "NAME")
+	assert.Contains(t, out, "Sunset Apartments")
+	assert.Contains(t, out, "Oakwood Estates")
+}
+
+func TestPrintOutputJSON(t *testing.T) {
+	origFormat := outputFormat
+	defer func() { outputFormat = origFormat }()
+	outputFormat = "json"
+
+	items := []models.Property{
+		{ID: "p1", Name: "Sunset"},
+	}
+	data := outputData{
+		Headers: []string{"ID", "NAME"},
+		Rows:    [][]string{{"p1", "Sunset"}},
+		Items:   items,
+		Count:   1,
+	}
+
+	out := captureStdout(t, func() {
+		err := printOutput(data)
+		require.NoError(t, err)
+	})
+
+	var parsed map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal([]byte(out), &parsed))
+	assert.Contains(t, string(parsed["items"]), "p1")
+	assert.Contains(t, string(parsed["items"]), "Sunset")
+}
+
+func TestPrintOutputCSV(t *testing.T) {
+	origFormat := outputFormat
+	defer func() { outputFormat = origFormat }()
+	outputFormat = "csv"
+
+	data := outputData{
+		Headers: []string{"ID", "NAME"},
+		Rows:    [][]string{{"p1", "=dangerous"}, {"p2", "safe"}},
+		Items:   nil,
+		Count:   2,
+	}
+
+	out := captureStdout(t, func() {
+		err := printOutput(data)
+		require.NoError(t, err)
+	})
+
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	require.GreaterOrEqual(t, len(lines), 3)
+	assert.Equal(t, "ID,NAME", lines[0])
+	assert.Contains(t, lines[1], "'=dangerous") // CSV injection prevention
+	assert.Contains(t, lines[2], "safe")
+}
+
+func TestPrintOutputRaw(t *testing.T) {
+	origFormat := outputFormat
+	defer func() { outputFormat = origFormat }()
+	outputFormat = "raw"
+
+	rawJSON := json.RawMessage(`{"account":{"id":"12345"}}`)
+	data := outputData{RawJSON: rawJSON}
+
+	out := captureStdout(t, func() {
+		err := printOutput(data)
+		require.NoError(t, err)
+	})
+
+	assert.Contains(t, out, "12345")
+}
+
+// --- validateLimit ---
+
+func TestValidateLimit(t *testing.T) {
+	assert.NoError(t, validateLimit(0))
+	assert.NoError(t, validateLimit(100))
+	assert.Error(t, validateLimit(-1))
+	assert.Error(t, validateLimit(-100))
 }

@@ -61,9 +61,7 @@ func main() {
 	if cfg.Debug {
 		opts = append(opts, api.WithDebug(true))
 	}
-	if cfg.Endpoint != "" {
-		opts = append(opts, api.WithEndpoint(cfg.Endpoint))
-	}
+	opts = append(opts, api.WithEndpoint(cfg.Endpoint))
 
 	client, err := api.NewClient(cfg.Email, cfg.Password, cfg.AccountID, opts...)
 	if err != nil {
@@ -75,8 +73,7 @@ func main() {
 
 	// Startup auth health check — fail fast
 	if err := client.EnsureAuth(ctx); err != nil {
-		fmt.Fprintf(os.Stderr, "Authentication failed: %v\n", err)
-		fmt.Fprintf(os.Stderr, "Check your credentials in ~/.hppycli.yaml or environment variables.\n")
+		fmt.Fprintf(os.Stderr, "Authentication failed. Check your credentials in ~/.hppycli.yaml or environment variables.\n")
 		os.Exit(1)
 	}
 
