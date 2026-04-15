@@ -17,9 +17,8 @@ type graphqlError struct {
 }
 
 type pageInfo struct {
-	HasNextPage     bool   `json:"hasNextPage"`
-	HasPreviousPage bool   `json:"hasPreviousPage"`
-	EndCursor       string `json:"endCursor"`
+	HasNextPage bool   `json:"hasNextPage"`
+	EndCursor   string `json:"endCursor"`
 }
 
 type connection[T any] struct {
