@@ -6,26 +6,17 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestResolveConfigPathDefault(t *testing.T) {
-	// Reset cfgFile to ensure default path is used
-	origCfgFile := cfgFile
-	cfgFile = ""
-	defer func() { cfgFile = origCfgFile }()
-
-	got := resolveConfigPath()
+	got := resolveConfigPathFrom("")
 	home, err := os.UserHomeDir()
-	if err == nil {
-		assert.Equal(t, filepath.Join(home, ".hppycli.yaml"), got)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(home, ".hppycli.yaml"), got)
 }
 
 func TestResolveConfigPathFlag(t *testing.T) {
-	origCfgFile := cfgFile
-	cfgFile = "/custom/path/config.yaml"
-	defer func() { cfgFile = origCfgFile }()
-
-	got := resolveConfigPath()
+	got := resolveConfigPathFrom("/custom/path/config.yaml")
 	assert.Equal(t, "/custom/path/config.yaml", got)
 }

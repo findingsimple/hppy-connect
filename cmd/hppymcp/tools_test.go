@@ -1032,3 +1032,60 @@ func TestToolInputError(t *testing.T) {
 	text := result.Content[0].(*mcp.TextContent).Text
 	assert.Equal(t, "invalid_input: field is required", text)
 }
+
+// ---------------------------------------------------------------------------
+// Debug wrapper test
+// ---------------------------------------------------------------------------
+
+// newTestServerWithDebug creates an MCP server with debug=true to exercise
+// the wrapTool debug logging path.
+func newTestServerWithDebug(t *testing.T, mock *mockClient) *mcp.ClientSession {
+	t.Helper()
+	ctx := context.Background()
+
+	server := mcp.NewServer(
+		&mcp.Implementation{Name: "hppymcp-test", Version: "test"},
+		&mcp.ServerOptions{Instructions: "test"},
+	)
+	registerTools(server, mock, true) // debug enabled
+	registerResources(server, mock)
+	registerPrompts(server)
+
+	ct, st := mcp.NewInMemoryTransports()
+	_, err := server.Connect(ctx, st, nil)
+	require.NoError(t, err)
+
+	client := mcp.NewClient(
+		&mcp.Implementation{Name: "test-client", Version: "test"},
+		nil,
+	)
+	cs, err := client.Connect(ctx, ct, nil)
+	require.NoError(t, err)
+	t.Cleanup(func() { cs.Close() })
+	return cs
+}
+
+func TestWrapToolDebugModeReturnsCorrectResults(t *testing.T) {
+	mock := &mockClient{
+		account: &models.Account{ID: "54522", Name: "Test Account"},
+	}
+	cs := newTestServerWithDebug(t, mock)
+
+	// Verify the debug wrapper does not interfere with normal results
+	result := callTool(t, cs, "get_account", nil)
+	assert.False(t, result.IsError)
+
+	var account models.Account
+	require.NoError(t, json.Unmarshal([]byte(toolText(t, result)), &account))
+	assert.Equal(t, "54522", account.ID)
+	assert.Equal(t, "Test Account", account.Name)
+}
+
+func TestWrapToolDebugModePassesErrorsThrough(t *testing.T) {
+	mock := &mockClient{err: fmt.Errorf("api_error: something broke")}
+	cs := newTestServerWithDebug(t, mock)
+
+	result := callTool(t, cs, "get_account", nil)
+	assert.True(t, result.IsError)
+	assert.Contains(t, toolText(t, result), "api_error")
+}

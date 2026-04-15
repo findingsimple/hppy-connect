@@ -53,6 +53,11 @@ func registerResources(server *mcp.Server, client apiClient) {
 				return nil, fmt.Errorf("invalid property ID format")
 			}
 
+			if err := acquireSem(ctx, sem); err != nil {
+				return nil, fmt.Errorf("failed to retrieve property")
+			}
+			defer releaseSem(sem)
+
 			opts := models.ListOptions{LocationID: propertyID, Limit: 1}
 			properties, _, err := client.ListProperties(ctx, opts)
 			if err != nil {

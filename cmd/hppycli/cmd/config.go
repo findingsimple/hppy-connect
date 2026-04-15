@@ -150,8 +150,13 @@ var configShowCmd = &cobra.Command{
 
 // resolveConfigPath returns the config file path from --config flag or the default.
 func resolveConfigPath() string {
-	if cfgFile != "" {
-		return cfgFile
+	return resolveConfigPathFrom(cfgFile)
+}
+
+// resolveConfigPathFrom returns flagValue if non-empty, otherwise the default path.
+func resolveConfigPathFrom(flagValue string) string {
+	if flagValue != "" {
+		return flagValue
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
