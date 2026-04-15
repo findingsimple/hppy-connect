@@ -1,10 +1,12 @@
 package cmd
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
+	"io"
 	"math"
 	"os"
 	"strings"
@@ -215,6 +217,36 @@ func printOutput(data outputData) error {
 		}
 		return w.Flush()
 	}
+}
+
+// confirmAction prompts the user for y/n confirmation on destructive operations.
+// Skipped when --yes flag is set. Accepts an io.Reader for testability
+// (pass os.Stdin in production).
+func confirmAction(cmd *cobra.Command, action string, input io.Reader) error {
+	yes, _ := cmd.Flags().GetBool("yes")
+	if yes {
+		return nil
+	}
+	fmt.Fprintf(os.Stderr, "About to %s. Continue? [y/N] ", action)
+	scanner := bufio.NewScanner(input)
+	if scanner.Scan() {
+		response := strings.ToLower(strings.TrimSpace(scanner.Text()))
+		if response == "y" || response == "yes" {
+			return nil
+		}
+	}
+	return fmt.Errorf("aborted")
+}
+
+// printMutationResult outputs a mutation result as indented JSON to the given writer.
+// If --output text is explicitly set, warns on stderr that mutation output is always JSON.
+func printMutationResult(cmd *cobra.Command, w io.Writer, result any) error {
+	if f, _ := cmd.Flags().GetString("output"); f == "text" && cmd.Flags().Changed("output") {
+		fmt.Fprintln(os.Stderr, "note: mutation output is always JSON")
+	}
+	enc := json.NewEncoder(w)
+	enc.SetIndent("", "  ")
+	return enc.Encode(result)
 }
 
 // formatAddress formats an address as a single line.

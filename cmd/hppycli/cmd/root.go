@@ -15,6 +15,10 @@ var (
 	apiClient    *api.Client
 	outputFormat string
 
+	// configAccountID is populated from the config file after loading.
+	// Mutation commands that need --account-id can default to this value.
+	configAccountID string
+
 	versionStr string
 	commitStr  string
 	buildStr   string
@@ -84,6 +88,8 @@ var rootCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+
+		configAccountID = cfg.AccountID
 
 		if cfg.Email == "" || cfg.Password == "" || cfg.AccountID == "" {
 			return fmt.Errorf(`missing required configuration

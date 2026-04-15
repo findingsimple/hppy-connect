@@ -29,9 +29,20 @@ type mockClient struct {
 	inspTotal   int
 	err         error // returned by all methods when set
 
+	// Mutation response fields
+	mutatedWorkOrder *models.WorkOrder
+	attachmentResult *models.WorkOrderAddAttachmentResult
+
 	// Capture call args for verification.
-	lastListOpts   models.ListOptions
-	lastPropertyID string
+	lastListOpts    models.ListOptions
+	lastPropertyID  string
+	lastMutationID  string
+	lastCreateInput models.WorkOrderCreateInput
+	lastStatusInput models.WorkOrderSetStatusAndSubStatusInput
+	lastAssignInput models.WorkOrderSetAssigneeInput
+	lastAttachInput models.WorkOrderAddAttachmentInput
+	lastStringValue string
+	lastBoolValue   bool
 }
 
 func (m *mockClient) GetAccount(_ context.Context) (*models.Account, error) {
@@ -76,6 +87,178 @@ func (m *mockClient) ListInspections(_ context.Context, opts models.ListOptions)
 
 func (m *mockClient) EnsureAuth(_ context.Context) error {
 	return m.err
+}
+
+// --- Work Order Mutation Mocks ---
+
+func (m *mockClient) woResult() *models.WorkOrder {
+	if m.mutatedWorkOrder != nil {
+		return m.mutatedWorkOrder
+	}
+	return &models.WorkOrder{ID: "wo-mock", Status: "OPEN"}
+}
+
+func (m *mockClient) WorkOrderCreate(_ context.Context, input models.WorkOrderCreateInput) (*models.WorkOrder, error) {
+	m.lastCreateInput = input
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.woResult(), nil
+}
+
+func (m *mockClient) WorkOrderSetStatusAndSubStatus(_ context.Context, input models.WorkOrderSetStatusAndSubStatusInput) (*models.WorkOrder, error) {
+	m.lastMutationID = input.WorkOrderID
+	m.lastStatusInput = input
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.woResult(), nil
+}
+
+func (m *mockClient) WorkOrderSetAssignee(_ context.Context, input models.WorkOrderSetAssigneeInput) (*models.WorkOrder, error) {
+	m.lastMutationID = input.WorkOrderID
+	m.lastAssignInput = input
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.woResult(), nil
+}
+
+func (m *mockClient) WorkOrderSetDescription(_ context.Context, id, value string) (*models.WorkOrder, error) {
+	m.lastStringValue = value
+	m.lastMutationID = id
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.woResult(), nil
+}
+
+func (m *mockClient) WorkOrderSetPriority(_ context.Context, id, value string) (*models.WorkOrder, error) {
+	m.lastStringValue = value
+	m.lastMutationID = id
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.woResult(), nil
+}
+
+func (m *mockClient) WorkOrderSetScheduledFor(_ context.Context, id, _ string) (*models.WorkOrder, error) {
+	m.lastMutationID = id
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.woResult(), nil
+}
+
+func (m *mockClient) WorkOrderSetLocation(_ context.Context, id, _ string) (*models.WorkOrder, error) {
+	m.lastMutationID = id
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.woResult(), nil
+}
+
+func (m *mockClient) WorkOrderSetType(_ context.Context, id, _ string) (*models.WorkOrder, error) {
+	m.lastMutationID = id
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.woResult(), nil
+}
+
+func (m *mockClient) WorkOrderSetEntryNotes(_ context.Context, id, _ string) (*models.WorkOrder, error) {
+	m.lastMutationID = id
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.woResult(), nil
+}
+
+func (m *mockClient) WorkOrderSetPermissionToEnter(_ context.Context, id string, _ bool) (*models.WorkOrder, error) {
+	m.lastMutationID = id
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.woResult(), nil
+}
+
+func (m *mockClient) WorkOrderSetResidentApprovedEntry(_ context.Context, id string, _ bool) (*models.WorkOrder, error) {
+	m.lastMutationID = id
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.woResult(), nil
+}
+
+func (m *mockClient) WorkOrderSetUnitEntered(_ context.Context, id string, _ bool) (*models.WorkOrder, error) {
+	m.lastMutationID = id
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.woResult(), nil
+}
+
+func (m *mockClient) WorkOrderArchive(_ context.Context, id string) (*models.WorkOrder, error) {
+	m.lastMutationID = id
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.woResult(), nil
+}
+
+func (m *mockClient) WorkOrderAddComment(_ context.Context, id, _ string) (*models.WorkOrder, error) {
+	m.lastMutationID = id
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.woResult(), nil
+}
+
+func (m *mockClient) WorkOrderAddTime(_ context.Context, id, _ string) (*models.WorkOrder, error) {
+	m.lastMutationID = id
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.woResult(), nil
+}
+
+func (m *mockClient) WorkOrderAddAttachment(_ context.Context, input models.WorkOrderAddAttachmentInput) (*models.WorkOrderAddAttachmentResult, error) {
+	m.lastAttachInput = input
+	if m.err != nil {
+		return nil, m.err
+	}
+	if m.attachmentResult != nil {
+		return m.attachmentResult, nil
+	}
+	return &models.WorkOrderAddAttachmentResult{
+		WorkOrder:  *m.woResult(),
+		Attachment: models.WorkOrderAttachment{ID: "att-1", Name: "photo.jpg"},
+		SignedURL:  "https://storage.example.com/upload/att-1",
+	}, nil
+}
+
+func (m *mockClient) WorkOrderRemoveAttachment(_ context.Context, id, _ string) (*models.WorkOrder, error) {
+	m.lastMutationID = id
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.woResult(), nil
+}
+
+func (m *mockClient) WorkOrderStartTimer(_ context.Context, id, _ string) (*models.WorkOrder, error) {
+	m.lastMutationID = id
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.woResult(), nil
+}
+
+func (m *mockClient) WorkOrderStopTimer(_ context.Context, id, _ string) (*models.WorkOrder, error) {
+	m.lastMutationID = id
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.woResult(), nil
 }
 
 // Verify mockClient satisfies the interface at compile time.
@@ -385,6 +568,915 @@ func TestToolListInspections(t *testing.T) {
 		// OPEN is valid for work orders but not inspections
 		assert.Contains(t, text, "OPEN")
 	})
+}
+
+// ---------------------------------------------------------------------------
+// Work Order Mutation Tool Tests
+// ---------------------------------------------------------------------------
+
+func TestToolWorkOrderCreate(t *testing.T) {
+	t.Run("happy path", func(t *testing.T) {
+		mock := &mockClient{
+			mutatedWorkOrder: &models.WorkOrder{ID: "wo-new", Status: "OPEN", Priority: "URGENT", Description: "Fix leak"},
+		}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "work_order_create", map[string]any{
+			"location_id": "loc-123",
+			"description": "Fix leak",
+			"priority":    "URGENT",
+		})
+		assert.False(t, result.IsError)
+
+		var wo models.WorkOrder
+		require.NoError(t, json.Unmarshal([]byte(toolText(t, result)), &wo))
+		assert.Equal(t, "wo-new", wo.ID)
+		assert.Equal(t, "URGENT", wo.Priority)
+	})
+
+	t.Run("missing location_id returns error", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "work_order_create", map[string]any{
+			"description": "Fix leak",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "location_id")
+	})
+
+	t.Run("invalid location_id rejected", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "work_order_create", map[string]any{
+			"location_id": "../../etc/passwd",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "invalid_input")
+	})
+
+	t.Run("invalid priority rejected", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "work_order_create", map[string]any{
+			"location_id": "loc-123",
+			"priority":    "INVALID",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "priority must be NORMAL or URGENT")
+	})
+
+	t.Run("lowercase priority normalised", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "work_order_create", map[string]any{
+			"location_id": "loc-123",
+			"priority":    "urgent",
+		})
+		assert.False(t, result.IsError)
+	})
+}
+
+func TestToolWorkOrderSetStatus(t *testing.T) {
+	t.Run("happy path", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "work_order_set_status", map[string]any{
+			"work_order_id": "wo-123",
+			"status":        "COMPLETED",
+		})
+		assert.False(t, result.IsError)
+		assert.Equal(t, "wo-123", mock.lastMutationID)
+	})
+
+	t.Run("missing work_order_id", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "work_order_set_status", map[string]any{
+			"status": "OPEN",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "work_order_id")
+	})
+
+	t.Run("invalid status rejected", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "work_order_set_status", map[string]any{
+			"work_order_id": "wo-123",
+			"status":        "INVALID",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "status must be")
+	})
+
+	t.Run("explicit sub_status reaches mock", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "work_order_set_status", map[string]any{
+			"work_order_id": "wo-123",
+			"status":        "COMPLETED",
+			"sub_status":    "CANCELLED",
+		})
+		assert.False(t, result.IsError)
+		assert.Equal(t, "CANCELLED", mock.lastStatusInput.SubStatus.SubStatus)
+	})
+
+	t.Run("default sub_status is UNKNOWN", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "work_order_set_status", map[string]any{
+			"work_order_id": "wo-123",
+			"status":        "OPEN",
+		})
+		assert.False(t, result.IsError)
+		assert.Equal(t, "UNKNOWN", mock.lastStatusInput.SubStatus.SubStatus)
+	})
+
+	t.Run("invalid sub_status rejected", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "work_order_set_status", map[string]any{
+			"work_order_id": "wo-123",
+			"status":        "OPEN",
+			"sub_status":    "INVALID",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "sub_status must be")
+	})
+}
+
+func TestToolWorkOrderSetAssignee(t *testing.T) {
+	t.Run("happy path with VENDOR", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "work_order_set_assignee", map[string]any{
+			"work_order_id": "wo-123",
+			"assignee_id":   "vendor-456",
+			"assignee_type": "VENDOR",
+		})
+		assert.False(t, result.IsError)
+		assert.Equal(t, "wo-123", mock.lastAssignInput.WorkOrderID)
+		assert.Equal(t, "vendor-456", mock.lastAssignInput.Assignee.AssigneeID)
+		assert.Equal(t, "VENDOR", mock.lastAssignInput.Assignee.AssigneeType)
+	})
+
+	t.Run("default assignee_type is USER", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "work_order_set_assignee", map[string]any{
+			"work_order_id": "wo-123",
+			"assignee_id":   "user-789",
+		})
+		assert.False(t, result.IsError)
+		assert.Equal(t, "USER", mock.lastAssignInput.Assignee.AssigneeType)
+	})
+
+	t.Run("invalid assignee_type rejected", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "work_order_set_assignee", map[string]any{
+			"work_order_id": "wo-123",
+			"assignee_id":   "user-789",
+			"assignee_type": "ROBOT",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "assignee_type must be")
+	})
+
+	t.Run("missing assignee_id rejected", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "work_order_set_assignee", map[string]any{
+			"work_order_id": "wo-123",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "assignee_id")
+	})
+}
+
+func TestToolWorkOrderArchive(t *testing.T) {
+	t.Run("happy path", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "work_order_archive", map[string]any{
+			"work_order_id": "wo-123",
+		})
+		assert.False(t, result.IsError)
+		assert.Equal(t, "wo-123", mock.lastMutationID)
+	})
+
+	t.Run("invalid ID rejected", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "work_order_archive", map[string]any{
+			"work_order_id": "../bad",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "invalid_input")
+	})
+}
+
+func TestToolWorkOrderAddAttachment(t *testing.T) {
+	t.Run("happy path returns signed URL", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "work_order_add_attachment", map[string]any{
+			"work_order_id": "wo-123",
+			"file_name":     "photo.jpg",
+			"mime_type":     "image/jpeg",
+		})
+		assert.False(t, result.IsError)
+		text := toolText(t, result)
+		assert.Contains(t, text, "signedURL")
+		assert.Contains(t, text, "photo.jpg")
+	})
+
+	t.Run("missing required fields", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "work_order_add_attachment", map[string]any{
+			"work_order_id": "wo-123",
+		})
+		assert.True(t, result.IsError)
+	})
+}
+
+func TestToolWorkOrderSetPriority(t *testing.T) {
+	t.Run("valid priority", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "work_order_set_priority", map[string]any{
+			"work_order_id": "wo-123",
+			"value":         "URGENT",
+		})
+		assert.False(t, result.IsError)
+	})
+
+	t.Run("invalid priority", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "work_order_set_priority", map[string]any{
+			"work_order_id": "wo-123",
+			"value":         "HIGH",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "NORMAL or URGENT")
+	})
+}
+
+func TestToolWorkOrderSetDescription(t *testing.T) {
+	t.Run("happy path", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "work_order_set_description", map[string]any{
+			"work_order_id": "wo-123",
+			"value":         "Fix the leaky faucet in unit 4B",
+		})
+		assert.False(t, result.IsError)
+		assert.Equal(t, "wo-123", mock.lastMutationID)
+		assert.Equal(t, "Fix the leaky faucet in unit 4B", mock.lastStringValue)
+	})
+
+	t.Run("missing work_order_id", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "work_order_set_description", map[string]any{
+			"value": "some description",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "work_order_id")
+	})
+
+	t.Run("missing value rejected", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "work_order_set_description", map[string]any{
+			"work_order_id": "wo-123",
+			"value":         "",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "invalid_input")
+	})
+
+	t.Run("oversized value rejected", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "work_order_set_description", map[string]any{
+			"work_order_id": "wo-123",
+			"value":         string(make([]byte, models.MaxFreeTextLength+1)),
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "invalid_input")
+	})
+}
+
+func TestToolWorkOrderSetScheduledFor(t *testing.T) {
+	t.Run("happy path with valid RFC3339 timestamp", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "work_order_set_scheduled_for", map[string]any{
+			"work_order_id": "wo-123",
+			"value":         "2026-05-01T09:00:00Z",
+		})
+		assert.False(t, result.IsError)
+		assert.Equal(t, "wo-123", mock.lastMutationID)
+	})
+
+	t.Run("missing work_order_id", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "work_order_set_scheduled_for", map[string]any{
+			"value": "2026-05-01T09:00:00Z",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "work_order_id")
+	})
+
+	t.Run("missing value rejected", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "work_order_set_scheduled_for", map[string]any{
+			"work_order_id": "wo-123",
+			"value":         "",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "invalid_input")
+	})
+
+	t.Run("invalid timestamp rejected", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "work_order_set_scheduled_for", map[string]any{
+			"work_order_id": "wo-123",
+			"value":         "not-a-timestamp",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "invalid_input")
+	})
+}
+
+func TestToolWorkOrderSetLocation(t *testing.T) {
+	t.Run("happy path", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "work_order_set_location", map[string]any{
+			"work_order_id": "wo-123",
+			"value":         "loc-456",
+		})
+		assert.False(t, result.IsError)
+		assert.Equal(t, "wo-123", mock.lastMutationID)
+	})
+
+	t.Run("missing work_order_id", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "work_order_set_location", map[string]any{
+			"value": "loc-456",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "work_order_id")
+	})
+
+	t.Run("missing value rejected", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "work_order_set_location", map[string]any{
+			"work_order_id": "wo-123",
+			"value":         "",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "invalid_input")
+	})
+
+	t.Run("invalid location ID rejected", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "work_order_set_location", map[string]any{
+			"work_order_id": "wo-123",
+			"value":         "../../etc/passwd",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "invalid_input")
+	})
+}
+
+func TestToolWorkOrderSetType(t *testing.T) {
+	t.Run("happy path with valid type", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "work_order_set_type", map[string]any{
+			"work_order_id": "wo-123",
+			"value":         "SERVICE_REQUEST",
+		})
+		assert.False(t, result.IsError)
+		assert.Equal(t, "wo-123", mock.lastMutationID)
+	})
+
+	t.Run("missing work_order_id", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "work_order_set_type", map[string]any{
+			"value": "TURN",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "work_order_id")
+	})
+
+	t.Run("missing value rejected", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "work_order_set_type", map[string]any{
+			"work_order_id": "wo-123",
+			"value":         "",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "invalid_input")
+	})
+
+	t.Run("invalid type rejected", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "work_order_set_type", map[string]any{
+			"work_order_id": "wo-123",
+			"value":         "URGENT",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "SERVICE_REQUEST")
+	})
+
+	t.Run("lowercase type normalised", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "work_order_set_type", map[string]any{
+			"work_order_id": "wo-123",
+			"value":         "turn",
+		})
+		assert.False(t, result.IsError)
+	})
+}
+
+func TestToolWorkOrderSetEntryNotes(t *testing.T) {
+	t.Run("happy path", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "work_order_set_entry_notes", map[string]any{
+			"work_order_id": "wo-123",
+			"value":         "Please knock before entering",
+		})
+		assert.False(t, result.IsError)
+		assert.Equal(t, "wo-123", mock.lastMutationID)
+	})
+
+	t.Run("missing work_order_id", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "work_order_set_entry_notes", map[string]any{
+			"value": "Please knock",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "work_order_id")
+	})
+
+	t.Run("missing value rejected", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "work_order_set_entry_notes", map[string]any{
+			"work_order_id": "wo-123",
+			"value":         "",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "invalid_input")
+	})
+
+	t.Run("oversized value rejected", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "work_order_set_entry_notes", map[string]any{
+			"work_order_id": "wo-123",
+			"value":         string(make([]byte, models.MaxFreeTextLength+1)),
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "invalid_input")
+	})
+}
+
+func TestToolWorkOrderSetPermissionToEnter(t *testing.T) {
+	t.Run("happy path true", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "work_order_set_permission_to_enter", map[string]any{
+			"work_order_id": "wo-123",
+			"value":         true,
+		})
+		assert.False(t, result.IsError)
+		assert.Equal(t, "wo-123", mock.lastMutationID)
+	})
+
+	t.Run("happy path false", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "work_order_set_permission_to_enter", map[string]any{
+			"work_order_id": "wo-123",
+			"value":         false,
+		})
+		assert.False(t, result.IsError)
+		assert.Equal(t, "wo-123", mock.lastMutationID)
+	})
+
+	t.Run("missing work_order_id", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "work_order_set_permission_to_enter", map[string]any{
+			"value": true,
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "work_order_id")
+	})
+}
+
+func TestToolWorkOrderSetResidentApprovedEntry(t *testing.T) {
+	t.Run("happy path true", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "work_order_set_resident_approved_entry", map[string]any{
+			"work_order_id": "wo-123",
+			"value":         true,
+		})
+		assert.False(t, result.IsError)
+		assert.Equal(t, "wo-123", mock.lastMutationID)
+	})
+
+	t.Run("happy path false", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "work_order_set_resident_approved_entry", map[string]any{
+			"work_order_id": "wo-123",
+			"value":         false,
+		})
+		assert.False(t, result.IsError)
+		assert.Equal(t, "wo-123", mock.lastMutationID)
+	})
+
+	t.Run("missing work_order_id", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "work_order_set_resident_approved_entry", map[string]any{
+			"value": false,
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "work_order_id")
+	})
+}
+
+func TestToolWorkOrderSetUnitEntered(t *testing.T) {
+	t.Run("happy path true", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "work_order_set_unit_entered", map[string]any{
+			"work_order_id": "wo-123",
+			"value":         true,
+		})
+		assert.False(t, result.IsError)
+		assert.Equal(t, "wo-123", mock.lastMutationID)
+	})
+
+	t.Run("happy path false", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "work_order_set_unit_entered", map[string]any{
+			"work_order_id": "wo-123",
+			"value":         false,
+		})
+		assert.False(t, result.IsError)
+		assert.Equal(t, "wo-123", mock.lastMutationID)
+	})
+
+	t.Run("missing work_order_id", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "work_order_set_unit_entered", map[string]any{
+			"value": true,
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "work_order_id")
+	})
+}
+
+func TestToolWorkOrderAddComment(t *testing.T) {
+	t.Run("happy path", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "work_order_add_comment", map[string]any{
+			"work_order_id": "wo-123",
+			"value":         "Technician will arrive at 10am",
+		})
+		assert.False(t, result.IsError)
+		assert.Equal(t, "wo-123", mock.lastMutationID)
+	})
+
+	t.Run("missing work_order_id", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "work_order_add_comment", map[string]any{
+			"value": "some comment",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "work_order_id")
+	})
+
+	t.Run("missing value rejected", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "work_order_add_comment", map[string]any{
+			"work_order_id": "wo-123",
+			"value":         "",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "invalid_input")
+	})
+
+	t.Run("oversized comment rejected", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "work_order_add_comment", map[string]any{
+			"work_order_id": "wo-123",
+			"value":         string(make([]byte, models.MaxFreeTextLength+1)),
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "invalid_input")
+	})
+}
+
+func TestToolWorkOrderAddTime(t *testing.T) {
+	t.Run("happy path with valid duration", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "work_order_add_time", map[string]any{
+			"work_order_id": "wo-123",
+			"value":         "PT1H30M",
+		})
+		assert.False(t, result.IsError)
+		assert.Equal(t, "wo-123", mock.lastMutationID)
+	})
+
+	t.Run("missing work_order_id", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "work_order_add_time", map[string]any{
+			"value": "PT1H",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "work_order_id")
+	})
+
+	t.Run("missing value rejected", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "work_order_add_time", map[string]any{
+			"work_order_id": "wo-123",
+			"value":         "",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "invalid_input")
+	})
+
+	t.Run("invalid duration rejected", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "work_order_add_time", map[string]any{
+			"work_order_id": "wo-123",
+			"value":         "1h30m",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "invalid_input")
+	})
+
+	t.Run("bare PT rejected", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "work_order_add_time", map[string]any{
+			"work_order_id": "wo-123",
+			"value":         "PT",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "invalid_input")
+	})
+}
+
+func TestToolWorkOrderRemoveAttachment(t *testing.T) {
+	t.Run("happy path", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "work_order_remove_attachment", map[string]any{
+			"work_order_id": "wo-123",
+			"attachment_id": "att-456",
+		})
+		assert.False(t, result.IsError)
+		assert.Equal(t, "wo-123", mock.lastMutationID)
+	})
+
+	t.Run("missing work_order_id", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "work_order_remove_attachment", map[string]any{
+			"attachment_id": "att-456",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "work_order_id")
+	})
+
+	t.Run("missing attachment_id", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "work_order_remove_attachment", map[string]any{
+			"work_order_id": "wo-123",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "attachment_id")
+	})
+
+	t.Run("invalid attachment_id rejected", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "work_order_remove_attachment", map[string]any{
+			"work_order_id": "wo-123",
+			"attachment_id": "../../bad",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "invalid_input")
+	})
+}
+
+func TestToolWorkOrderStartTimer(t *testing.T) {
+	t.Run("happy path with valid timestamp", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "work_order_start_timer", map[string]any{
+			"work_order_id": "wo-123",
+			"timestamp":     "2026-04-16T10:00:00Z",
+		})
+		assert.False(t, result.IsError)
+		assert.Equal(t, "wo-123", mock.lastMutationID)
+	})
+
+	t.Run("missing work_order_id", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "work_order_start_timer", map[string]any{
+			"timestamp": "2026-04-16T10:00:00Z",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "work_order_id")
+	})
+
+	t.Run("missing timestamp rejected", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "work_order_start_timer", map[string]any{
+			"work_order_id": "wo-123",
+			"timestamp":     "",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "invalid_input")
+	})
+
+	t.Run("invalid timestamp rejected", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "work_order_start_timer", map[string]any{
+			"work_order_id": "wo-123",
+			"timestamp":     "2026-04-16",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "invalid_input")
+	})
+}
+
+func TestToolWorkOrderStopTimer(t *testing.T) {
+	t.Run("happy path with valid timestamp", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "work_order_stop_timer", map[string]any{
+			"work_order_id": "wo-123",
+			"timestamp":     "2026-04-16T11:30:00Z",
+		})
+		assert.False(t, result.IsError)
+		assert.Equal(t, "wo-123", mock.lastMutationID)
+	})
+
+	t.Run("missing work_order_id", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "work_order_stop_timer", map[string]any{
+			"timestamp": "2026-04-16T11:30:00Z",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "work_order_id")
+	})
+
+	t.Run("missing timestamp rejected", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "work_order_stop_timer", map[string]any{
+			"work_order_id": "wo-123",
+			"timestamp":     "",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "invalid_input")
+	})
+
+	t.Run("invalid timestamp rejected", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "work_order_stop_timer", map[string]any{
+			"work_order_id": "wo-123",
+			"timestamp":     "not-a-date",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "invalid_input")
+	})
+}
+
+func TestToolWorkOrderMutationAPIError(t *testing.T) {
+	mock := &mockClient{err: fmt.Errorf("api_error: HTTP 500")}
+	cs := newTestServer(t, mock)
+
+	result := callTool(t, cs, "work_order_archive", map[string]any{
+		"work_order_id": "wo-123",
+	})
+	assert.True(t, result.IsError)
+	assert.Contains(t, toolText(t, result), "api_error")
 }
 
 // ---------------------------------------------------------------------------

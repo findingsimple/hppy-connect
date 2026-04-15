@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/findingsimple/hppy-connect/internal/models"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -31,8 +32,8 @@ func requirePropertyID(args map[string]string) (string, error) {
 	if id == "" {
 		return "", fmt.Errorf("property_id is required")
 	}
-	if !validID.MatchString(id) {
-		return "", fmt.Errorf("property_id contains invalid characters")
+	if err := models.ValidateID("property_id", id); err != nil {
+		return "", err
 	}
 	return id, nil
 }

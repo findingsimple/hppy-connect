@@ -1628,3 +1628,826 @@ func makePropertyEdges(n int) []interface{} {
 	}
 	return edges
 }
+
+// --- doMutation tests ---
+
+func TestDoMutationNoRetryOnTransient500(t *testing.T) {
+	var requestCount int32
+	srv, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&requestCount, 1)
+		w.WriteHeader(http.StatusInternalServerError)
+	})
+	_ = srv
+
+	var result json.RawMessage
+	err := c.doMutation(context.Background(), "mutation { test }", nil, &result)
+	require.Error(t, err)
+
+	var ae *apiError
+	require.True(t, errors.As(err, &ae))
+	assert.Equal(t, "api_error", ae.Category)
+	// Should NOT have retried — only 1 request
+	assert.Equal(t, int32(1), atomic.LoadInt32(&requestCount))
+}
+
+func TestDoMutationAuthRetryOn401(t *testing.T) {
+	var mutationAttempts int32
+	var loginAttempts int32
+	expiresAt := fmt.Sprintf("%d", time.Now().Add(1*time.Hour).UnixMilli())
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		bodyStr := string(body)
+
+		if strings.Contains(bodyStr, "login") {
+			atomic.AddInt32(&loginAttempts, 1)
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"data": map[string]interface{}{
+					"login": map[string]interface{}{
+						"token":                 "fresh-token",
+						"expiresAt":             expiresAt,
+						"accessibleBusinessIds": []string{"12345"},
+					},
+				},
+			})
+			return
+		}
+
+		attempt := atomic.AddInt32(&mutationAttempts, 1)
+		if attempt == 1 {
+			// First mutation attempt: return 401 to trigger auth-retry
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+
+		// Second mutation attempt (after re-auth): succeed
+		json.NewEncoder(w).Encode(gqlResponse(map[string]interface{}{
+			"testMutation": map[string]interface{}{"id": "123"},
+		}))
+	}))
+	t.Cleanup(srv.Close)
+
+	c, err := NewClient("test@example.com", "password", "12345",
+		withInsecureHTTP(),
+		WithEndpoint(srv.URL),
+		withRetryBackoff(fastBackoff),
+	)
+	require.NoError(t, err)
+	// Pre-set a valid token
+	c.authState.Store(&tokenState{
+		token:     "about-to-expire-token",
+		expiresAt: time.Now().Add(1 * time.Hour),
+	})
+
+	var result json.RawMessage
+	err = c.doMutation(context.Background(), "mutation { testMutation { id } }", nil, &result)
+	require.NoError(t, err)
+	assert.Contains(t, string(result), "123")
+	// Verify the retry path was exercised: 2 mutation attempts + 1 login
+	assert.Equal(t, int32(2), atomic.LoadInt32(&mutationAttempts), "expected exactly 2 mutation attempts (initial + retry)")
+	assert.Equal(t, int32(1), atomic.LoadInt32(&loginAttempts), "expected exactly 1 re-auth login")
+}
+
+func TestDoMutationNoRetryOnFatalError(t *testing.T) {
+	var requestCount int32
+	srv, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&requestCount, 1)
+		w.WriteHeader(http.StatusBadRequest)
+	})
+	_ = srv
+
+	var result json.RawMessage
+	err := c.doMutation(context.Background(), "mutation { test }", nil, &result)
+	require.Error(t, err)
+	// 400 is a fatal error (not auth, not retryable) — should be 1 request only
+	assert.Equal(t, int32(1), atomic.LoadInt32(&requestCount))
+}
+
+func TestWorkOrderCreateRoundTrip(t *testing.T) {
+	var capturedBody map[string]interface{}
+	srv, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		json.Unmarshal(body, &capturedBody)
+		json.NewEncoder(w).Encode(gqlResponse(map[string]interface{}{
+			"workOrderCreate": map[string]interface{}{
+				"id":          "wo-new-123",
+				"status":      "OPEN",
+				"priority":    "URGENT",
+				"description": "Fix leak",
+			},
+		}))
+	})
+	_ = srv
+
+	input := models.WorkOrderCreateInput{
+		LocationID:  "loc-456",
+		Description: "Fix leak",
+		Priority:    "URGENT",
+	}
+	wo, err := c.WorkOrderCreate(context.Background(), input)
+	require.NoError(t, err)
+	assert.Equal(t, "wo-new-123", wo.ID)
+	assert.Equal(t, "OPEN", wo.Status)
+	assert.Equal(t, "URGENT", wo.Priority)
+	assert.Equal(t, "Fix leak", wo.Description)
+
+	// Verify the mutation string was sent
+	query, ok := capturedBody["query"].(string)
+	require.True(t, ok)
+	assert.Contains(t, query, "workOrderCreate")
+
+	// Verify the input variables were sent
+	vars, ok := capturedBody["variables"].(map[string]interface{})
+	require.True(t, ok)
+	inputVar, ok := vars["input"].(map[string]interface{})
+	require.True(t, ok)
+	assert.Equal(t, "loc-456", inputVar["locationId"])
+	assert.Equal(t, "Fix leak", inputVar["description"])
+	assert.Equal(t, "URGENT", inputVar["priority"])
+}
+
+func TestWorkOrderSetPriorityRoundTrip(t *testing.T) {
+	var capturedBody map[string]interface{}
+	srv, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		json.Unmarshal(body, &capturedBody)
+		json.NewEncoder(w).Encode(gqlResponse(map[string]interface{}{
+			"workOrderSetPriority": map[string]interface{}{
+				"id":       "wo-123",
+				"status":   "OPEN",
+				"priority": "URGENT",
+			},
+		}))
+	})
+	_ = srv
+
+	wo, err := c.WorkOrderSetPriority(context.Background(), "wo-123", "URGENT")
+	require.NoError(t, err)
+	assert.Equal(t, "wo-123", wo.ID)
+	assert.Equal(t, "URGENT", wo.Priority)
+
+	// Verify the mutation string was sent
+	query, ok := capturedBody["query"].(string)
+	require.True(t, ok)
+	assert.Contains(t, query, "workOrderSetPriority")
+
+	// Verify the input variables were sent
+	vars, ok := capturedBody["variables"].(map[string]interface{})
+	require.True(t, ok)
+	inputVar, ok := vars["input"].(map[string]interface{})
+	require.True(t, ok)
+	assert.Equal(t, "wo-123", inputVar["workOrderId"])
+	assert.Equal(t, "URGENT", inputVar["priority"])
+}
+
+func TestWorkOrderAddAttachmentRoundTrip(t *testing.T) {
+	var capturedBody map[string]interface{}
+	srv, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		json.Unmarshal(body, &capturedBody)
+		json.NewEncoder(w).Encode(gqlResponse(map[string]interface{}{
+			"workOrderAddAttachment": map[string]interface{}{
+				"workOrder": map[string]interface{}{
+					"id":     "wo-123",
+					"status": "OPEN",
+				},
+				"attachment": map[string]interface{}{
+					"id":        "att-456",
+					"name":      "photo.jpg",
+					"mediaType": "image/jpeg",
+				},
+				"signedURL": "https://storage.example.com/upload/att-456",
+			},
+		}))
+	})
+	_ = srv
+
+	input := models.WorkOrderAddAttachmentInput{
+		WorkOrderID: "wo-123",
+		FileName:    "photo.jpg",
+		MimeType:    "image/jpeg",
+	}
+	result, err := c.WorkOrderAddAttachment(context.Background(), input)
+	require.NoError(t, err)
+	assert.Equal(t, "wo-123", result.WorkOrder.ID)
+	assert.Equal(t, "att-456", result.Attachment.ID)
+	assert.Equal(t, "photo.jpg", result.Attachment.Name)
+	assert.Equal(t, "https://storage.example.com/upload/att-456", result.SignedURL)
+
+	// Verify the mutation string was sent
+	query, ok := capturedBody["query"].(string)
+	require.True(t, ok)
+	assert.Contains(t, query, "workOrderAddAttachment")
+
+	// Verify the input variables were sent
+	vars, ok := capturedBody["variables"].(map[string]interface{})
+	require.True(t, ok)
+	inputVar, ok := vars["input"].(map[string]interface{})
+	require.True(t, ok)
+	assert.Equal(t, "wo-123", inputVar["workOrderId"])
+	assert.Equal(t, "photo.jpg", inputVar["fileName"])
+	assert.Equal(t, "image/jpeg", inputVar["mimeType"])
+}
+
+func TestWorkOrderSetStatusAndSubStatusRoundTrip(t *testing.T) {
+	var capturedBody map[string]interface{}
+	srv, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		json.Unmarshal(body, &capturedBody)
+		json.NewEncoder(w).Encode(gqlResponse(map[string]interface{}{
+			"workOrderSetStatusAndSubStatus": map[string]interface{}{
+				"id":        "wo-123",
+				"status":    "COMPLETE",
+				"subStatus": "DONE",
+			},
+		}))
+	})
+	_ = srv
+
+	input := models.WorkOrderSetStatusAndSubStatusInput{
+		WorkOrderID: "wo-123",
+		Status:      models.WorkOrderStatusInput{Status: "COMPLETE"},
+		SubStatus:   models.WorkOrderSubStatusInput{SubStatus: "DONE"},
+	}
+	wo, err := c.WorkOrderSetStatusAndSubStatus(context.Background(), input)
+	require.NoError(t, err)
+	assert.Equal(t, "wo-123", wo.ID)
+	assert.Equal(t, "COMPLETE", wo.Status)
+
+	query, ok := capturedBody["query"].(string)
+	require.True(t, ok)
+	assert.Contains(t, query, "workOrderSetStatusAndSubStatus")
+
+	vars, ok := capturedBody["variables"].(map[string]interface{})
+	require.True(t, ok)
+	inputVar, ok := vars["input"].(map[string]interface{})
+	require.True(t, ok)
+	assert.Equal(t, "wo-123", inputVar["workOrderId"])
+	statusVar, ok := inputVar["Status"].(map[string]interface{})
+	require.True(t, ok)
+	assert.Equal(t, "COMPLETE", statusVar["status"])
+	subStatusVar, ok := inputVar["SubStatus"].(map[string]interface{})
+	require.True(t, ok)
+	assert.Equal(t, "DONE", subStatusVar["subStatus"])
+}
+
+func TestWorkOrderSetAssigneeRoundTrip(t *testing.T) {
+	var capturedBody map[string]interface{}
+	srv, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		json.Unmarshal(body, &capturedBody)
+		json.NewEncoder(w).Encode(gqlResponse(map[string]interface{}{
+			"workOrderSetAssignee": map[string]interface{}{
+				"id":     "wo-123",
+				"status": "OPEN",
+			},
+		}))
+	})
+	_ = srv
+
+	input := models.WorkOrderSetAssigneeInput{
+		WorkOrderID: "wo-123",
+		Assignee: models.AssignableInput{
+			AssigneeID:   "user-456",
+			AssigneeType: "USER",
+		},
+	}
+	wo, err := c.WorkOrderSetAssignee(context.Background(), input)
+	require.NoError(t, err)
+	assert.Equal(t, "wo-123", wo.ID)
+
+	query, ok := capturedBody["query"].(string)
+	require.True(t, ok)
+	assert.Contains(t, query, "workOrderSetAssignee")
+
+	vars, ok := capturedBody["variables"].(map[string]interface{})
+	require.True(t, ok)
+	inputVar, ok := vars["input"].(map[string]interface{})
+	require.True(t, ok)
+	assert.Equal(t, "wo-123", inputVar["workOrderId"])
+	assigneeVar, ok := inputVar["assignee"].(map[string]interface{})
+	require.True(t, ok)
+	assert.Equal(t, "user-456", assigneeVar["assigneeId"])
+	assert.Equal(t, "USER", assigneeVar["assigneeType"])
+}
+
+func TestWorkOrderSetDescriptionRoundTrip(t *testing.T) {
+	var capturedBody map[string]interface{}
+	srv, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		json.Unmarshal(body, &capturedBody)
+		json.NewEncoder(w).Encode(gqlResponse(map[string]interface{}{
+			"workOrderSetDescription": map[string]interface{}{
+				"id":          "wo-123",
+				"status":      "OPEN",
+				"description": "New description",
+			},
+		}))
+	})
+	_ = srv
+
+	wo, err := c.WorkOrderSetDescription(context.Background(), "wo-123", "New description")
+	require.NoError(t, err)
+	assert.Equal(t, "wo-123", wo.ID)
+	assert.Equal(t, "New description", wo.Description)
+
+	query, ok := capturedBody["query"].(string)
+	require.True(t, ok)
+	assert.Contains(t, query, "workOrderSetDescription")
+
+	vars, ok := capturedBody["variables"].(map[string]interface{})
+	require.True(t, ok)
+	inputVar, ok := vars["input"].(map[string]interface{})
+	require.True(t, ok)
+	assert.Equal(t, "wo-123", inputVar["workOrderId"])
+	assert.Equal(t, "New description", inputVar["description"])
+}
+
+func TestWorkOrderSetScheduledForRoundTrip(t *testing.T) {
+	var capturedBody map[string]interface{}
+	srv, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		json.Unmarshal(body, &capturedBody)
+		json.NewEncoder(w).Encode(gqlResponse(map[string]interface{}{
+			"workOrderSetScheduledFor": map[string]interface{}{
+				"id":           "wo-123",
+				"status":       "OPEN",
+				"scheduledFor": "2026-05-01T09:00:00Z",
+			},
+		}))
+	})
+	_ = srv
+
+	wo, err := c.WorkOrderSetScheduledFor(context.Background(), "wo-123", "2026-05-01T09:00:00Z")
+	require.NoError(t, err)
+	assert.Equal(t, "wo-123", wo.ID)
+
+	query, ok := capturedBody["query"].(string)
+	require.True(t, ok)
+	assert.Contains(t, query, "workOrderSetScheduledFor")
+
+	vars, ok := capturedBody["variables"].(map[string]interface{})
+	require.True(t, ok)
+	inputVar, ok := vars["input"].(map[string]interface{})
+	require.True(t, ok)
+	assert.Equal(t, "wo-123", inputVar["workOrderId"])
+	assert.Equal(t, "2026-05-01T09:00:00Z", inputVar["scheduledFor"])
+}
+
+func TestWorkOrderSetLocationRoundTrip(t *testing.T) {
+	var capturedBody map[string]interface{}
+	srv, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		json.Unmarshal(body, &capturedBody)
+		json.NewEncoder(w).Encode(gqlResponse(map[string]interface{}{
+			"workOrderSetLocation": map[string]interface{}{
+				"id":     "wo-123",
+				"status": "OPEN",
+			},
+		}))
+	})
+	_ = srv
+
+	wo, err := c.WorkOrderSetLocation(context.Background(), "wo-123", "loc-789")
+	require.NoError(t, err)
+	assert.Equal(t, "wo-123", wo.ID)
+
+	query, ok := capturedBody["query"].(string)
+	require.True(t, ok)
+	assert.Contains(t, query, "workOrderSetLocation")
+
+	vars, ok := capturedBody["variables"].(map[string]interface{})
+	require.True(t, ok)
+	inputVar, ok := vars["input"].(map[string]interface{})
+	require.True(t, ok)
+	assert.Equal(t, "wo-123", inputVar["workOrderId"])
+	assert.Equal(t, "loc-789", inputVar["locationId"])
+}
+
+func TestWorkOrderSetTypeRoundTrip(t *testing.T) {
+	var capturedBody map[string]interface{}
+	srv, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		json.Unmarshal(body, &capturedBody)
+		json.NewEncoder(w).Encode(gqlResponse(map[string]interface{}{
+			"workOrderSetType": map[string]interface{}{
+				"id":     "wo-123",
+				"status": "OPEN",
+			},
+		}))
+	})
+	_ = srv
+
+	wo, err := c.WorkOrderSetType(context.Background(), "wo-123", "MAINTENANCE")
+	require.NoError(t, err)
+	assert.Equal(t, "wo-123", wo.ID)
+
+	query, ok := capturedBody["query"].(string)
+	require.True(t, ok)
+	assert.Contains(t, query, "workOrderSetType")
+
+	vars, ok := capturedBody["variables"].(map[string]interface{})
+	require.True(t, ok)
+	inputVar, ok := vars["input"].(map[string]interface{})
+	require.True(t, ok)
+	assert.Equal(t, "wo-123", inputVar["workOrderId"])
+	assert.Equal(t, "MAINTENANCE", inputVar["workOrderType"])
+}
+
+func TestWorkOrderSetEntryNotesRoundTrip(t *testing.T) {
+	var capturedBody map[string]interface{}
+	srv, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		json.Unmarshal(body, &capturedBody)
+		json.NewEncoder(w).Encode(gqlResponse(map[string]interface{}{
+			"workOrderSetEntryNotes": map[string]interface{}{
+				"id":     "wo-123",
+				"status": "OPEN",
+			},
+		}))
+	})
+	_ = srv
+
+	wo, err := c.WorkOrderSetEntryNotes(context.Background(), "wo-123", "Knock first")
+	require.NoError(t, err)
+	assert.Equal(t, "wo-123", wo.ID)
+
+	query, ok := capturedBody["query"].(string)
+	require.True(t, ok)
+	assert.Contains(t, query, "workOrderSetEntryNotes")
+
+	vars, ok := capturedBody["variables"].(map[string]interface{})
+	require.True(t, ok)
+	inputVar, ok := vars["input"].(map[string]interface{})
+	require.True(t, ok)
+	assert.Equal(t, "wo-123", inputVar["workOrderId"])
+	assert.Equal(t, "Knock first", inputVar["entryNotes"])
+}
+
+func TestWorkOrderSetPermissionToEnterRoundTrip(t *testing.T) {
+	var capturedBody map[string]interface{}
+	srv, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		json.Unmarshal(body, &capturedBody)
+		json.NewEncoder(w).Encode(gqlResponse(map[string]interface{}{
+			"workOrderSetPermissionToEnter": map[string]interface{}{
+				"id":     "wo-123",
+				"status": "OPEN",
+			},
+		}))
+	})
+	_ = srv
+
+	wo, err := c.WorkOrderSetPermissionToEnter(context.Background(), "wo-123", true)
+	require.NoError(t, err)
+	assert.Equal(t, "wo-123", wo.ID)
+
+	query, ok := capturedBody["query"].(string)
+	require.True(t, ok)
+	assert.Contains(t, query, "workOrderSetPermissionToEnter")
+
+	vars, ok := capturedBody["variables"].(map[string]interface{})
+	require.True(t, ok)
+	inputVar, ok := vars["input"].(map[string]interface{})
+	require.True(t, ok)
+	assert.Equal(t, "wo-123", inputVar["workOrderId"])
+	assert.Equal(t, true, inputVar["permissionToEnter"])
+}
+
+func TestWorkOrderSetResidentApprovedEntryRoundTrip(t *testing.T) {
+	var capturedBody map[string]interface{}
+	srv, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		json.Unmarshal(body, &capturedBody)
+		json.NewEncoder(w).Encode(gqlResponse(map[string]interface{}{
+			"workOrderSetResidentApprovedEntry": map[string]interface{}{
+				"id":     "wo-123",
+				"status": "OPEN",
+			},
+		}))
+	})
+	_ = srv
+
+	wo, err := c.WorkOrderSetResidentApprovedEntry(context.Background(), "wo-123", true)
+	require.NoError(t, err)
+	assert.Equal(t, "wo-123", wo.ID)
+
+	query, ok := capturedBody["query"].(string)
+	require.True(t, ok)
+	assert.Contains(t, query, "workOrderSetResidentApprovedEntry")
+
+	vars, ok := capturedBody["variables"].(map[string]interface{})
+	require.True(t, ok)
+	inputVar, ok := vars["input"].(map[string]interface{})
+	require.True(t, ok)
+	assert.Equal(t, "wo-123", inputVar["workOrderId"])
+	assert.Equal(t, true, inputVar["residentApprovedEntry"])
+}
+
+func TestWorkOrderSetUnitEnteredRoundTrip(t *testing.T) {
+	var capturedBody map[string]interface{}
+	srv, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		json.Unmarshal(body, &capturedBody)
+		json.NewEncoder(w).Encode(gqlResponse(map[string]interface{}{
+			"workOrderSetUnitEntered": map[string]interface{}{
+				"id":     "wo-123",
+				"status": "OPEN",
+			},
+		}))
+	})
+	_ = srv
+
+	wo, err := c.WorkOrderSetUnitEntered(context.Background(), "wo-123", true)
+	require.NoError(t, err)
+	assert.Equal(t, "wo-123", wo.ID)
+
+	query, ok := capturedBody["query"].(string)
+	require.True(t, ok)
+	assert.Contains(t, query, "workOrderSetUnitEntered")
+
+	vars, ok := capturedBody["variables"].(map[string]interface{})
+	require.True(t, ok)
+	inputVar, ok := vars["input"].(map[string]interface{})
+	require.True(t, ok)
+	assert.Equal(t, "wo-123", inputVar["workOrderId"])
+	assert.Equal(t, true, inputVar["unitEntered"])
+}
+
+func TestWorkOrderArchiveRoundTrip(t *testing.T) {
+	var capturedBody map[string]interface{}
+	srv, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		json.Unmarshal(body, &capturedBody)
+		json.NewEncoder(w).Encode(gqlResponse(map[string]interface{}{
+			"workOrderArchive": map[string]interface{}{
+				"id":     "wo-123",
+				"status": "ARCHIVED",
+			},
+		}))
+	})
+	_ = srv
+
+	wo, err := c.WorkOrderArchive(context.Background(), "wo-123")
+	require.NoError(t, err)
+	assert.Equal(t, "wo-123", wo.ID)
+	assert.Equal(t, "ARCHIVED", wo.Status)
+
+	query, ok := capturedBody["query"].(string)
+	require.True(t, ok)
+	assert.Contains(t, query, "workOrderArchive")
+
+	vars, ok := capturedBody["variables"].(map[string]interface{})
+	require.True(t, ok)
+	inputVar, ok := vars["input"].(map[string]interface{})
+	require.True(t, ok)
+	assert.Equal(t, "wo-123", inputVar["workOrderId"])
+	assert.Equal(t, 1, len(inputVar), "archive input should only contain workOrderId")
+}
+
+func TestWorkOrderAddCommentRoundTrip(t *testing.T) {
+	var capturedBody map[string]interface{}
+	srv, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		json.Unmarshal(body, &capturedBody)
+		json.NewEncoder(w).Encode(gqlResponse(map[string]interface{}{
+			"workOrderAddComment": map[string]interface{}{
+				"id":     "wo-123",
+				"status": "OPEN",
+			},
+		}))
+	})
+	_ = srv
+
+	wo, err := c.WorkOrderAddComment(context.Background(), "wo-123", "Checked the unit")
+	require.NoError(t, err)
+	assert.Equal(t, "wo-123", wo.ID)
+
+	query, ok := capturedBody["query"].(string)
+	require.True(t, ok)
+	assert.Contains(t, query, "workOrderAddComment")
+
+	vars, ok := capturedBody["variables"].(map[string]interface{})
+	require.True(t, ok)
+	inputVar, ok := vars["input"].(map[string]interface{})
+	require.True(t, ok)
+	assert.Equal(t, "wo-123", inputVar["workOrderId"])
+	assert.Equal(t, "Checked the unit", inputVar["comment"])
+}
+
+func TestWorkOrderAddTimeRoundTrip(t *testing.T) {
+	var capturedBody map[string]interface{}
+	srv, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		json.Unmarshal(body, &capturedBody)
+		json.NewEncoder(w).Encode(gqlResponse(map[string]interface{}{
+			"workOrderAddTime": map[string]interface{}{
+				"id":     "wo-123",
+				"status": "OPEN",
+			},
+		}))
+	})
+	_ = srv
+
+	wo, err := c.WorkOrderAddTime(context.Background(), "wo-123", "PT30M")
+	require.NoError(t, err)
+	assert.Equal(t, "wo-123", wo.ID)
+
+	query, ok := capturedBody["query"].(string)
+	require.True(t, ok)
+	assert.Contains(t, query, "workOrderAddTime")
+
+	vars, ok := capturedBody["variables"].(map[string]interface{})
+	require.True(t, ok)
+	inputVar, ok := vars["input"].(map[string]interface{})
+	require.True(t, ok)
+	assert.Equal(t, "wo-123", inputVar["workOrderId"])
+	assert.Equal(t, "PT30M", inputVar["duration"])
+}
+
+func TestWorkOrderRemoveAttachmentRoundTrip(t *testing.T) {
+	var capturedBody map[string]interface{}
+	srv, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		json.Unmarshal(body, &capturedBody)
+		json.NewEncoder(w).Encode(gqlResponse(map[string]interface{}{
+			"workOrderRemoveAttachment": map[string]interface{}{
+				"id":     "wo-123",
+				"status": "OPEN",
+			},
+		}))
+	})
+	_ = srv
+
+	wo, err := c.WorkOrderRemoveAttachment(context.Background(), "wo-123", "att-456")
+	require.NoError(t, err)
+	assert.Equal(t, "wo-123", wo.ID)
+
+	query, ok := capturedBody["query"].(string)
+	require.True(t, ok)
+	assert.Contains(t, query, "workOrderRemoveAttachment")
+
+	vars, ok := capturedBody["variables"].(map[string]interface{})
+	require.True(t, ok)
+	inputVar, ok := vars["input"].(map[string]interface{})
+	require.True(t, ok)
+	assert.Equal(t, "wo-123", inputVar["workOrderId"])
+	assert.Equal(t, "att-456", inputVar["attachmentId"])
+}
+
+func TestWorkOrderStartTimerRoundTrip(t *testing.T) {
+	var capturedBody map[string]interface{}
+	srv, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		json.Unmarshal(body, &capturedBody)
+		json.NewEncoder(w).Encode(gqlResponse(map[string]interface{}{
+			"workOrderStartTimer": map[string]interface{}{
+				"id":     "wo-123",
+				"status": "OPEN",
+			},
+		}))
+	})
+	_ = srv
+
+	wo, err := c.WorkOrderStartTimer(context.Background(), "wo-123", "2026-04-16T08:00:00Z")
+	require.NoError(t, err)
+	assert.Equal(t, "wo-123", wo.ID)
+
+	query, ok := capturedBody["query"].(string)
+	require.True(t, ok)
+	assert.Contains(t, query, "workOrderStartTimer")
+
+	vars, ok := capturedBody["variables"].(map[string]interface{})
+	require.True(t, ok)
+	inputVar, ok := vars["input"].(map[string]interface{})
+	require.True(t, ok)
+	assert.Equal(t, "wo-123", inputVar["workOrderId"])
+	assert.Equal(t, "2026-04-16T08:00:00Z", inputVar["startedAt"])
+}
+
+func TestWorkOrderStopTimerRoundTrip(t *testing.T) {
+	var capturedBody map[string]interface{}
+	srv, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		json.Unmarshal(body, &capturedBody)
+		json.NewEncoder(w).Encode(gqlResponse(map[string]interface{}{
+			"workOrderStopTimer": map[string]interface{}{
+				"id":     "wo-123",
+				"status": "OPEN",
+			},
+		}))
+	})
+	_ = srv
+
+	wo, err := c.WorkOrderStopTimer(context.Background(), "wo-123", "2026-04-16T09:30:00Z")
+	require.NoError(t, err)
+	assert.Equal(t, "wo-123", wo.ID)
+
+	query, ok := capturedBody["query"].(string)
+	require.True(t, ok)
+	assert.Contains(t, query, "workOrderStopTimer")
+
+	vars, ok := capturedBody["variables"].(map[string]interface{})
+	require.True(t, ok)
+	inputVar, ok := vars["input"].(map[string]interface{})
+	require.True(t, ok)
+	assert.Equal(t, "wo-123", inputVar["workOrderId"])
+	assert.Equal(t, "2026-04-16T09:30:00Z", inputVar["stoppedAt"])
+}
+
+// TestMutationRetryClassification verifies that non-idempotent mutations (Create,
+// AddComment, AddTime, AddAttachment) do NOT retry on 500, while idempotent
+// mutations (all set*, archive, remove, start, stop) DO retry.
+func TestMutationRetryClassification(t *testing.T) {
+	// nonIdempotent mutations should attempt exactly 1 request on a 500 error.
+	// Idempotent mutations should attempt >1 request (retry).
+	tests := []struct {
+		name       string
+		call       func(ctx context.Context, c *Client) error
+		idempotent bool
+	}{
+		{"WorkOrderCreate", func(ctx context.Context, c *Client) error {
+			_, err := c.WorkOrderCreate(ctx, models.WorkOrderCreateInput{LocationID: "loc-1"})
+			return err
+		}, false},
+		{"WorkOrderAddComment", func(ctx context.Context, c *Client) error {
+			_, err := c.WorkOrderAddComment(ctx, "wo-1", "text")
+			return err
+		}, false},
+		{"WorkOrderAddTime", func(ctx context.Context, c *Client) error {
+			_, err := c.WorkOrderAddTime(ctx, "wo-1", "PT1H")
+			return err
+		}, false},
+		{"WorkOrderAddAttachment", func(ctx context.Context, c *Client) error {
+			_, err := c.WorkOrderAddAttachment(ctx, models.WorkOrderAddAttachmentInput{WorkOrderID: "wo-1", FileName: "f", MimeType: "image/jpeg"})
+			return err
+		}, false},
+		{"WorkOrderSetPriority", func(ctx context.Context, c *Client) error {
+			_, err := c.WorkOrderSetPriority(ctx, "wo-1", "URGENT")
+			return err
+		}, true},
+		{"WorkOrderSetDescription", func(ctx context.Context, c *Client) error {
+			_, err := c.WorkOrderSetDescription(ctx, "wo-1", "desc")
+			return err
+		}, true},
+		{"WorkOrderArchive", func(ctx context.Context, c *Client) error {
+			_, err := c.WorkOrderArchive(ctx, "wo-1")
+			return err
+		}, true},
+		{"WorkOrderRemoveAttachment", func(ctx context.Context, c *Client) error {
+			_, err := c.WorkOrderRemoveAttachment(ctx, "wo-1", "att-1")
+			return err
+		}, true},
+		{"WorkOrderStartTimer", func(ctx context.Context, c *Client) error {
+			_, err := c.WorkOrderStartTimer(ctx, "wo-1", "2026-01-01T00:00:00Z")
+			return err
+		}, true},
+		{"WorkOrderStopTimer", func(ctx context.Context, c *Client) error {
+			_, err := c.WorkOrderStopTimer(ctx, "wo-1", "2026-01-01T01:00:00Z")
+			return err
+		}, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var requestCount int32
+			srv, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+				atomic.AddInt32(&requestCount, 1)
+				w.WriteHeader(http.StatusInternalServerError)
+			})
+			_ = srv
+
+			err := tt.call(context.Background(), c)
+			require.Error(t, err)
+
+			count := atomic.LoadInt32(&requestCount)
+			if tt.idempotent {
+				assert.Greater(t, count, int32(1), "%s should retry on 500 (idempotent)", tt.name)
+			} else {
+				assert.Equal(t, int32(1), count, "%s should NOT retry on 500 (non-idempotent)", tt.name)
+			}
+		})
+	}
+}
+
+func TestDoMutationIdempotentRetriesOnTransient500(t *testing.T) {
+	var requestCount int32
+	srv, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		count := atomic.AddInt32(&requestCount, 1)
+		if count <= 2 {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		json.NewEncoder(w).Encode(gqlResponse(map[string]interface{}{
+			"testMutation": map[string]interface{}{"id": "456"},
+		}))
+	})
+	_ = srv
+
+	var result json.RawMessage
+	err := c.doMutationIdempotent(context.Background(), "mutation { testMutation { id } }", nil, &result)
+	require.NoError(t, err)
+	assert.Contains(t, string(result), "456")
+	// Should have retried: 2 failures + 1 success = 3
+	assert.Equal(t, int32(3), atomic.LoadInt32(&requestCount))
+}

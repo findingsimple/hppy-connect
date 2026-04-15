@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"regexp"
 	"strings"
 	"time"
 
@@ -22,9 +21,6 @@ var sem = make(chan struct{}, 3)
 
 // maxLimit caps the maximum number of items a single tool call can return.
 const maxLimit = 10000
-
-// validID matches numeric, UUID-style, or underscore-containing identifiers.
-var validID = regexp.MustCompile(`^[a-zA-Z0-9_\-]+$`)
 
 // Input structs for typed tool handlers.
 
@@ -55,15 +51,74 @@ type ListInspectionsInput struct {
 	Limit         int    `json:"limit,omitempty" jsonschema:"Maximum number of inspections to return."`
 }
 
-// apiClient is the subset of api.Client methods used by the MCP server.
-// Defined here so tests can provide a mock without importing internal/api.
-type apiClient interface {
+// Domain-specific interfaces — each contains only the methods its tools need.
+// Test mocks can embed a no-op base struct and override only the methods under test,
+// preventing a new mutation from breaking every existing mock.
+
+type accountReader interface {
 	GetAccount(ctx context.Context) (*models.Account, error)
+	EnsureAuth(ctx context.Context) error
+}
+
+type propertyReader interface {
 	ListProperties(ctx context.Context, opts models.ListOptions) ([]models.Property, int, error)
 	ListUnits(ctx context.Context, propertyID string, opts models.ListOptions) ([]models.Unit, int, error)
+}
+
+type workOrderReader interface {
 	ListWorkOrders(ctx context.Context, opts models.ListOptions) ([]models.WorkOrder, int, error)
+}
+
+type inspectionReader interface {
 	ListInspections(ctx context.Context, opts models.ListOptions) ([]models.Inspection, int, error)
-	EnsureAuth(ctx context.Context) error
+}
+
+// Mutation interfaces — added per domain phase. Initially empty, populated in later phases.
+
+type workOrderMutator interface {
+	WorkOrderCreate(ctx context.Context, input models.WorkOrderCreateInput) (*models.WorkOrder, error)
+	WorkOrderSetStatusAndSubStatus(ctx context.Context, input models.WorkOrderSetStatusAndSubStatusInput) (*models.WorkOrder, error)
+	WorkOrderSetAssignee(ctx context.Context, input models.WorkOrderSetAssigneeInput) (*models.WorkOrder, error)
+	WorkOrderSetDescription(ctx context.Context, workOrderID, description string) (*models.WorkOrder, error)
+	WorkOrderSetPriority(ctx context.Context, workOrderID, priority string) (*models.WorkOrder, error)
+	WorkOrderSetScheduledFor(ctx context.Context, workOrderID, scheduledFor string) (*models.WorkOrder, error)
+	WorkOrderSetLocation(ctx context.Context, workOrderID, locationID string) (*models.WorkOrder, error)
+	WorkOrderSetType(ctx context.Context, workOrderID, woType string) (*models.WorkOrder, error)
+	WorkOrderSetEntryNotes(ctx context.Context, workOrderID, entryNotes string) (*models.WorkOrder, error)
+	WorkOrderSetPermissionToEnter(ctx context.Context, workOrderID string, permission bool) (*models.WorkOrder, error)
+	WorkOrderSetResidentApprovedEntry(ctx context.Context, workOrderID string, approved bool) (*models.WorkOrder, error)
+	WorkOrderSetUnitEntered(ctx context.Context, workOrderID string, unitEntered bool) (*models.WorkOrder, error)
+	WorkOrderArchive(ctx context.Context, workOrderID string) (*models.WorkOrder, error)
+	WorkOrderAddComment(ctx context.Context, workOrderID, comment string) (*models.WorkOrder, error)
+	WorkOrderAddTime(ctx context.Context, workOrderID, duration string) (*models.WorkOrder, error)
+	WorkOrderAddAttachment(ctx context.Context, input models.WorkOrderAddAttachmentInput) (*models.WorkOrderAddAttachmentResult, error)
+	WorkOrderRemoveAttachment(ctx context.Context, workOrderID, attachmentID string) (*models.WorkOrder, error)
+	WorkOrderStartTimer(ctx context.Context, workOrderID, startedAt string) (*models.WorkOrder, error)
+	WorkOrderStopTimer(ctx context.Context, workOrderID, stoppedAt string) (*models.WorkOrder, error)
+}
+type inspectionMutator interface{}
+type projectMutator interface{}
+type userMutator interface{}
+type membershipMutator interface{}
+type propertyAccessMutator interface{}
+type roleMutator interface{}
+type webhookMutator interface{}
+
+// apiClient composes all domain interfaces. The concrete *api.Client satisfies this.
+// Mocks in tests only need to implement the sub-interface their test uses.
+type apiClient interface {
+	accountReader
+	propertyReader
+	workOrderReader
+	inspectionReader
+	workOrderMutator
+	inspectionMutator
+	projectMutator
+	userMutator
+	membershipMutator
+	propertyAccessMutator
+	roleMutator
+	webhookMutator
 }
 
 func registerTools(server *mcp.Server, client apiClient, debug bool) {
@@ -116,11 +171,8 @@ func registerTools(server *mcp.Server, client apiClient, debug bool) {
 			Description: "List all units within a specific HappyCo property",
 		},
 		wrapTool(debug, "list_units", func(ctx context.Context, _ *mcp.CallToolRequest, input ListUnitsInput) (*mcp.CallToolResult, any, error) {
-			if input.PropertyID == "" {
-				return toolInputError("property_id is required"), nil, nil
-			}
-			if err := validateID("property_id", input.PropertyID); err != nil {
-				return toolInputError(err.Error()), nil, nil
+			if errResult := requireID("property_id", input.PropertyID); errResult != nil {
+				return errResult, nil, nil
 			}
 
 			ctx, cancel := context.WithTimeout(ctx, toolTimeout)
@@ -204,6 +256,9 @@ func registerTools(server *mcp.Server, client apiClient, debug bool) {
 			})
 		}),
 	)
+
+	// Register mutation tools by domain
+	registerWorkOrderMutationTools(server, client, debug)
 }
 
 // acquireSem acquires a semaphore slot, respecting context cancellation.
@@ -311,8 +366,17 @@ func clampLimit(limit int) int {
 
 // validateID checks that an ID string contains only safe characters.
 func validateID(name, value string) error {
-	if value != "" && !validID.MatchString(value) {
-		return fmt.Errorf("%s contains invalid characters", name)
+	return models.ValidateID(name, value)
+}
+
+// requireID validates that an ID is non-empty and contains only safe characters.
+// Returns an MCP error result on failure, or nil on success.
+func requireID(name, value string) *mcp.CallToolResult {
+	if value == "" {
+		return toolInputError(name + " is required")
+	}
+	if err := validateID(name, value); err != nil {
+		return toolInputError(err.Error())
 	}
 	return nil
 }

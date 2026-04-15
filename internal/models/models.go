@@ -15,6 +15,14 @@ var (
 	ValidInspectionStatuses = map[string]bool{"COMPLETE": true, "EXPIRED": true, "INCOMPLETE": true, "SCHEDULED": true}
 )
 
+// Mutation-specific validation maps.
+var (
+	ValidWorkOrderPriorities    = map[string]bool{"NORMAL": true, "URGENT": true}
+	ValidWorkOrderTypes         = map[string]bool{"SERVICE_REQUEST": true, "TURN": true, "CAPITAL_IMPROVEMENT": true, "INSPECTION_RELATED": true, "APPLIANCE_REPLACEMENT": true}
+	ValidWorkOrderSubStatuses   = map[string]bool{"CANCELLED": true, "UNKNOWN": true}
+	ValidWorkOrderAssigneeTypes = map[string]bool{"USER": true, "VENDOR": true}
+)
+
 // ValidateStatus checks that a status value is allowed, normalises it to uppercase,
 // and returns the validated status slice. Returns an error listing valid options if invalid.
 func ValidateStatus(status string, validStatuses map[string]bool) ([]string, error) {

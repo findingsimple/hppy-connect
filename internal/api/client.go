@@ -370,6 +370,33 @@ func (c *Client) doQuery(ctx context.Context, query string, variables map[string
 	return nil
 }
 
+// doMutation sends a mutation with a single auth-retry but no transient-error retry.
+// If the request gets a 401, re-authenticates once and retries. This is safe because
+// the server either executed the mutation or rejected it — a fresh token retry resolves
+// the ambiguity without risking duplicates.
+// Use for non-idempotent operations: creates, adds, sends, duplicates.
+func (c *Client) doMutation(ctx context.Context, query string, variables map[string]interface{}, result interface{}) error {
+	err := c.doQuery(ctx, query, variables, result)
+	if err == nil {
+		return nil
+	}
+	var ae *apiError
+	if errors.As(err, &ae) && ae.Category == "auth_failed" {
+		if _, authErr := c.ensureAuth(ctx); authErr != nil {
+			return err
+		}
+		return c.doQuery(ctx, query, variables, result)
+	}
+	return err
+}
+
+// doMutationIdempotent sends an idempotent mutation with full retry logic
+// (auth retry + transient error retry with backoff).
+// Use for set*, archive, delete, remove, start, complete, reopen, etc.
+func (c *Client) doMutationIdempotent(ctx context.Context, query string, variables map[string]interface{}, result interface{}) error {
+	return c.doQueryWithRetry(ctx, query, variables, result)
+}
+
 // GetAccount returns the account details with retry for transient errors.
 func (c *Client) GetAccount(ctx context.Context) (*models.Account, error) {
 	vars := map[string]interface{}{
@@ -496,6 +523,243 @@ func (c *Client) ListInspections(ctx context.Context, opts models.ListOptions) (
 		}
 		return &resp.Account.Inspections, nil
 	})
+}
+
+// --- Work Order Mutations (19) ---
+
+// WorkOrderCreate creates a new work order. Non-idempotent: auth-retry only.
+func (c *Client) WorkOrderCreate(ctx context.Context, input models.WorkOrderCreateInput) (*models.WorkOrder, error) {
+	vars := map[string]interface{}{"input": input}
+	var resp workOrderCreateResponse
+	if err := c.doMutation(ctx, workOrderCreateMutation, vars, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.WorkOrderCreate, nil
+}
+
+// WorkOrderSetStatusAndSubStatus sets both status and sub-status. Idempotent.
+func (c *Client) WorkOrderSetStatusAndSubStatus(ctx context.Context, input models.WorkOrderSetStatusAndSubStatusInput) (*models.WorkOrder, error) {
+	vars := map[string]interface{}{"input": input}
+	var resp workOrderSetStatusAndSubStatusResponse
+	if err := c.doMutationIdempotent(ctx, workOrderSetStatusAndSubStatusMutation, vars, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.WorkOrderSetStatusAndSubStatus, nil
+}
+
+// WorkOrderSetAssignee sets the work order assignee. Idempotent.
+func (c *Client) WorkOrderSetAssignee(ctx context.Context, input models.WorkOrderSetAssigneeInput) (*models.WorkOrder, error) {
+	vars := map[string]interface{}{"input": input}
+	var resp workOrderSetAssigneeResponse
+	if err := c.doMutationIdempotent(ctx, workOrderSetAssigneeMutation, vars, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.WorkOrderSetAssignee, nil
+}
+
+// WorkOrderSetDescription sets the work order description. Idempotent.
+func (c *Client) WorkOrderSetDescription(ctx context.Context, workOrderID, description string) (*models.WorkOrder, error) {
+	vars := map[string]interface{}{"input": map[string]interface{}{
+		"workOrderId": workOrderID,
+		"description": description,
+	}}
+	var resp workOrderSetDescriptionResponse
+	if err := c.doMutationIdempotent(ctx, workOrderSetDescriptionMutation, vars, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.WorkOrderSetDescription, nil
+}
+
+// WorkOrderSetPriority sets the work order priority. Idempotent.
+func (c *Client) WorkOrderSetPriority(ctx context.Context, workOrderID, priority string) (*models.WorkOrder, error) {
+	vars := map[string]interface{}{"input": map[string]interface{}{
+		"workOrderId": workOrderID,
+		"priority":    priority,
+	}}
+	var resp workOrderSetPriorityResponse
+	if err := c.doMutationIdempotent(ctx, workOrderSetPriorityMutation, vars, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.WorkOrderSetPriority, nil
+}
+
+// WorkOrderSetScheduledFor sets when the work order is scheduled. Idempotent.
+func (c *Client) WorkOrderSetScheduledFor(ctx context.Context, workOrderID, scheduledFor string) (*models.WorkOrder, error) {
+	vars := map[string]interface{}{"input": map[string]interface{}{
+		"workOrderId":  workOrderID,
+		"scheduledFor": scheduledFor,
+	}}
+	var resp workOrderSetScheduledForResponse
+	if err := c.doMutationIdempotent(ctx, workOrderSetScheduledForMutation, vars, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.WorkOrderSetScheduledFor, nil
+}
+
+// WorkOrderSetLocation sets the work order location. Idempotent.
+func (c *Client) WorkOrderSetLocation(ctx context.Context, workOrderID, locationID string) (*models.WorkOrder, error) {
+	vars := map[string]interface{}{"input": map[string]interface{}{
+		"workOrderId": workOrderID,
+		"locationId":  locationID,
+	}}
+	var resp workOrderSetLocationResponse
+	if err := c.doMutationIdempotent(ctx, workOrderSetLocationMutation, vars, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.WorkOrderSetLocation, nil
+}
+
+// WorkOrderSetType sets the work order type. Idempotent.
+func (c *Client) WorkOrderSetType(ctx context.Context, workOrderID, woType string) (*models.WorkOrder, error) {
+	vars := map[string]interface{}{"input": map[string]interface{}{
+		"workOrderId":   workOrderID,
+		"workOrderType": woType,
+	}}
+	var resp workOrderSetTypeResponse
+	if err := c.doMutationIdempotent(ctx, workOrderSetTypeMutation, vars, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.WorkOrderSetType, nil
+}
+
+// WorkOrderSetEntryNotes sets the work order entry notes. Idempotent.
+func (c *Client) WorkOrderSetEntryNotes(ctx context.Context, workOrderID, entryNotes string) (*models.WorkOrder, error) {
+	vars := map[string]interface{}{"input": map[string]interface{}{
+		"workOrderId": workOrderID,
+		"entryNotes":  entryNotes,
+	}}
+	var resp workOrderSetEntryNotesResponse
+	if err := c.doMutationIdempotent(ctx, workOrderSetEntryNotesMutation, vars, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.WorkOrderSetEntryNotes, nil
+}
+
+// WorkOrderSetPermissionToEnter sets the permission to enter flag. Idempotent.
+func (c *Client) WorkOrderSetPermissionToEnter(ctx context.Context, workOrderID string, permission bool) (*models.WorkOrder, error) {
+	vars := map[string]interface{}{"input": map[string]interface{}{
+		"workOrderId":       workOrderID,
+		"permissionToEnter": permission,
+	}}
+	var resp workOrderSetPermissionToEnterResponse
+	if err := c.doMutationIdempotent(ctx, workOrderSetPermissionToEnterMutation, vars, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.WorkOrderSetPermissionToEnter, nil
+}
+
+// WorkOrderSetResidentApprovedEntry sets the resident approved entry flag. Idempotent.
+func (c *Client) WorkOrderSetResidentApprovedEntry(ctx context.Context, workOrderID string, approved bool) (*models.WorkOrder, error) {
+	vars := map[string]interface{}{"input": map[string]interface{}{
+		"workOrderId":           workOrderID,
+		"residentApprovedEntry": approved,
+	}}
+	var resp workOrderSetResidentApprovedEntryResponse
+	if err := c.doMutationIdempotent(ctx, workOrderSetResidentApprovedEntryMutation, vars, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.WorkOrderSetResidentApprovedEntry, nil
+}
+
+// WorkOrderSetUnitEntered sets the unit entered flag. Idempotent.
+func (c *Client) WorkOrderSetUnitEntered(ctx context.Context, workOrderID string, unitEntered bool) (*models.WorkOrder, error) {
+	vars := map[string]interface{}{"input": map[string]interface{}{
+		"workOrderId": workOrderID,
+		"unitEntered": unitEntered,
+	}}
+	var resp workOrderSetUnitEnteredResponse
+	if err := c.doMutationIdempotent(ctx, workOrderSetUnitEnteredMutation, vars, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.WorkOrderSetUnitEntered, nil
+}
+
+// WorkOrderArchive archives a work order. Idempotent.
+func (c *Client) WorkOrderArchive(ctx context.Context, workOrderID string) (*models.WorkOrder, error) {
+	vars := map[string]interface{}{"input": map[string]interface{}{
+		"workOrderId": workOrderID,
+	}}
+	var resp workOrderArchiveResponse
+	if err := c.doMutationIdempotent(ctx, workOrderArchiveMutation, vars, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.WorkOrderArchive, nil
+}
+
+// WorkOrderAddComment adds a comment to a work order. Non-idempotent: auth-retry only.
+func (c *Client) WorkOrderAddComment(ctx context.Context, workOrderID, comment string) (*models.WorkOrder, error) {
+	vars := map[string]interface{}{"input": map[string]interface{}{
+		"workOrderId": workOrderID,
+		"comment":     comment,
+	}}
+	var resp workOrderAddCommentResponse
+	if err := c.doMutation(ctx, workOrderAddCommentMutation, vars, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.WorkOrderAddComment, nil
+}
+
+// WorkOrderAddTime adds time spent on a work order. Non-idempotent: auth-retry only.
+func (c *Client) WorkOrderAddTime(ctx context.Context, workOrderID, duration string) (*models.WorkOrder, error) {
+	vars := map[string]interface{}{"input": map[string]interface{}{
+		"workOrderId": workOrderID,
+		"duration":    duration,
+	}}
+	var resp workOrderAddTimeResponse
+	if err := c.doMutation(ctx, workOrderAddTimeMutation, vars, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.WorkOrderAddTime, nil
+}
+
+// WorkOrderAddAttachment adds an attachment to a work order. Non-idempotent: auth-retry only.
+// Returns the updated work order, attachment metadata, and a signed upload URL.
+func (c *Client) WorkOrderAddAttachment(ctx context.Context, input models.WorkOrderAddAttachmentInput) (*models.WorkOrderAddAttachmentResult, error) {
+	vars := map[string]interface{}{"input": input}
+	var resp workOrderAddAttachmentResponse
+	if err := c.doMutation(ctx, workOrderAddAttachmentMutation, vars, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.WorkOrderAddAttachment, nil
+}
+
+// WorkOrderRemoveAttachment removes an attachment. Idempotent.
+func (c *Client) WorkOrderRemoveAttachment(ctx context.Context, workOrderID, attachmentID string) (*models.WorkOrder, error) {
+	vars := map[string]interface{}{"input": map[string]interface{}{
+		"workOrderId":  workOrderID,
+		"attachmentId": attachmentID,
+	}}
+	var resp workOrderRemoveAttachmentResponse
+	if err := c.doMutationIdempotent(ctx, workOrderRemoveAttachmentMutation, vars, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.WorkOrderRemoveAttachment, nil
+}
+
+// WorkOrderStartTimer starts the timer. Idempotent.
+func (c *Client) WorkOrderStartTimer(ctx context.Context, workOrderID, startedAt string) (*models.WorkOrder, error) {
+	vars := map[string]interface{}{"input": map[string]interface{}{
+		"workOrderId": workOrderID,
+		"startedAt":   startedAt,
+	}}
+	var resp workOrderStartTimerResponse
+	if err := c.doMutationIdempotent(ctx, workOrderStartTimerMutation, vars, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.WorkOrderStartTimer, nil
+}
+
+// WorkOrderStopTimer stops the timer. Idempotent.
+func (c *Client) WorkOrderStopTimer(ctx context.Context, workOrderID, stoppedAt string) (*models.WorkOrder, error) {
+	vars := map[string]interface{}{"input": map[string]interface{}{
+		"workOrderId": workOrderID,
+		"stoppedAt":   stoppedAt,
+	}}
+	var resp workOrderStopTimerResponse
+	if err := c.doMutationIdempotent(ctx, workOrderStopTimerMutation, vars, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.WorkOrderStopTimer, nil
 }
 
 // paginate is a generic pagination loop shared by all List* methods.

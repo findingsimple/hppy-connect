@@ -459,3 +459,118 @@ func TestValidateLimit(t *testing.T) {
 	assert.Error(t, validateLimit(-1))
 	assert.Error(t, validateLimit(-100))
 }
+
+// --- confirmAction ---
+
+func TestConfirmActionYesFlag(t *testing.T) {
+	cmd := &cobra.Command{Use: "test"}
+	cmd.Flags().Bool("yes", true, "")
+
+	// Should skip prompt entirely — input is never read
+	err := confirmAction(cmd, "delete everything", strings.NewReader(""))
+	assert.NoError(t, err)
+}
+
+func TestConfirmActionUserTypesY(t *testing.T) {
+	cmd := &cobra.Command{Use: "test"}
+	cmd.Flags().Bool("yes", false, "")
+
+	err := confirmAction(cmd, "archive work order", strings.NewReader("y\n"))
+	assert.NoError(t, err)
+}
+
+func TestConfirmActionUserTypesUpperY(t *testing.T) {
+	cmd := &cobra.Command{Use: "test"}
+	cmd.Flags().Bool("yes", false, "")
+
+	err := confirmAction(cmd, "archive work order", strings.NewReader("Y\n"))
+	assert.NoError(t, err)
+}
+
+func TestConfirmActionUserTypesYes(t *testing.T) {
+	cmd := &cobra.Command{Use: "test"}
+	cmd.Flags().Bool("yes", false, "")
+
+	err := confirmAction(cmd, "archive work order", strings.NewReader("yes\n"))
+	assert.NoError(t, err)
+}
+
+func TestConfirmActionUserTypesYesMixedCase(t *testing.T) {
+	cmd := &cobra.Command{Use: "test"}
+	cmd.Flags().Bool("yes", false, "")
+
+	err := confirmAction(cmd, "archive work order", strings.NewReader("Yes\n"))
+	assert.NoError(t, err)
+}
+
+func TestConfirmActionUserTypesN(t *testing.T) {
+	cmd := &cobra.Command{Use: "test"}
+	cmd.Flags().Bool("yes", false, "")
+
+	err := confirmAction(cmd, "archive work order", strings.NewReader("n\n"))
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "aborted")
+}
+
+func TestConfirmActionEmptyInput(t *testing.T) {
+	cmd := &cobra.Command{Use: "test"}
+	cmd.Flags().Bool("yes", false, "")
+
+	err := confirmAction(cmd, "archive work order", strings.NewReader("\n"))
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "aborted")
+}
+
+func TestConfirmActionEOF(t *testing.T) {
+	cmd := &cobra.Command{Use: "test"}
+	cmd.Flags().Bool("yes", false, "")
+
+	err := confirmAction(cmd, "archive work order", strings.NewReader(""))
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "aborted")
+}
+
+// --- printMutationResult ---
+
+func TestPrintMutationResultJSON(t *testing.T) {
+	cmd := &cobra.Command{Use: "test"}
+	cmd.Flags().String("output", "json", "")
+
+	var buf bytes.Buffer
+	result := map[string]string{"id": "abc123", "status": "OPEN"}
+	err := printMutationResult(cmd, &buf, result)
+	require.NoError(t, err)
+
+	var parsed map[string]string
+	require.NoError(t, json.Unmarshal(buf.Bytes(), &parsed))
+	assert.Equal(t, "abc123", parsed["id"])
+	assert.Equal(t, "OPEN", parsed["status"])
+}
+
+func TestPrintMutationResultOutputTextWarning(t *testing.T) {
+	cmd := &cobra.Command{Use: "test"}
+	cmd.Flags().String("output", "text", "")
+	// Simulate the flag being explicitly set by the user
+	require.NoError(t, cmd.Flags().Set("output", "text"))
+
+	// Capture stderr to verify the warning
+	oldStderr := os.Stderr
+	r, w, _ := os.Pipe()
+	os.Stderr = w
+
+	var buf bytes.Buffer
+	result := map[string]string{"id": "abc123"}
+	err := printMutationResult(cmd, &buf, result)
+	require.NoError(t, err)
+
+	w.Close()
+	os.Stderr = oldStderr
+	var stderrBuf bytes.Buffer
+	stderrBuf.ReadFrom(r)
+
+	assert.Contains(t, stderrBuf.String(), "note: mutation output is always JSON")
+	// Output should still be valid JSON regardless
+	var parsed map[string]string
+	require.NoError(t, json.Unmarshal(buf.Bytes(), &parsed))
+	assert.Equal(t, "abc123", parsed["id"])
+}

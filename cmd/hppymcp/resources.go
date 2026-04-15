@@ -49,7 +49,7 @@ func registerResources(server *mcp.Server, client apiClient) {
 			if propertyID == "" {
 				return nil, fmt.Errorf("missing property ID in URI")
 			}
-			if !validID.MatchString(propertyID) {
+			if err := models.ValidateID("property_id", propertyID); err != nil {
 				return nil, fmt.Errorf("invalid property ID format")
 			}
 
