@@ -19,9 +19,11 @@ import (
 	"github.com/findingsimple/hppy-connect/internal/models"
 )
 
+// DefaultEndpoint is the HappyCo external GraphQL API endpoint.
+const DefaultEndpoint = "https://externalgraph.happyco.com"
+
 const (
-	defaultEndpoint = "https://externalgraph.happyco.com"
-	pageSize        = 100
+	pageSize = 100
 	defaultCap      = 1000
 	expiryBuffer    = 5 * time.Minute
 	maxRetries      = 3
@@ -96,7 +98,7 @@ func withInsecureHTTP() Option {
 // is not HTTPS (credentials are transmitted over this connection).
 func NewClient(email, password, accountID string, opts ...Option) (*Client, error) {
 	c := &Client{
-		endpoint:     defaultEndpoint,
+		endpoint:     DefaultEndpoint,
 		httpClient:   &http.Client{Timeout: 30 * time.Second},
 		email:        email,
 		password:     password,
@@ -166,10 +168,49 @@ func (c *Client) invalidateAuth() {
 }
 
 func (c *Client) login(ctx context.Context) error {
+	result, err := doLogin(ctx, c.httpClient, c.endpoint, c.email, c.password, c.debug)
+	if err != nil {
+		return err
+	}
+
+	c.authState.Store(&tokenState{
+		token:     result.Token,
+		expiresAt: result.ExpiresAt,
+	})
+
+	return nil
+}
+
+// LoginResult contains the data returned by a successful login.
+type LoginResult struct {
+	Token      string
+	ExpiresAt  time.Time
+	AccountIDs []string // accessibleBusinessIds
+}
+
+// Login authenticates with the HappyCo API and returns account IDs.
+// This is a standalone function for use during initial setup (config init)
+// where a full Client is not yet configured.
+func Login(ctx context.Context, email, password, endpoint string) (*LoginResult, error) {
+	if endpoint == "" {
+		endpoint = DefaultEndpoint
+	}
+
+	u, err := url.Parse(endpoint)
+	if err != nil || u.Scheme != "https" || u.Host == "" {
+		return nil, errAuth(fmt.Sprintf("endpoint %q must be a valid https:// URL (credentials are transmitted)", endpoint))
+	}
+
+	return doLogin(ctx, &http.Client{Timeout: 30 * time.Second}, endpoint, email, password, false)
+}
+
+// doLogin is the shared login implementation used by both Client.login and the
+// standalone Login function.
+func doLogin(ctx context.Context, httpClient *http.Client, endpoint, email, password string, debug bool) (*LoginResult, error) {
 	vars := map[string]interface{}{
 		"input": map[string]string{
-			"email":    c.email,
-			"password": c.password,
+			"email":    email,
+			"password": password,
 		},
 	}
 
@@ -178,66 +219,64 @@ func (c *Client) login(ctx context.Context) error {
 		"variables": vars,
 	})
 	if err != nil {
-		return errAuth(fmt.Sprintf("marshalling login request: %v", err))
+		return nil, errAuth(fmt.Sprintf("marshalling login request: %v", err))
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.endpoint, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
 	if err != nil {
-		return errAuth(fmt.Sprintf("creating login request: %v", err))
+		return nil, errAuth(fmt.Sprintf("creating login request: %v", err))
 	}
 	req.Header.Set("Content-Type", "application/json")
 
 	start := time.Now()
-	resp, err := c.httpClient.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
-		return errAuth(fmt.Sprintf("login request: %v", err))
+		return nil, errAuth(fmt.Sprintf("login request: %v", err))
 	}
 	defer resp.Body.Close()
 
-	if c.debug {
-		log.Printf("[debug] login POST %s status=%d duration=%s", c.endpoint, resp.StatusCode, time.Since(start))
+	if debug {
+		log.Printf("[debug] login POST %s status=%d duration=%s", endpoint, resp.StatusCode, time.Since(start))
 	}
 
 	respBody, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseSize))
 	if err != nil {
-		return errAuth(fmt.Sprintf("reading login response: %v", err))
+		return nil, errAuth(fmt.Sprintf("reading login response: %v", err))
 	}
 
 	if resp.StatusCode == http.StatusTooManyRequests {
-		return errRateLimited("login rate limited")
+		return nil, errRateLimited("login rate limited")
 	}
 	if resp.StatusCode >= 500 {
-		return errAPI(fmt.Sprintf("login returned HTTP %d", resp.StatusCode))
+		return nil, errAPI(fmt.Sprintf("login returned HTTP %d", resp.StatusCode))
 	}
 	if resp.StatusCode >= 400 {
-		return errAuth(fmt.Sprintf("login returned HTTP %d", resp.StatusCode))
+		return nil, errAuth(fmt.Sprintf("login returned HTTP %d", resp.StatusCode))
 	}
 
 	var gqlResp graphqlResponse
 	if err := json.Unmarshal(respBody, &gqlResp); err != nil {
-		return errAuth(fmt.Sprintf("parsing login response: %v", err))
+		return nil, errAuth(fmt.Sprintf("parsing login response: %v", err))
 	}
 	if len(gqlResp.Errors) > 0 {
-		return errAuth(gqlResp.Errors[0].Message)
+		return nil, errAuth(gqlResp.Errors[0].Message)
 	}
 
 	var loginData loginResponse
 	if err := json.Unmarshal(gqlResp.Data, &loginData); err != nil {
-		return errAuth(fmt.Sprintf("parsing login data: %v", err))
+		return nil, errAuth(fmt.Sprintf("parsing login data: %v", err))
 	}
 
-	// expiresAt is millisecond unix timestamp as string
 	ms, err := strconv.ParseInt(loginData.Login.ExpiresAt, 10, 64)
 	if err != nil {
-		return errAuth(fmt.Sprintf("parsing expiresAt %q: %v", loginData.Login.ExpiresAt, err))
+		return nil, errAuth(fmt.Sprintf("parsing expiresAt %q: %v", loginData.Login.ExpiresAt, err))
 	}
 
-	c.authState.Store(&tokenState{
-		token:     loginData.Login.Token,
-		expiresAt: time.Unix(0, ms*int64(time.Millisecond)),
-	})
-
-	return nil
+	return &LoginResult{
+		Token:      loginData.Login.Token,
+		ExpiresAt:  time.Unix(0, ms*int64(time.Millisecond)),
+		AccountIDs: loginData.Login.AccessibleBusinessIds,
+	}, nil
 }
 
 func (c *Client) doQuery(ctx context.Context, query string, variables map[string]interface{}, result interface{}) error {

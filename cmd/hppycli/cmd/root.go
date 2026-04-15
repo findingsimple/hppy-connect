@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 	"text/tabwriter"
 
@@ -47,7 +46,16 @@ var rootCmd = &cobra.Command{
 		// Skip config loading for commands that don't need the API client.
 		// Convention: all leaf commands that call the API must use RunE (not Run).
 		// Parent/grouping commands (RunE == nil) just show help and skip auth.
-		if cmd.Name() == "help" || cmd.Name() == "version" || cmd.RunE == nil {
+		// Use full command path to avoid collisions with generic names like "init" or "show".
+		skipPaths := map[string]bool{
+			"hppycli help":       true,
+			"hppycli version":    true,
+			"hppycli completion": true,
+			"hppycli config init": true,
+			"hppycli config show": true,
+			"hppycli mcp setup":   true,
+		}
+		if skipPaths[cmd.CommandPath()] || cmd.RunE == nil {
 			return nil
 		}
 
@@ -56,14 +64,7 @@ var rootCmd = &cobra.Command{
 			return fmt.Errorf("invalid output format %q: valid options are text, json, csv, raw", outputFormat)
 		}
 
-		// Default config path
-		configPath := cfgFile
-		if configPath == "" {
-			home, err := os.UserHomeDir()
-			if err == nil {
-				configPath = filepath.Join(home, ".hppycli.yaml")
-			}
-		}
+		configPath := resolveConfigPath()
 
 		flags := make(map[string]string)
 		if cmd.Flags().Changed("email") {

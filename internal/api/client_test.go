@@ -1241,6 +1241,124 @@ func TestListInspectionsRawForwardsFilters(t *testing.T) {
 	assert.Equal(t, "2026-03-01T00:00:00Z", receivedFilter["createdAfter"])
 }
 
+// --- Standalone Login (doLogin / Login) ---
+
+func TestStandaloneLoginSuccess(t *testing.T) {
+	expiresAt := fmt.Sprintf("%d", time.Now().Add(1*time.Hour).UnixMilli())
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"data": map[string]interface{}{
+				"login": map[string]interface{}{
+					"token":                 "jwt-abc",
+					"expiresAt":             expiresAt,
+					"accessibleBusinessIds": []string{"111", "222"},
+				},
+			},
+		})
+	}))
+	defer srv.Close()
+
+	// Login() enforces HTTPS, so test doLogin directly via the internal path
+	result, err := doLogin(context.Background(), srv.Client(), srv.URL, "user@example.com", "pass", false)
+	require.NoError(t, err)
+	assert.Equal(t, "jwt-abc", result.Token)
+	assert.Equal(t, []string{"111", "222"}, result.AccountIDs)
+	assert.False(t, result.ExpiresAt.IsZero())
+}
+
+func TestStandaloneLoginHTTPError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer srv.Close()
+
+	_, err := doLogin(context.Background(), srv.Client(), srv.URL, "user@example.com", "bad", false)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "auth_failed")
+	assert.Contains(t, err.Error(), "401")
+}
+
+func TestStandaloneLoginGraphQLError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"data":   nil,
+			"errors": []map[string]interface{}{{"message": "invalid credentials"}},
+		})
+	}))
+	defer srv.Close()
+
+	_, err := doLogin(context.Background(), srv.Client(), srv.URL, "user@example.com", "bad", false)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid credentials")
+}
+
+func TestStandaloneLoginMalformedJSON(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("not json"))
+	}))
+	defer srv.Close()
+
+	_, err := doLogin(context.Background(), srv.Client(), srv.URL, "user@example.com", "pass", false)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "parsing login response")
+}
+
+func TestStandaloneLoginInvalidExpiresAt(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"data": map[string]interface{}{
+				"login": map[string]interface{}{
+					"token":                 "jwt-abc",
+					"expiresAt":             "not-a-number",
+					"accessibleBusinessIds": []string{"111"},
+				},
+			},
+		})
+	}))
+	defer srv.Close()
+
+	_, err := doLogin(context.Background(), srv.Client(), srv.URL, "user@example.com", "pass", false)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "parsing expiresAt")
+}
+
+func TestStandaloneLoginRateLimited(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusTooManyRequests)
+	}))
+	defer srv.Close()
+
+	_, err := doLogin(context.Background(), srv.Client(), srv.URL, "user@example.com", "pass", false)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "rate_limited")
+}
+
+func TestStandaloneLoginServerError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	_, err := doLogin(context.Background(), srv.Client(), srv.URL, "user@example.com", "pass", false)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "api_error")
+}
+
+func TestStandaloneLoginPublicRejectsHTTP(t *testing.T) {
+	_, err := Login(context.Background(), "user@example.com", "pass", "http://insecure.example.com")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "https://")
+}
+
+func TestStandaloneLoginPublicDefaultEndpoint(t *testing.T) {
+	// With empty endpoint, Login should use DefaultEndpoint — not fail on HTTPS validation.
+	// It will either fail on network or reach the real API and get an auth error.
+	_, err := Login(context.Background(), "user@example.com", "pass", "")
+	require.Error(t, err)
+	// Should NOT be an HTTPS validation error
+	assert.NotContains(t, err.Error(), "must be a valid https://")
+}
+
 // --- Helpers ---
 
 func makePropertyEdges(n int) []interface{} {
