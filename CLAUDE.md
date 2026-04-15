@@ -4,20 +4,26 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-This repository (`~/hppy-connect`) stores a project completed as part of a 2day HappyCo AI Hackathon in April 2026.
+This repository (`~/hppy-connect`) is a project built during a 2-day HappyCo AI Hackathon (April 2026).
 
-## Proposed Naming convention
+## Naming Conventions
 
-repo:           hppy-connect
-cli command:    hppycli
-mcp:            hppymcp
+| Thing       | Name       |
+|-------------|------------|
+| Repository  | hppy-connect |
+| CLI command | hppycli    |
+| MCP server  | hppymcp    |
 
-## Context
+## Reference Documentation
 
-`.scratch` contains contextual information and copies of documentation e.g. happyco api version controlled
+`.scratch/` (gitignored) contains contextual information and copies of documentation, including HappyCo API docs that are not available via Context7.
 
 ## Context7
 
-Always use Context7 when I need library/API documentation, code generation, setup or configuration steps without me having to explicitly ask.
+Always use Context7 for library/API documentation, code generation, and setup/configuration steps proactively.
 
-However, HappyCo API documentation is not available on Context7. For that default to the scratch folder or web search.
+HappyCo API documentation is **not** available on Context7 — use `.scratch/` or web search instead.
+
+Gitlab cli **IS** available for reference (https://context7.com/websites/gitlab_cli).
+
+JIRA cli **IS** available for reference (https://context7.com/ankitpokhrel/jira-cli).
