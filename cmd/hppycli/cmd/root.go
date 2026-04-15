@@ -105,10 +105,9 @@ Run 'hppycli config init' to create a config file, or set environment variables:
 		if cfg.Endpoint != "" {
 			opts = append(opts, api.WithEndpoint(cfg.Endpoint))
 		}
-		var err2 error
-		apiClient, err2 = api.NewClient(cfg.Email, cfg.Password, cfg.AccountID, opts...)
-		if err2 != nil {
-			return err2
+		apiClient, err = api.NewClient(cfg.Email, cfg.Password, cfg.AccountID, opts...)
+		if err != nil {
+			return err
 		}
 
 		return nil
@@ -133,6 +132,8 @@ func init() {
 	rootCmd.AddCommand(accountCmd)
 	rootCmd.AddCommand(propertiesCmd)
 	rootCmd.AddCommand(unitsCmd)
+	rootCmd.AddCommand(workordersCmd)
+	rootCmd.AddCommand(inspectionsCmd)
 }
 
 // outputData holds structured data for the printOutput helper.
@@ -162,7 +163,11 @@ func printOutput(data outputData) error {
 			return err
 		}
 		for _, row := range data.Rows {
-			if err := w.Write(row); err != nil {
+			sanitized := make([]string, len(row))
+			for i, cell := range row {
+				sanitized[i] = sanitizeCSVCell(cell)
+			}
+			if err := w.Write(sanitized); err != nil {
 				return err
 			}
 		}
@@ -185,7 +190,11 @@ func printOutput(data outputData) error {
 		w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 		fmt.Fprintln(w, strings.Join(data.Headers, "\t"))
 		for _, row := range data.Rows {
-			fmt.Fprintln(w, strings.Join(row, "\t"))
+			sanitized := make([]string, len(row))
+			for i, cell := range row {
+				sanitized[i] = sanitizeCell(cell)
+			}
+			fmt.Fprintln(w, strings.Join(sanitized, "\t"))
 		}
 		return w.Flush()
 	}
@@ -215,3 +224,4 @@ func formatAddress(line1, line2, city, state, postalCode string) string {
 	}
 	return strings.Join(parts, ", ")
 }
+

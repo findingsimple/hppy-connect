@@ -701,7 +701,7 @@ func TestListInspectionsHappyPath(t *testing.T) {
 	assert.Equal(t, 95.0, *inspections[0].Score)
 }
 
-func TestListInspectionsWithLocationFilter(t *testing.T) {
+func TestListInspectionsWithFilters(t *testing.T) {
 	var receivedFilter map[string]interface{}
 	_, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
@@ -721,13 +721,28 @@ func TestListInspectionsWithLocationFilter(t *testing.T) {
 		}))
 	})
 
-	_, _, err := c.ListInspections(context.Background(), models.ListOptions{LocationID: "prop-456"})
+	after := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	before := time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)
+	_, _, err := c.ListInspections(context.Background(), models.ListOptions{
+		LocationID:    "prop-456",
+		Status:        []string{"COMPLETE", "INCOMPLETE"},
+		CreatedAfter:  &after,
+		CreatedBefore: &before,
+	})
 	require.NoError(t, err)
 
 	require.NotNil(t, receivedFilter, "filter should be present in request")
+
 	locIDs, ok := receivedFilter["locationId"].([]interface{})
 	require.True(t, ok)
 	assert.Equal(t, "prop-456", locIDs[0])
+
+	statuses, ok := receivedFilter["status"].([]interface{})
+	require.True(t, ok, "status should be an array")
+	assert.Equal(t, []interface{}{"COMPLETE", "INCOMPLETE"}, statuses)
+
+	assert.Equal(t, "2026-01-01T00:00:00Z", receivedFilter["createdAfter"])
+	assert.Equal(t, "2026-06-01T00:00:00Z", receivedFilter["createdBefore"])
 }
 
 // --- Debug Logging Security ---
@@ -1040,6 +1055,190 @@ func TestLoginCooldownExpiresAndRetries(t *testing.T) {
 	err2 := c.EnsureAuth(context.Background())
 	require.Error(t, err2)
 	assert.Equal(t, int32(2), atomic.LoadInt32(&loginCount), "should retry login after cooldown expires")
+}
+
+// --- Raw Work Orders & Inspections ---
+
+func TestListWorkOrdersRaw(t *testing.T) {
+	_, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(gqlResponse(map[string]interface{}{
+			"account": map[string]interface{}{
+				"workOrders": map[string]interface{}{
+					"count":    2,
+					"pageInfo": map[string]interface{}{"hasNextPage": false, "endCursor": ""},
+					"edges": []interface{}{
+						map[string]interface{}{"cursor": "w1", "node": map[string]interface{}{
+							"id": "wo-1", "status": "OPEN", "description": "Fix leak",
+						}},
+					},
+				},
+			},
+		}))
+	})
+
+	raw, err := c.ListWorkOrdersRaw(context.Background(), models.ListOptions{})
+	require.NoError(t, err)
+	require.NotNil(t, raw, "raw response should not be nil")
+
+	var parsed map[string]interface{}
+	require.NoError(t, json.Unmarshal(raw, &parsed))
+	acct := parsed["account"].(map[string]interface{})
+	wos := acct["workOrders"].(map[string]interface{})
+	assert.Equal(t, float64(2), wos["count"])
+}
+
+func TestListWorkOrdersRawHonoursLimit(t *testing.T) {
+	var receivedFirst float64
+	_, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Variables map[string]interface{} `json:"variables"`
+		}
+		json.NewDecoder(r.Body).Decode(&body)
+		receivedFirst, _ = body.Variables["first"].(float64)
+		json.NewEncoder(w).Encode(gqlResponse(map[string]interface{}{
+			"account": map[string]interface{}{
+				"workOrders": map[string]interface{}{
+					"count":    50,
+					"pageInfo": map[string]interface{}{"hasNextPage": false, "endCursor": ""},
+					"edges":    []interface{}{},
+				},
+			},
+		}))
+	})
+
+	_, err := c.ListWorkOrdersRaw(context.Background(), models.ListOptions{Limit: 10})
+	require.NoError(t, err)
+	assert.Equal(t, float64(10), receivedFirst, "raw query should use limit as page size")
+}
+
+func TestListWorkOrdersRawForwardsFilters(t *testing.T) {
+	var receivedFilter map[string]interface{}
+	_, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Variables map[string]interface{} `json:"variables"`
+		}
+		json.NewDecoder(r.Body).Decode(&body)
+		receivedFilter, _ = body.Variables["filter"].(map[string]interface{})
+		json.NewEncoder(w).Encode(gqlResponse(map[string]interface{}{
+			"account": map[string]interface{}{
+				"workOrders": map[string]interface{}{
+					"count":    0,
+					"pageInfo": map[string]interface{}{"hasNextPage": false, "endCursor": ""},
+					"edges":    []interface{}{},
+				},
+			},
+		}))
+	})
+
+	before := time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)
+	_, err := c.ListWorkOrdersRaw(context.Background(), models.ListOptions{
+		LocationID:    "prop-99",
+		Status:        []string{"OPEN"},
+		CreatedBefore: &before,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, receivedFilter)
+
+	locIDs, ok := receivedFilter["locationId"].([]interface{})
+	require.True(t, ok)
+	assert.Equal(t, "prop-99", locIDs[0])
+
+	statuses, ok := receivedFilter["status"].([]interface{})
+	require.True(t, ok, "status should be an array")
+	assert.Equal(t, []interface{}{"OPEN"}, statuses)
+
+	assert.Equal(t, "2026-06-01T00:00:00Z", receivedFilter["createdBefore"])
+}
+
+func TestListInspectionsRaw(t *testing.T) {
+	_, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(gqlResponse(map[string]interface{}{
+			"account": map[string]interface{}{
+				"inspections": map[string]interface{}{
+					"count":    3,
+					"pageInfo": map[string]interface{}{"hasNextPage": false, "endCursor": ""},
+					"edges": []interface{}{
+						map[string]interface{}{"cursor": "i1", "node": map[string]interface{}{
+							"id": "insp-1", "name": "Test Inspection", "status": "COMPLETE",
+						}},
+					},
+				},
+			},
+		}))
+	})
+
+	raw, err := c.ListInspectionsRaw(context.Background(), models.ListOptions{})
+	require.NoError(t, err)
+	require.NotNil(t, raw, "raw response should not be nil")
+
+	var parsed map[string]interface{}
+	require.NoError(t, json.Unmarshal(raw, &parsed))
+	acct := parsed["account"].(map[string]interface{})
+	insps := acct["inspections"].(map[string]interface{})
+	assert.Equal(t, float64(3), insps["count"])
+}
+
+func TestListInspectionsRawHonoursLimit(t *testing.T) {
+	var receivedFirst float64
+	_, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Variables map[string]interface{} `json:"variables"`
+		}
+		json.NewDecoder(r.Body).Decode(&body)
+		receivedFirst, _ = body.Variables["first"].(float64)
+		json.NewEncoder(w).Encode(gqlResponse(map[string]interface{}{
+			"account": map[string]interface{}{
+				"inspections": map[string]interface{}{
+					"count":    50,
+					"pageInfo": map[string]interface{}{"hasNextPage": false, "endCursor": ""},
+					"edges":    []interface{}{},
+				},
+			},
+		}))
+	})
+
+	_, err := c.ListInspectionsRaw(context.Background(), models.ListOptions{Limit: 25})
+	require.NoError(t, err)
+	assert.Equal(t, float64(25), receivedFirst, "raw query should use limit as page size")
+}
+
+func TestListInspectionsRawForwardsFilters(t *testing.T) {
+	var receivedFilter map[string]interface{}
+	_, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Variables map[string]interface{} `json:"variables"`
+		}
+		json.NewDecoder(r.Body).Decode(&body)
+		receivedFilter, _ = body.Variables["filter"].(map[string]interface{})
+		json.NewEncoder(w).Encode(gqlResponse(map[string]interface{}{
+			"account": map[string]interface{}{
+				"inspections": map[string]interface{}{
+					"count":    0,
+					"pageInfo": map[string]interface{}{"hasNextPage": false, "endCursor": ""},
+					"edges":    []interface{}{},
+				},
+			},
+		}))
+	})
+
+	after := time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC)
+	_, err := c.ListInspectionsRaw(context.Background(), models.ListOptions{
+		LocationID:   "prop-55",
+		Status:       []string{"COMPLETE", "INCOMPLETE"},
+		CreatedAfter: &after,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, receivedFilter)
+
+	locIDs, ok := receivedFilter["locationId"].([]interface{})
+	require.True(t, ok)
+	assert.Equal(t, "prop-55", locIDs[0])
+
+	statuses, ok := receivedFilter["status"].([]interface{})
+	require.True(t, ok, "status should be an array")
+	assert.Equal(t, []interface{}{"COMPLETE", "INCOMPLETE"}, statuses)
+
+	assert.Equal(t, "2026-03-01T00:00:00Z", receivedFilter["createdAfter"])
 }
 
 // --- Helpers ---

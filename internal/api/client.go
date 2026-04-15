@@ -537,6 +537,34 @@ func (c *Client) ListUnitsRaw(ctx context.Context, propertyID string, limit int)
 	return raw, c.doQuery(ctx, listUnitsQuery, vars, &raw)
 }
 
+// ListWorkOrdersRaw returns the raw GraphQL response for the first page of work orders.
+func (c *Client) ListWorkOrdersRaw(ctx context.Context, opts models.ListOptions) (json.RawMessage, error) {
+	vars := map[string]interface{}{
+		"accountId": c.accountID,
+		"first":     rawPageFirst(opts.Limit),
+		"orderBy":   []string{"CREATED_AT_DESC"},
+	}
+	if filter := buildLocationDateFilter(opts); len(filter) > 0 {
+		vars["filter"] = filter
+	}
+	var raw json.RawMessage
+	return raw, c.doQuery(ctx, listWorkOrdersQuery, vars, &raw)
+}
+
+// ListInspectionsRaw returns the raw GraphQL response for the first page of inspections.
+func (c *Client) ListInspectionsRaw(ctx context.Context, opts models.ListOptions) (json.RawMessage, error) {
+	vars := map[string]interface{}{
+		"accountId": c.accountID,
+		"first":     rawPageFirst(opts.Limit),
+		"orderBy":   []string{"CREATED_AT_DESC"},
+	}
+	if filter := buildLocationDateFilter(opts); len(filter) > 0 {
+		vars["filter"] = filter
+	}
+	var raw json.RawMessage
+	return raw, c.doQuery(ctx, listInspectionsQuery, vars, &raw)
+}
+
 // rawPageFirst returns the page size for raw queries, honouring the limit if set.
 func rawPageFirst(limit int) int {
 	if limit > 0 && limit < pageSize {
