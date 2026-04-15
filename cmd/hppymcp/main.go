@@ -1,0 +1,100 @@
+package main
+
+import (
+	"context"
+	"flag"
+	"fmt"
+	"log"
+	"os"
+	"path/filepath"
+
+	"github.com/findingsimple/hppy-connect/internal/api"
+	"github.com/findingsimple/hppy-connect/internal/config"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
+)
+
+var (
+	version   = "dev"
+	commit    = "unknown"
+	buildDate = "unknown"
+)
+
+const serverInstructions = `HappyCo property management API — read-only access to account properties, units, work orders, and inspections. Property ID is required for unit queries. Use resources for quick lookups; use tools for filtered/paginated queries.`
+
+func main() {
+	configPath := flag.String("config", "", "path to config file")
+	debug := flag.Bool("debug", false, "enable debug logging")
+	flag.Parse()
+
+	// Resolve default config path
+	cfgPath := *configPath
+	if cfgPath == "" {
+		home, err := os.UserHomeDir()
+		if err == nil {
+			cfgPath = filepath.Join(home, ".hppycli.yaml")
+		}
+	}
+
+	flags := map[string]string{}
+	if *debug {
+		flags["debug"] = "true"
+	}
+
+	cfg, err := config.LoadConfig(cfgPath, os.Getenv, flags)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
+		fmt.Fprintf(os.Stderr, "\nTo get started, create ~/.hppycli.yaml with:\n")
+		fmt.Fprintf(os.Stderr, "  email: your@email.com\n")
+		fmt.Fprintf(os.Stderr, "  password: your-password\n")
+		fmt.Fprintf(os.Stderr, "  account_id: \"your-account-id\"\n")
+		os.Exit(1)
+	}
+
+	if cfg.Email == "" || cfg.Password == "" || cfg.AccountID == "" {
+		fmt.Fprintf(os.Stderr, "Error: email, password, and account_id are required\n")
+		fmt.Fprintf(os.Stderr, "\nConfigure via ~/.hppycli.yaml or environment variables:\n")
+		fmt.Fprintf(os.Stderr, "  HAPPYCO_EMAIL, HAPPYCO_PASSWORD, HAPPYCO_ACCOUNT_ID\n")
+		os.Exit(1)
+	}
+
+	var opts []api.Option
+	if cfg.Debug {
+		opts = append(opts, api.WithDebug(true))
+	}
+	if cfg.Endpoint != "" {
+		opts = append(opts, api.WithEndpoint(cfg.Endpoint))
+	}
+
+	client, err := api.NewClient(cfg.Email, cfg.Password, cfg.AccountID, opts...)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error creating API client: %v\n", err)
+		os.Exit(1)
+	}
+
+	ctx := context.Background()
+
+	// Startup auth health check — fail fast
+	if err := client.EnsureAuth(ctx); err != nil {
+		fmt.Fprintf(os.Stderr, "Authentication failed: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Check your credentials in ~/.hppycli.yaml or environment variables.\n")
+		os.Exit(1)
+	}
+
+	if cfg.Debug {
+		log.Printf("[debug] hppymcp %s (commit=%s, built=%s) authenticated successfully", version, commit, buildDate)
+	}
+
+	server := mcp.NewServer(
+		&mcp.Implementation{Name: "hppymcp", Version: version},
+		&mcp.ServerOptions{Instructions: serverInstructions},
+	)
+
+	registerTools(server, client, cfg.Debug)
+	registerResources(server, client)
+	registerPrompts(server)
+
+	if err := server.Run(ctx, &mcp.StdioTransport{}); err != nil {
+		fmt.Fprintf(os.Stderr, "Server error: %v\n", err)
+		os.Exit(1)
+	}
+}

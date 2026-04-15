@@ -1,0 +1,335 @@
+package main
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"log"
+	"regexp"
+	"time"
+
+	"github.com/findingsimple/hppy-connect/internal/models"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
+)
+
+// sem limits concurrent pagination loops to 3.
+var sem = make(chan struct{}, 3)
+
+// maxLimit caps the maximum number of items a single tool call can return.
+const maxLimit = 10000
+
+// validID matches numeric, UUID-style, or underscore-containing identifiers.
+var validID = regexp.MustCompile(`^[a-zA-Z0-9_\-]+$`)
+
+// Input structs for typed tool handlers.
+
+type ListPropertiesInput struct {
+	Limit int `json:"limit,omitempty" jsonschema:"Maximum number of properties to return. Omit for default (1000)."`
+}
+
+type ListUnitsInput struct {
+	PropertyID string `json:"property_id" jsonschema:"required,The property ID to list units for."`
+	Limit      int    `json:"limit,omitempty" jsonschema:"Maximum number of units to return."`
+}
+
+type ListWorkOrdersInput struct {
+	PropertyID    string `json:"property_id,omitempty" jsonschema:"Property ID to scope results."`
+	UnitID        string `json:"unit_id,omitempty" jsonschema:"Unit ID to scope results (more specific than property_id)."`
+	CreatedAfter  string `json:"created_after,omitempty" jsonschema:"Filter: created after this ISO 8601 date."`
+	CreatedBefore string `json:"created_before,omitempty" jsonschema:"Filter: created before this ISO 8601 date."`
+	Status        string `json:"status,omitempty" jsonschema:"Filter by status: OPEN, ON_HOLD, or COMPLETED."`
+	Limit         int    `json:"limit,omitempty" jsonschema:"Maximum number of work orders to return."`
+}
+
+type ListInspectionsInput struct {
+	PropertyID    string `json:"property_id,omitempty" jsonschema:"Property ID to scope results."`
+	UnitID        string `json:"unit_id,omitempty" jsonschema:"Unit ID to scope results."`
+	CreatedAfter  string `json:"created_after,omitempty" jsonschema:"Filter: created after this ISO 8601 date."`
+	CreatedBefore string `json:"created_before,omitempty" jsonschema:"Filter: created before this ISO 8601 date."`
+	Status        string `json:"status,omitempty" jsonschema:"Filter: COMPLETE, EXPIRED, INCOMPLETE, or SCHEDULED."`
+	Limit         int    `json:"limit,omitempty" jsonschema:"Maximum number of inspections to return."`
+}
+
+// apiClient is the subset of api.Client methods used by the MCP server.
+// Defined here so tests can provide a mock without importing internal/api.
+type apiClient interface {
+	GetAccount(ctx context.Context) (*models.Account, error)
+	ListProperties(ctx context.Context, opts models.ListOptions) ([]models.Property, int, error)
+	ListUnits(ctx context.Context, propertyID string, opts models.ListOptions) ([]models.Unit, int, error)
+	ListWorkOrders(ctx context.Context, opts models.ListOptions) ([]models.WorkOrder, int, error)
+	ListInspections(ctx context.Context, opts models.ListOptions) ([]models.Inspection, int, error)
+	EnsureAuth(ctx context.Context) error
+}
+
+func registerTools(server *mcp.Server, client apiClient, debug bool) {
+	// get_account — no pagination, no semaphore needed
+	mcp.AddTool(server,
+		&mcp.Tool{
+			Name:        "get_account",
+			Description: "Get the authenticated HappyCo account's information including name and ID",
+		},
+		wrapTool(debug, "get_account", func(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, any, error) {
+			account, err := client.GetAccount(ctx)
+			if err != nil {
+				return toolError(err), nil, nil
+			}
+			return toolJSON(account)
+		}),
+	)
+
+	// list_properties
+	mcp.AddTool(server,
+		&mcp.Tool{
+			Name:        "list_properties",
+			Description: "List all properties for the authenticated HappyCo account, including name, address, and creation date",
+		},
+		wrapTool(debug, "list_properties", func(ctx context.Context, _ *mcp.CallToolRequest, input ListPropertiesInput) (*mcp.CallToolResult, any, error) {
+			if err := acquireSem(ctx); err != nil {
+				return toolError(err), nil, nil
+			}
+			defer releaseSem()
+
+			opts := models.ListOptions{Limit: clampLimit(input.Limit)}
+			properties, total, err := client.ListProperties(ctx, opts)
+			if err != nil {
+				return toolError(err), nil, nil
+			}
+			return toolJSON(map[string]any{
+				"total":      total,
+				"count":      len(properties),
+				"properties": properties,
+			})
+		}),
+	)
+
+	// list_units
+	mcp.AddTool(server,
+		&mcp.Tool{
+			Name:        "list_units",
+			Description: "List all units within a specific HappyCo property",
+		},
+		wrapTool(debug, "list_units", func(ctx context.Context, _ *mcp.CallToolRequest, input ListUnitsInput) (*mcp.CallToolResult, any, error) {
+			if input.PropertyID == "" {
+				return toolInputError("property_id is required"), nil, nil
+			}
+			if !validID.MatchString(input.PropertyID) {
+				return toolInputError("property_id contains invalid characters"), nil, nil
+			}
+
+			if err := acquireSem(ctx); err != nil {
+				return toolError(err), nil, nil
+			}
+			defer releaseSem()
+
+			opts := models.ListOptions{Limit: clampLimit(input.Limit)}
+			units, total, err := client.ListUnits(ctx, input.PropertyID, opts)
+			if err != nil {
+				return toolError(err), nil, nil
+			}
+			return toolJSON(map[string]any{
+				"total": total,
+				"count": len(units),
+				"units": units,
+			})
+		}),
+	)
+
+	// list_work_orders
+	mcp.AddTool(server,
+		&mcp.Tool{
+			Name:        "list_work_orders",
+			Description: "List work orders for the authenticated HappyCo account. Can filter by property, unit, date range, and status",
+		},
+		wrapTool(debug, "list_work_orders", func(ctx context.Context, _ *mcp.CallToolRequest, input ListWorkOrdersInput) (*mcp.CallToolResult, any, error) {
+			if err := acquireSem(ctx); err != nil {
+				return toolError(err), nil, nil
+			}
+			defer releaseSem()
+
+			opts, err := buildListOpts(input.PropertyID, input.UnitID, input.Status, input.CreatedAfter, input.CreatedBefore, input.Limit)
+			if err != nil {
+				return toolInputError(err.Error()), nil, nil
+			}
+
+			workOrders, total, apiErr := client.ListWorkOrders(ctx, opts)
+			if apiErr != nil {
+				return toolError(apiErr), nil, nil
+			}
+			return toolJSON(map[string]any{
+				"total":       total,
+				"count":       len(workOrders),
+				"work_orders": workOrders,
+			})
+		}),
+	)
+
+	// list_inspections
+	mcp.AddTool(server,
+		&mcp.Tool{
+			Name:        "list_inspections",
+			Description: "List inspections for the authenticated HappyCo account. Can filter by property, unit, date range, and status",
+		},
+		wrapTool(debug, "list_inspections", func(ctx context.Context, _ *mcp.CallToolRequest, input ListInspectionsInput) (*mcp.CallToolResult, any, error) {
+			if err := acquireSem(ctx); err != nil {
+				return toolError(err), nil, nil
+			}
+			defer releaseSem()
+
+			opts, err := buildListOpts(input.PropertyID, input.UnitID, input.Status, input.CreatedAfter, input.CreatedBefore, input.Limit)
+			if err != nil {
+				return toolInputError(err.Error()), nil, nil
+			}
+
+			inspections, total, apiErr := client.ListInspections(ctx, opts)
+			if apiErr != nil {
+				return toolError(apiErr), nil, nil
+			}
+			return toolJSON(map[string]any{
+				"total":       total,
+				"count":       len(inspections),
+				"inspections": inspections,
+			})
+		}),
+	)
+}
+
+// acquireSem acquires a semaphore slot, respecting context cancellation.
+func acquireSem(ctx context.Context) error {
+	select {
+	case sem <- struct{}{}:
+		return nil
+	case <-ctx.Done():
+		return fmt.Errorf("api_error: request cancelled while waiting for capacity")
+	}
+}
+
+func releaseSem() { <-sem }
+
+// wrapTool adds debug logging around a tool handler.
+func wrapTool[In any](debug bool, name string, handler mcp.ToolHandlerFor[In, any]) mcp.ToolHandlerFor[In, any] {
+	if !debug {
+		return handler
+	}
+	return func(ctx context.Context, req *mcp.CallToolRequest, input In) (*mcp.CallToolResult, any, error) {
+		start := time.Now()
+		result, out, err := handler(ctx, req, input)
+		isErr := err != nil || (result != nil && result.IsError)
+		log.Printf("[debug] tool=%s duration=%s error=%v", name, time.Since(start), isErr)
+		return result, out, err
+	}
+}
+
+// toolError converts an API error into a sanitised MCP error result.
+// Logs the full error to stderr; returns only the category prefix to the client.
+func toolError(err error) *mcp.CallToolResult {
+	msg := err.Error()
+	// Log the full error for debugging; only expose the category to the MCP client.
+	log.Printf("[error] %s", msg)
+	category := sanitiseErrorCategory(msg)
+	return &mcp.CallToolResult{
+		Content: []mcp.Content{&mcp.TextContent{Text: category}},
+		IsError: true,
+	}
+}
+
+// sanitiseErrorCategory extracts "category: generic message" from an api error string,
+// avoiding leaking internal details (URLs, HTTP codes) to the MCP client.
+func sanitiseErrorCategory(msg string) string {
+	categories := map[string]string{
+		"auth_failed":   "auth_failed: Authentication failed — check credentials",
+		"not_found":     "not_found: The requested resource was not found",
+		"invalid_input": "invalid_input: Invalid input parameters",
+		"rate_limited":  "rate_limited: API rate limit exceeded — try again later",
+		"api_error":     "api_error: An API error occurred — try again later",
+	}
+	for prefix, friendly := range categories {
+		if len(msg) >= len(prefix) && msg[:len(prefix)] == prefix {
+			return friendly
+		}
+	}
+	return "api_error: An unexpected error occurred"
+}
+
+// toolInputError returns a validation error result to the MCP client.
+func toolInputError(msg string) *mcp.CallToolResult {
+	return &mcp.CallToolResult{
+		Content: []mcp.Content{&mcp.TextContent{Text: "invalid_input: " + msg}},
+		IsError: true,
+	}
+}
+
+// toolJSON marshals a value into a JSON text CallToolResult.
+func toolJSON(v any) (*mcp.CallToolResult, any, error) {
+	data, err := json.MarshalIndent(v, "", "  ")
+	if err != nil {
+		log.Printf("[error] failed to marshal response: %v", err)
+		return &mcp.CallToolResult{
+			Content: []mcp.Content{&mcp.TextContent{Text: "api_error: failed to marshal response"}},
+			IsError: true,
+		}, nil, nil
+	}
+	return &mcp.CallToolResult{
+		Content: []mcp.Content{&mcp.TextContent{Text: string(data)}},
+	}, nil, nil
+}
+
+// clampLimit ensures limit is within safe bounds.
+// 0 = API default (1000); negative or over-max are clamped to maxLimit.
+func clampLimit(limit int) int {
+	if limit <= 0 {
+		return 0 // let API client apply its default
+	}
+	if limit > maxLimit {
+		return maxLimit
+	}
+	return limit
+}
+
+// validateID checks that an ID string contains only safe characters.
+func validateID(name, value string) error {
+	if value != "" && !validID.MatchString(value) {
+		return fmt.Errorf("%s contains invalid characters", name)
+	}
+	return nil
+}
+
+// buildListOpts maps common filter fields to models.ListOptions.
+// unit_id takes precedence over property_id (more specific scope).
+func buildListOpts(propertyID, unitID, status, createdAfter, createdBefore string, limit int) (models.ListOptions, error) {
+	opts := models.ListOptions{Limit: clampLimit(limit)}
+
+	if err := validateID("property_id", propertyID); err != nil {
+		return opts, err
+	}
+	if err := validateID("unit_id", unitID); err != nil {
+		return opts, err
+	}
+
+	if unitID != "" {
+		opts.LocationID = unitID
+	} else if propertyID != "" {
+		opts.LocationID = propertyID
+	}
+
+	if status != "" {
+		opts.Status = []string{status}
+	}
+
+	if createdAfter != "" {
+		t, err := time.Parse(time.RFC3339, createdAfter)
+		if err != nil {
+			return opts, fmt.Errorf("created_after must be ISO 8601 format (e.g. 2026-01-15T00:00:00Z)")
+		}
+		opts.CreatedAfter = &t
+	}
+
+	if createdBefore != "" {
+		t, err := time.Parse(time.RFC3339, createdBefore)
+		if err != nil {
+			return opts, fmt.Errorf("created_before must be ISO 8601 format (e.g. 2026-01-15T00:00:00Z)")
+		}
+		opts.CreatedBefore = &t
+	}
+
+	return opts, nil
+}

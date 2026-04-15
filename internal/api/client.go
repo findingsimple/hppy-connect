@@ -321,8 +321,12 @@ func (c *Client) doQuery(ctx context.Context, query string, variables map[string
 	}
 	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
 		c.invalidateAuth()
-		// TODO: re-authenticate and retry once instead of aborting, so long-running
-		// paginations survive token expiry mid-loop.
+		// Known limitation: token expiry mid-pagination loses all progress for the
+		// current request. The ideal fix is to call ensureAuth here to get a fresh
+		// token and retry the single failed request (bounded to one retry). The
+		// ensureAuth mutex and double-check pattern already handle concurrent callers
+		// correctly, so this would be safe. Not implemented yet because it requires
+		// restructuring doQuery's return path.
 		return errAuth(fmt.Sprintf("HTTP %d", resp.StatusCode))
 	}
 	if resp.StatusCode >= 500 {
