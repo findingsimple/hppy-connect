@@ -16,7 +16,9 @@ func TestValidateDaysBack(t *testing.T) {
 	}{
 		{"empty defaults to 30", "", "30", false},
 		{"valid number", "7", "7", false},
-		{"large number", "365", "365", false},
+		{"max allowed", "365", "365", false},
+		{"over max rejected", "366", "", true},
+		{"way over max rejected", "999999", "", true},
 		{"zero rejected", "0", "", true},
 		{"negative rejected", "-5", "", true},
 		{"non-numeric rejected", "abc", "", true},

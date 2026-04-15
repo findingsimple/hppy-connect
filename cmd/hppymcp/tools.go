@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log"
 	"regexp"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/findingsimple/hppy-connect/internal/models"
@@ -84,10 +86,10 @@ func registerTools(server *mcp.Server, client apiClient, debug bool) {
 			Description: "List all properties for the authenticated HappyCo account, including name, address, and creation date",
 		},
 		wrapTool(debug, "list_properties", func(ctx context.Context, _ *mcp.CallToolRequest, input ListPropertiesInput) (*mcp.CallToolResult, any, error) {
-			if err := acquireSem(ctx); err != nil {
+			if err := acquireSem(ctx, sem); err != nil {
 				return toolError(err), nil, nil
 			}
-			defer releaseSem()
+			defer releaseSem(sem)
 
 			opts := models.ListOptions{Limit: clampLimit(input.Limit)}
 			properties, total, err := client.ListProperties(ctx, opts)
@@ -97,7 +99,7 @@ func registerTools(server *mcp.Server, client apiClient, debug bool) {
 			return toolJSON(map[string]any{
 				"total":      total,
 				"count":      len(properties),
-				"properties": properties,
+				"properties": emptyIfNil(properties),
 			})
 		}),
 	)
@@ -116,10 +118,10 @@ func registerTools(server *mcp.Server, client apiClient, debug bool) {
 				return toolInputError("property_id contains invalid characters"), nil, nil
 			}
 
-			if err := acquireSem(ctx); err != nil {
+			if err := acquireSem(ctx, sem); err != nil {
 				return toolError(err), nil, nil
 			}
-			defer releaseSem()
+			defer releaseSem(sem)
 
 			opts := models.ListOptions{Limit: clampLimit(input.Limit)}
 			units, total, err := client.ListUnits(ctx, input.PropertyID, opts)
@@ -129,7 +131,7 @@ func registerTools(server *mcp.Server, client apiClient, debug bool) {
 			return toolJSON(map[string]any{
 				"total": total,
 				"count": len(units),
-				"units": units,
+				"units": emptyIfNil(units),
 			})
 		}),
 	)
@@ -141,12 +143,12 @@ func registerTools(server *mcp.Server, client apiClient, debug bool) {
 			Description: "List work orders for the authenticated HappyCo account. Can filter by property, unit, date range, and status",
 		},
 		wrapTool(debug, "list_work_orders", func(ctx context.Context, _ *mcp.CallToolRequest, input ListWorkOrdersInput) (*mcp.CallToolResult, any, error) {
-			if err := acquireSem(ctx); err != nil {
+			if err := acquireSem(ctx, sem); err != nil {
 				return toolError(err), nil, nil
 			}
-			defer releaseSem()
+			defer releaseSem(sem)
 
-			opts, err := buildListOpts(input.PropertyID, input.UnitID, input.Status, input.CreatedAfter, input.CreatedBefore, input.Limit)
+			opts, err := buildListOpts(input.PropertyID, input.UnitID, input.Status, input.CreatedAfter, input.CreatedBefore, input.Limit, validWorkOrderStatuses)
 			if err != nil {
 				return toolInputError(err.Error()), nil, nil
 			}
@@ -158,7 +160,7 @@ func registerTools(server *mcp.Server, client apiClient, debug bool) {
 			return toolJSON(map[string]any{
 				"total":       total,
 				"count":       len(workOrders),
-				"work_orders": workOrders,
+				"work_orders": emptyIfNil(workOrders),
 			})
 		}),
 	)
@@ -170,12 +172,12 @@ func registerTools(server *mcp.Server, client apiClient, debug bool) {
 			Description: "List inspections for the authenticated HappyCo account. Can filter by property, unit, date range, and status",
 		},
 		wrapTool(debug, "list_inspections", func(ctx context.Context, _ *mcp.CallToolRequest, input ListInspectionsInput) (*mcp.CallToolResult, any, error) {
-			if err := acquireSem(ctx); err != nil {
+			if err := acquireSem(ctx, sem); err != nil {
 				return toolError(err), nil, nil
 			}
-			defer releaseSem()
+			defer releaseSem(sem)
 
-			opts, err := buildListOpts(input.PropertyID, input.UnitID, input.Status, input.CreatedAfter, input.CreatedBefore, input.Limit)
+			opts, err := buildListOpts(input.PropertyID, input.UnitID, input.Status, input.CreatedAfter, input.CreatedBefore, input.Limit, validInspectionStatuses)
 			if err != nil {
 				return toolInputError(err.Error()), nil, nil
 			}
@@ -187,23 +189,23 @@ func registerTools(server *mcp.Server, client apiClient, debug bool) {
 			return toolJSON(map[string]any{
 				"total":       total,
 				"count":       len(inspections),
-				"inspections": inspections,
+				"inspections": emptyIfNil(inspections),
 			})
 		}),
 	)
 }
 
 // acquireSem acquires a semaphore slot, respecting context cancellation.
-func acquireSem(ctx context.Context) error {
+func acquireSem(ctx context.Context, s chan struct{}) error {
 	select {
-	case sem <- struct{}{}:
+	case s <- struct{}{}:
 		return nil
 	case <-ctx.Done():
 		return fmt.Errorf("api_error: request cancelled while waiting for capacity")
 	}
 }
 
-func releaseSem() { <-sem }
+func releaseSem(s chan struct{}) { <-s }
 
 // wrapTool adds debug logging around a tool handler.
 func wrapTool[In any](debug bool, name string, handler mcp.ToolHandlerFor[In, any]) mcp.ToolHandlerFor[In, any] {
@@ -243,7 +245,7 @@ func sanitiseErrorCategory(msg string) string {
 		"api_error":     "api_error: An API error occurred — try again later",
 	}
 	for prefix, friendly := range categories {
-		if len(msg) >= len(prefix) && msg[:len(prefix)] == prefix {
+		if strings.HasPrefix(msg, prefix) {
 			return friendly
 		}
 	}
@@ -273,6 +275,15 @@ func toolJSON(v any) (*mcp.CallToolResult, any, error) {
 	}, nil, nil
 }
 
+// emptyIfNil returns an empty slice if the input is nil, ensuring JSON
+// serialisation produces [] rather than null.
+func emptyIfNil[T any](s []T) []T {
+	if s == nil {
+		return []T{}
+	}
+	return s
+}
+
 // clampLimit ensures limit is within safe bounds.
 // 0 = API default (1000); negative or over-max are clamped to maxLimit.
 func clampLimit(limit int) int {
@@ -293,9 +304,16 @@ func validateID(name, value string) error {
 	return nil
 }
 
+// Valid status values per domain.
+var (
+	validWorkOrderStatuses  = map[string]bool{"OPEN": true, "ON_HOLD": true, "COMPLETED": true}
+	validInspectionStatuses = map[string]bool{"COMPLETE": true, "EXPIRED": true, "INCOMPLETE": true, "SCHEDULED": true}
+)
+
 // buildListOpts maps common filter fields to models.ListOptions.
 // unit_id takes precedence over property_id (more specific scope).
-func buildListOpts(propertyID, unitID, status, createdAfter, createdBefore string, limit int) (models.ListOptions, error) {
+// validStatuses is the set of allowed status values for the calling tool.
+func buildListOpts(propertyID, unitID, status, createdAfter, createdBefore string, limit int, validStatuses map[string]bool) (models.ListOptions, error) {
 	opts := models.ListOptions{Limit: clampLimit(limit)}
 
 	if err := validateID("property_id", propertyID); err != nil {
@@ -312,7 +330,16 @@ func buildListOpts(propertyID, unitID, status, createdAfter, createdBefore strin
 	}
 
 	if status != "" {
-		opts.Status = []string{status}
+		upper := strings.ToUpper(status)
+		if !validStatuses[upper] {
+			allowed := make([]string, 0, len(validStatuses))
+			for k := range validStatuses {
+				allowed = append(allowed, k)
+			}
+			sort.Strings(allowed)
+			return opts, fmt.Errorf("invalid status %q — must be one of: %s", status, strings.Join(allowed, ", "))
+		}
+		opts.Status = []string{upper}
 	}
 
 	if createdAfter != "" {
@@ -329,6 +356,10 @@ func buildListOpts(propertyID, unitID, status, createdAfter, createdBefore strin
 			return opts, fmt.Errorf("created_before must be ISO 8601 format (e.g. 2026-01-15T00:00:00Z)")
 		}
 		opts.CreatedBefore = &t
+	}
+
+	if opts.CreatedAfter != nil && opts.CreatedBefore != nil && opts.CreatedAfter.After(*opts.CreatedBefore) {
+		return opts, fmt.Errorf("created_after must be before created_before")
 	}
 
 	return opts, nil

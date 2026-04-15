@@ -8,16 +8,33 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// validateDaysBack validates that a days_back string is a positive integer, returning the sanitised value.
+const maxDaysBack = 365
+
+// validateDaysBack validates that a days_back string is a positive integer (max 365), returning the sanitised value.
 func validateDaysBack(s string) (string, error) {
 	if s == "" {
 		return "30", nil
 	}
 	n, err := strconv.Atoi(s)
 	if err != nil || n <= 0 {
-		return "", fmt.Errorf("days_back must be a positive integer")
+		return "", fmt.Errorf("days_back must be a positive integer (max %d)", maxDaysBack)
+	}
+	if n > maxDaysBack {
+		return "", fmt.Errorf("days_back must be at most %d", maxDaysBack)
 	}
 	return strconv.Itoa(n), nil
+}
+
+// requirePropertyID extracts and validates property_id from prompt arguments.
+func requirePropertyID(args map[string]string) (string, error) {
+	id := args["property_id"]
+	if id == "" {
+		return "", fmt.Errorf("property_id is required")
+	}
+	if !validID.MatchString(id) {
+		return "", fmt.Errorf("property_id contains invalid characters")
+	}
+	return id, nil
 }
 
 func registerPrompts(server *mcp.Server) {
@@ -34,12 +51,9 @@ func registerPrompts(server *mcp.Server) {
 			},
 		},
 		func(_ context.Context, req *mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
-			propertyID := req.Params.Arguments["property_id"]
-			if propertyID == "" {
-				return nil, fmt.Errorf("property_id is required")
-			}
-			if !validID.MatchString(propertyID) {
-				return nil, fmt.Errorf("property_id contains invalid characters")
+			propertyID, err := requirePropertyID(req.Params.Arguments)
+			if err != nil {
+				return nil, err
 			}
 
 			return &mcp.GetPromptResult{
@@ -82,12 +96,9 @@ func registerPrompts(server *mcp.Server) {
 			},
 		},
 		func(_ context.Context, req *mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
-			propertyID := req.Params.Arguments["property_id"]
-			if propertyID == "" {
-				return nil, fmt.Errorf("property_id is required")
-			}
-			if !validID.MatchString(propertyID) {
-				return nil, fmt.Errorf("property_id contains invalid characters")
+			propertyID, err := requirePropertyID(req.Params.Arguments)
+			if err != nil {
+				return nil, err
 			}
 
 			daysBack, err := validateDaysBack(req.Params.Arguments["days_back"])

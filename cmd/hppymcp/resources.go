@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"strings"
 
 	"github.com/findingsimple/hppy-connect/internal/models"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -94,7 +95,7 @@ func registerResources(server *mcp.Server, client apiClient) {
 // extractPropertyID parses a property ID from a happyco://properties/{id} URI.
 func extractPropertyID(uri string) string {
 	const prefix = "happyco://properties/"
-	if len(uri) > len(prefix) {
+	if strings.HasPrefix(uri, prefix) && len(uri) > len(prefix) {
 		return uri[len(prefix):]
 	}
 	return ""
