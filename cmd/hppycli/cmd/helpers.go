@@ -1,10 +1,14 @@
 package cmd
 
 import (
+	"bytes"
+	"encoding/csv"
+	"encoding/json"
 	"fmt"
 	"math"
-	"sort"
+	"os"
 	"strings"
+	"text/tabwriter"
 	"time"
 
 	"github.com/findingsimple/hppy-connect/internal/models"
@@ -112,18 +116,11 @@ func parseListFlags(cmd *cobra.Command, validStatuses map[string]bool) (models.L
 		opts.LocationID = propertyID
 	}
 
-	if status != "" {
-		upper := strings.ToUpper(status)
-		if !validStatuses[upper] {
-			valid := make([]string, 0, len(validStatuses))
-			for k := range validStatuses {
-				valid = append(valid, k)
-			}
-			sort.Strings(valid)
-			return models.ListOptions{}, fmt.Errorf("invalid --status %q: valid options are %s", status, strings.Join(valid, ", "))
-		}
-		opts.Status = []string{upper}
+	statuses, err := models.ValidateStatus(status, validStatuses)
+	if err != nil {
+		return models.ListOptions{}, fmt.Errorf("invalid --status: %w", err)
 	}
+	opts.Status = statuses
 
 	if createdAfter != "" {
 		t, err := parseDate(createdAfter)
@@ -140,9 +137,98 @@ func parseListFlags(cmd *cobra.Command, validStatuses map[string]bool) (models.L
 		opts.CreatedBefore = &t
 	}
 
-	if opts.CreatedAfter != nil && opts.CreatedBefore != nil && !opts.CreatedAfter.Before(*opts.CreatedBefore) {
-		return models.ListOptions{}, fmt.Errorf("--created-after (%s) must be before --created-before (%s)", createdAfter, createdBefore)
+	if err := models.ValidateDateRange(opts.CreatedAfter, opts.CreatedBefore); err != nil {
+		return models.ListOptions{}, fmt.Errorf("--%s", err)
 	}
 
 	return opts, nil
+}
+
+// outputData holds structured data for the printOutput helper.
+type outputData struct {
+	Headers []string
+	Rows    [][]string
+	Items   any
+	Count   int
+	RawJSON json.RawMessage
+}
+
+func printOutput(data outputData) error {
+	switch outputFormat {
+	case "json":
+		wrapper := map[string]any{
+			"count":    data.Count,
+			"returned": len(data.Rows),
+			"items":    data.Items,
+		}
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		return enc.Encode(wrapper)
+
+	case "csv":
+		w := csv.NewWriter(os.Stdout)
+		if err := w.Write(data.Headers); err != nil {
+			return err
+		}
+		for _, row := range data.Rows {
+			sanitized := make([]string, len(row))
+			for i, cell := range row {
+				sanitized[i] = sanitizeCSVCell(cell)
+			}
+			if err := w.Write(sanitized); err != nil {
+				return err
+			}
+		}
+		w.Flush()
+		return w.Error()
+
+	case "raw":
+		if data.RawJSON != nil {
+			var buf bytes.Buffer
+			if err := json.Indent(&buf, data.RawJSON, "", "  "); err != nil {
+				os.Stdout.Write(data.RawJSON)
+			} else {
+				buf.WriteTo(os.Stdout)
+			}
+			fmt.Println()
+		}
+		return nil
+
+	default: // "text"
+		w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+		fmt.Fprintln(w, strings.Join(data.Headers, "\t"))
+		for _, row := range data.Rows {
+			sanitized := make([]string, len(row))
+			for i, cell := range row {
+				sanitized[i] = sanitizeCell(cell)
+			}
+			fmt.Fprintln(w, strings.Join(sanitized, "\t"))
+		}
+		return w.Flush()
+	}
+}
+
+// formatAddress formats an address as a single line.
+func formatAddress(line1, line2, city, state, postalCode string) string {
+	parts := []string{}
+	if line1 != "" {
+		parts = append(parts, line1)
+	}
+	if line2 != "" {
+		parts = append(parts, line2)
+	}
+	cityState := []string{}
+	if city != "" {
+		cityState = append(cityState, city)
+	}
+	if state != "" {
+		cityState = append(cityState, state)
+	}
+	if len(cityState) > 0 {
+		parts = append(parts, strings.Join(cityState, ", "))
+	}
+	if postalCode != "" {
+		parts = append(parts, postalCode)
+	}
+	return strings.Join(parts, ", ")
 }

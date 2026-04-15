@@ -3,7 +3,6 @@ package cmd
 import (
 	"bytes"
 	"encoding/json"
-	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -32,20 +31,11 @@ func TestDetectMcpBinaryFallback(t *testing.T) {
 }
 
 func TestPrintClaudeConfig(t *testing.T) {
-	old := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	err := printClaudeConfig("/usr/local/bin/hppymcp", "/home/user/.hppycli.yaml")
+	var buf bytes.Buffer
+	err := printClaudeConfig(&buf, "/usr/local/bin/hppymcp", "/home/user/.hppycli.yaml")
 	require.NoError(t, err)
 
-	w.Close()
-	os.Stdout = old
-
-	var buf bytes.Buffer
-	io.Copy(&buf, r)
 	output := buf.String()
-
 	assert.Contains(t, output, "Claude Code MCP settings")
 	assert.Contains(t, output, "/usr/local/bin/hppymcp")
 	assert.Contains(t, output, "/home/user/.hppycli.yaml")
@@ -70,20 +60,11 @@ func TestPrintClaudeConfig(t *testing.T) {
 }
 
 func TestPrintCursorConfig(t *testing.T) {
-	old := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	err := printCursorConfig("/usr/local/bin/hppymcp", "/home/user/.hppycli.yaml")
+	var buf bytes.Buffer
+	err := printCursorConfig(&buf, "/usr/local/bin/hppymcp", "/home/user/.hppycli.yaml")
 	require.NoError(t, err)
 
-	w.Close()
-	os.Stdout = old
-
-	var buf bytes.Buffer
-	io.Copy(&buf, r)
 	output := buf.String()
-
 	assert.Contains(t, output, "Cursor MCP settings")
 	assert.Contains(t, output, "/usr/local/bin/hppymcp")
 

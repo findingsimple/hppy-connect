@@ -3,12 +3,9 @@ package cmd
 import (
 	"fmt"
 
+	"github.com/findingsimple/hppy-connect/internal/models"
 	"github.com/spf13/cobra"
 )
-
-var validWorkOrderStatuses = map[string]bool{
-	"OPEN": true, "ON_HOLD": true, "COMPLETED": true,
-}
 
 var workordersCmd = &cobra.Command{
 	Use:   "workorders",
@@ -21,7 +18,7 @@ var workordersListCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := cmd.Context()
 
-		opts, err := parseListFlags(cmd, validWorkOrderStatuses)
+		opts, err := parseListFlags(cmd, models.ValidWorkOrderStatuses)
 		if err != nil {
 			return err
 		}

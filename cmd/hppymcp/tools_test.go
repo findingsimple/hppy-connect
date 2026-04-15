@@ -1014,4 +1014,3 @@ func TestToolInputError(t *testing.T) {
 	text := result.Content[0].(*mcp.TextContent).Text
 	assert.Equal(t, "invalid_input: field is required", text)
 }
-

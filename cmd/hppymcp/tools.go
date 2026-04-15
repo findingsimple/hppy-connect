@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log"
 	"regexp"
-	"sort"
 	"strings"
 	"time"
 
@@ -114,8 +113,8 @@ func registerTools(server *mcp.Server, client apiClient, debug bool) {
 			if input.PropertyID == "" {
 				return toolInputError("property_id is required"), nil, nil
 			}
-			if !validID.MatchString(input.PropertyID) {
-				return toolInputError("property_id contains invalid characters"), nil, nil
+			if err := validateID("property_id", input.PropertyID); err != nil {
+				return toolInputError(err.Error()), nil, nil
 			}
 
 			if err := acquireSem(ctx, sem); err != nil {
@@ -153,9 +152,9 @@ func registerTools(server *mcp.Server, client apiClient, debug bool) {
 				return toolInputError(err.Error()), nil, nil
 			}
 
-			workOrders, total, apiErr := client.ListWorkOrders(ctx, opts)
-			if apiErr != nil {
-				return toolError(apiErr), nil, nil
+			workOrders, total, err := client.ListWorkOrders(ctx, opts)
+			if err != nil {
+				return toolError(err), nil, nil
 			}
 			return toolJSON(map[string]any{
 				"total":       total,
@@ -182,9 +181,9 @@ func registerTools(server *mcp.Server, client apiClient, debug bool) {
 				return toolInputError(err.Error()), nil, nil
 			}
 
-			inspections, total, apiErr := client.ListInspections(ctx, opts)
-			if apiErr != nil {
-				return toolError(apiErr), nil, nil
+			inspections, total, err := client.ListInspections(ctx, opts)
+			if err != nil {
+				return toolError(err), nil, nil
 			}
 			return toolJSON(map[string]any{
 				"total":       total,
@@ -304,10 +303,10 @@ func validateID(name, value string) error {
 	return nil
 }
 
-// Valid status values per domain.
+// Status maps imported from models for single-source-of-truth.
 var (
-	validWorkOrderStatuses  = map[string]bool{"OPEN": true, "ON_HOLD": true, "COMPLETED": true}
-	validInspectionStatuses = map[string]bool{"COMPLETE": true, "EXPIRED": true, "INCOMPLETE": true, "SCHEDULED": true}
+	validWorkOrderStatuses  = models.ValidWorkOrderStatuses
+	validInspectionStatuses = models.ValidInspectionStatuses
 )
 
 // buildListOpts maps common filter fields to models.ListOptions.
@@ -329,18 +328,11 @@ func buildListOpts(propertyID, unitID, status, createdAfter, createdBefore strin
 		opts.LocationID = propertyID
 	}
 
-	if status != "" {
-		upper := strings.ToUpper(status)
-		if !validStatuses[upper] {
-			allowed := make([]string, 0, len(validStatuses))
-			for k := range validStatuses {
-				allowed = append(allowed, k)
-			}
-			sort.Strings(allowed)
-			return opts, fmt.Errorf("invalid status %q — must be one of: %s", status, strings.Join(allowed, ", "))
-		}
-		opts.Status = []string{upper}
+	statuses, err := models.ValidateStatus(status, validStatuses)
+	if err != nil {
+		return opts, err
 	}
+	opts.Status = statuses
 
 	if createdAfter != "" {
 		t, err := time.Parse(time.RFC3339, createdAfter)
@@ -358,8 +350,8 @@ func buildListOpts(propertyID, unitID, status, createdAfter, createdBefore strin
 		opts.CreatedBefore = &t
 	}
 
-	if opts.CreatedAfter != nil && opts.CreatedBefore != nil && opts.CreatedAfter.After(*opts.CreatedBefore) {
-		return opts, fmt.Errorf("created_after must be before created_before")
+	if err := models.ValidateDateRange(opts.CreatedAfter, opts.CreatedBefore); err != nil {
+		return opts, err
 	}
 
 	return opts, nil

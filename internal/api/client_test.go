@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"net/http/httptest"
@@ -181,9 +182,17 @@ func TestTokenRefresh(t *testing.T) {
 func TestConcurrentAuth(t *testing.T) {
 	var loginCount int32
 	expiresAt := fmt.Sprintf("%d", time.Now().Add(1*time.Hour).UnixMilli())
+
+	// Use a gate channel to ensure all goroutines are ready before any can proceed,
+	// and a latch to hold the login response until all goroutines have started.
+	goroutinesReady := make(chan struct{})
+	loginLatch := make(chan struct{})
+
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		atomic.AddInt32(&loginCount, 1)
-		time.Sleep(50 * time.Millisecond)
+		// Wait for all goroutines to have been launched — guarantees they all
+		// contend on the same login rather than racing against startup.
+		<-loginLatch
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"data": map[string]interface{}{
 				"login": map[string]interface{}{
@@ -199,15 +208,26 @@ func TestConcurrentAuth(t *testing.T) {
 	c, err := NewClient("test@example.com", "password", "12345", withInsecureHTTP(), WithEndpoint(srv.URL))
 	require.NoError(t, err)
 
+	const n = 10
 	var wg sync.WaitGroup
-	for i := 0; i < 10; i++ {
+	var started int32
+	for i := 0; i < n; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			// Signal that this goroutine is ready
+			if atomic.AddInt32(&started, 1) == n {
+				close(goroutinesReady)
+			}
+			<-goroutinesReady // wait for all goroutines
 			err := c.EnsureAuth(context.Background())
 			assert.NoError(t, err)
 		}()
 	}
+
+	// Once all goroutines are ready, release the login handler
+	<-goroutinesReady
+	close(loginLatch)
 	wg.Wait()
 
 	assert.Equal(t, int32(1), atomic.LoadInt32(&loginCount), "double-checked locking should result in exactly 1 login")
@@ -1357,6 +1377,146 @@ func TestStandaloneLoginPublicDefaultEndpoint(t *testing.T) {
 	require.Error(t, err)
 	// Should NOT be an HTTPS validation error
 	assert.NotContains(t, err.Error(), "must be a valid https://")
+}
+
+// --- Empty Credentials ---
+
+func TestNewClientEmptyCredentialsAccepted(t *testing.T) {
+	// NewClient doesn't validate credentials — that's deferred to login.
+	// Verify it doesn't panic or error on empty strings.
+	c, err := NewClient("", "", "12345", withInsecureHTTP(), WithEndpoint("http://localhost"))
+	require.NoError(t, err)
+	assert.Equal(t, "", c.email)
+	assert.Equal(t, "", c.password)
+}
+
+func TestNewClientEmptyCredentialsFailAtAuth(t *testing.T) {
+	// Verify that empty credentials produce a clear error at auth time.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(gqlErrorResponse("email is required"))
+	}))
+	defer srv.Close()
+
+	c, err := NewClient("", "", "12345", withInsecureHTTP(), WithEndpoint(srv.URL))
+	require.NoError(t, err)
+
+	err = c.EnsureAuth(context.Background())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "auth_failed")
+}
+
+// --- Malformed Query Response ---
+
+func TestDoQueryMalformedJSON(t *testing.T) {
+	_, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("not json at all"))
+	})
+
+	_, err := c.GetAccount(context.Background())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "parsing response")
+
+	var ae *apiError
+	require.True(t, errors.As(err, &ae))
+	assert.False(t, ae.Retryable, "malformed JSON should not be retried")
+}
+
+// --- Auth Retry During Pagination ---
+
+func TestAuthRetryDuringPagination(t *testing.T) {
+	// Simulate token expiry mid-pagination: page 1 succeeds, page 2 gets 401,
+	// re-auth succeeds, then page 2 retry succeeds.
+	var requestCount int32
+	var loginCount int32
+	expiresAt := fmt.Sprintf("%d", time.Now().Add(1*time.Hour).UnixMilli())
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Query string `json:"query"`
+		}
+		bodyBytes, _ := io.ReadAll(r.Body)
+		r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+		json.Unmarshal(bodyBytes, &body)
+
+		// Login requests
+		if strings.Contains(body.Query, "login") {
+			atomic.AddInt32(&loginCount, 1)
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"data": map[string]interface{}{
+					"login": map[string]interface{}{
+						"token":                 "refreshed-token",
+						"expiresAt":             expiresAt,
+						"accessibleBusinessIds": []string{"12345"},
+					},
+				},
+			})
+			return
+		}
+
+		// Data requests
+		n := atomic.AddInt32(&requestCount, 1)
+		if n == 2 {
+			// Second data request (page 2, first attempt) returns 401
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		if n == 1 {
+			// Page 1
+			json.NewEncoder(w).Encode(propertiesPage(200, 100, true, "cursor1"))
+		} else {
+			// Page 2 retry after re-auth
+			json.NewEncoder(w).Encode(propertiesPage(200, 100, false, ""))
+		}
+	}))
+	defer srv.Close()
+
+	c, err := NewClient("test@example.com", "password", "12345",
+		withInsecureHTTP(), WithEndpoint(srv.URL), withRetryBackoff(fastBackoff))
+	require.NoError(t, err)
+	c.authState.Store(&tokenState{token: "original-token", expiresAt: time.Now().Add(1 * time.Hour)})
+
+	items, count, err := c.ListProperties(context.Background(), models.ListOptions{Limit: 200})
+	require.NoError(t, err)
+	assert.Equal(t, 200, len(items), "should recover all items after mid-pagination auth retry")
+	assert.Equal(t, 200, count)
+	assert.Equal(t, int32(1), atomic.LoadInt32(&loginCount), "should re-authenticate exactly once")
+	assert.Equal(t, int32(3), atomic.LoadInt32(&requestCount), "page1 + page2(fail) + page2(retry)")
+}
+
+// --- Login Cooldown: Transient Errors Skip Cooldown ---
+
+func TestLoginCooldownSkippedForTransientErrors(t *testing.T) {
+	var loginCount int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n := atomic.AddInt32(&loginCount, 1)
+		if n == 1 {
+			// First attempt: transient 500 error
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		// Second attempt: also fails but we just want to verify it was called
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	c, err := NewClient("test@example.com", "password", "12345", withInsecureHTTP(), WithEndpoint(srv.URL))
+	require.NoError(t, err)
+
+	// First attempt — transient 500
+	err1 := c.EnsureAuth(context.Background())
+	require.Error(t, err1)
+
+	// Second attempt — should NOT be blocked by cooldown since 500 is transient
+	err2 := c.EnsureAuth(context.Background())
+	require.Error(t, err2)
+	assert.Equal(t, int32(2), atomic.LoadInt32(&loginCount),
+		"transient login failures should not trigger cooldown — second attempt should hit the server")
+}
+
+// --- hardMaxItems ---
+
+func TestHardMaxItems(t *testing.T) {
+	assert.Equal(t, 50000, hardMaxItems, "hard ceiling should be 50000")
 }
 
 // --- Helpers ---

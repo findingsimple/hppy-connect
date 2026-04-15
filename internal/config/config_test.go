@@ -29,8 +29,8 @@ func TestLoadConfig(t *testing.T) {
 		expected *Config
 	}{
 		{
-			name: "file only",
-			yaml: "email: file@test.com\npassword: filepass\naccount_id: \"100\"\nendpoint: https://custom.api.com\ndebug: true\n",
+			name:    "file only",
+			yaml:    "email: file@test.com\npassword: filepass\naccount_id: \"100\"\nendpoint: https://custom.api.com\ndebug: true\n",
 			envFunc: noEnv,
 			expected: &Config{
 				Email:     "file@test.com",

@@ -23,8 +23,9 @@ import (
 const DefaultEndpoint = "https://externalgraph.happyco.com"
 
 const (
-	pageSize = 100
+	pageSize        = 100
 	defaultCap      = 1000
+	hardMaxItems    = 50000 // defence-in-depth ceiling for unbounded pagination
 	expiryBuffer    = 5 * time.Minute
 	maxRetries      = 3
 	maxResponseSize = 10 * 1024 * 1024 // 10 MB
@@ -47,10 +48,12 @@ func (e *apiError) Error() string {
 	return fmt.Sprintf("%s: %s", e.Category, e.Message)
 }
 
-func errAuth(msg string) error       { return &apiError{Category: "auth_failed", Message: msg} }
-func errAPI(msg string) error         { return &apiError{Category: "api_error", Message: msg, Retryable: true} }
-func errAPIFatal(msg string) error    { return &apiError{Category: "api_error", Message: msg} }
-func errRateLimited(msg string) error { return &apiError{Category: "rate_limited", Message: msg, Retryable: true} }
+func errAuth(msg string) error     { return &apiError{Category: "auth_failed", Message: msg} }
+func errAPI(msg string) error      { return &apiError{Category: "api_error", Message: msg, Retryable: true} }
+func errAPIFatal(msg string) error { return &apiError{Category: "api_error", Message: msg} }
+func errRateLimited(msg string) error {
+	return &apiError{Category: "rate_limited", Message: msg, Retryable: true}
+}
 
 const loginCooldown = 30 * time.Second
 
@@ -64,7 +67,7 @@ type Client struct {
 	authState      atomic.Pointer[tokenState]
 	mu             sync.Mutex
 	debug          bool
-	allowInsecure  bool          // testing only — bypasses HTTPS requirement
+	allowInsecure  bool // testing only — bypasses HTTPS requirement
 	retryBackoff   []time.Duration
 	lastLoginFail  time.Time // protected by mu — prevents login hammering
 	lastLoginError error     // protected by mu — cached error during cooldown
@@ -153,8 +156,13 @@ func (c *Client) ensureAuth(ctx context.Context) (tokenState, error) {
 	}
 
 	if err := c.login(ctx); err != nil {
-		c.lastLoginFail = time.Now()
-		c.lastLoginError = err
+		// Only apply cooldown for permanent failures (bad credentials, rejected input).
+		// Transient errors (network timeouts, 5xx, rate limiting) should allow immediate retry.
+		var ae *apiError
+		if errors.As(err, &ae) && !ae.Retryable {
+			c.lastLoginFail = time.Now()
+			c.lastLoginError = err
+		}
 		return tokenState{}, err
 	}
 	c.lastLoginFail = time.Time{}
@@ -231,7 +239,7 @@ func doLogin(ctx context.Context, httpClient *http.Client, endpoint, email, pass
 	start := time.Now()
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		return nil, errAuth(fmt.Sprintf("login request: %v", err))
+		return nil, errAPI(fmt.Sprintf("login request: %v", err))
 	}
 	defer resp.Body.Close()
 
@@ -241,7 +249,7 @@ func doLogin(ctx context.Context, httpClient *http.Client, endpoint, email, pass
 
 	respBody, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseSize))
 	if err != nil {
-		return nil, errAuth(fmt.Sprintf("reading login response: %v", err))
+		return nil, errAPI(fmt.Sprintf("reading login response: %v", err))
 	}
 
 	if resp.StatusCode == http.StatusTooManyRequests {
@@ -321,12 +329,6 @@ func (c *Client) doQuery(ctx context.Context, query string, variables map[string
 	}
 	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
 		c.invalidateAuth()
-		// Known limitation: token expiry mid-pagination loses all progress for the
-		// current request. The ideal fix is to call ensureAuth here to get a fresh
-		// token and retry the single failed request (bounded to one retry). The
-		// ensureAuth mutex and double-check pattern already handle concurrent callers
-		// correctly, so this would be safe. Not implemented yet because it requires
-		// restructuring doQuery's return path.
 		return errAuth(fmt.Sprintf("HTTP %d", resp.StatusCode))
 	}
 	if resp.StatusCode >= 500 {
@@ -478,6 +480,15 @@ func paginate[T any](
 			return allItems, totalCount, nil
 		}
 
+		// Defence-in-depth: hard ceiling prevents unbounded memory growth
+		// for direct API callers that pass no cap (limit < 0).
+		if len(allItems) >= hardMaxItems {
+			if c.debug {
+				log.Printf("[debug] %s: hard ceiling reached (%d items), stopping pagination", resource, hardMaxItems)
+			}
+			return allItems[:hardMaxItems], totalCount, nil
+		}
+
 		if !conn.PageInfo.HasNextPage {
 			return allItems, totalCount, nil
 		}
@@ -486,6 +497,8 @@ func paginate[T any](
 }
 
 // fetchPageWithRetry wraps a page fetch with retries for transient errors.
+// On auth failures (401/403), it attempts a single re-authentication before giving up,
+// preventing mid-pagination token expiry from discarding all fetched pages.
 func fetchPageWithRetry[T any](
 	ctx context.Context,
 	c *Client,
@@ -494,6 +507,7 @@ func fetchPageWithRetry[T any](
 	fetchPage func(map[string]interface{}) (*connection[T], error),
 ) (*connection[T], error) {
 	var lastErr error
+	authRetried := false
 	for attempt := 0; attempt < maxRetries; attempt++ {
 		if err := ctx.Err(); err != nil {
 			return nil, errAPIFatal(fmt.Sprintf("context cancelled: %v", err))
@@ -505,10 +519,27 @@ func fetchPageWithRetry[T any](
 		}
 		lastErr = err
 
-		// Only retry transient errors
 		var ae *apiError
-		if errors.As(err, &ae) && !ae.Retryable {
-			return nil, err
+		if errors.As(err, &ae) {
+			// On auth failure, attempt a single re-auth before giving up.
+			// This handles mid-pagination token expiry gracefully.
+			if ae.Category == "auth_failed" && !authRetried {
+				authRetried = true
+				if c.debug {
+					log.Printf("[debug] page %d: auth failed, attempting re-authentication", page)
+				}
+				if _, authErr := c.ensureAuth(ctx); authErr != nil {
+					return nil, err // return the original auth error
+				}
+				// Retry the same page with the fresh token (don't count as a retry attempt)
+				attempt--
+				continue
+			}
+
+			// Only retry transient errors
+			if !ae.Retryable {
+				return nil, err
+			}
 		}
 
 		if c.debug {
@@ -582,20 +613,17 @@ func (c *Client) ListUnitsRaw(ctx context.Context, propertyID string, limit int)
 
 // ListWorkOrdersRaw returns the raw GraphQL response for the first page of work orders.
 func (c *Client) ListWorkOrdersRaw(ctx context.Context, opts models.ListOptions) (json.RawMessage, error) {
-	vars := map[string]interface{}{
-		"accountId": c.accountID,
-		"first":     rawPageFirst(opts.Limit),
-		"orderBy":   []string{"CREATED_AT_DESC"},
-	}
-	if filter := buildLocationDateFilter(opts); len(filter) > 0 {
-		vars["filter"] = filter
-	}
-	var raw json.RawMessage
-	return raw, c.doQuery(ctx, listWorkOrdersQuery, vars, &raw)
+	return c.listRawWithDateFilter(ctx, listWorkOrdersQuery, opts)
 }
 
 // ListInspectionsRaw returns the raw GraphQL response for the first page of inspections.
 func (c *Client) ListInspectionsRaw(ctx context.Context, opts models.ListOptions) (json.RawMessage, error) {
+	return c.listRawWithDateFilter(ctx, listInspectionsQuery, opts)
+}
+
+// listRawWithDateFilter is the shared implementation for raw queries that use
+// CREATED_AT_DESC ordering and location/date/status filters.
+func (c *Client) listRawWithDateFilter(ctx context.Context, query string, opts models.ListOptions) (json.RawMessage, error) {
 	vars := map[string]interface{}{
 		"accountId": c.accountID,
 		"first":     rawPageFirst(opts.Limit),
@@ -605,7 +633,7 @@ func (c *Client) ListInspectionsRaw(ctx context.Context, opts models.ListOptions
 		vars["filter"] = filter
 	}
 	var raw json.RawMessage
-	return raw, c.doQuery(ctx, listInspectionsQuery, vars, &raw)
+	return raw, c.doQuery(ctx, query, vars, &raw)
 }
 
 // rawPageFirst returns the page size for raw queries, honouring the limit if set.

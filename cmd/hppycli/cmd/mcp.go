@@ -3,6 +3,7 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -26,9 +27,9 @@ var mcpSetupCmd = &cobra.Command{
 
 		switch client {
 		case "claude":
-			return printClaudeConfig(binaryPath, configPath)
+			return printClaudeConfig(os.Stdout, binaryPath, configPath)
 		case "cursor":
-			return printCursorConfig(binaryPath, configPath)
+			return printCursorConfig(os.Stdout, binaryPath, configPath)
 		default:
 			return fmt.Errorf("unsupported --client %q: valid options are claude, cursor", client)
 		}
@@ -71,7 +72,7 @@ func detectMcpBinary() string {
 	return "hppymcp"
 }
 
-func printClaudeConfig(binaryPath, configPath string) error {
+func printClaudeConfig(w io.Writer, binaryPath, configPath string) error {
 	cfg := map[string]interface{}{
 		"hppymcp": map[string]interface{}{
 			"command": binaryPath,
@@ -84,14 +85,14 @@ func printClaudeConfig(binaryPath, configPath string) error {
 		return fmt.Errorf("marshalling config JSON: %w", err)
 	}
 
-	fmt.Println("Add the following to your Claude Code MCP settings")
-	fmt.Println("(~/.claude/settings.json → mcpServers):")
-	fmt.Println()
-	fmt.Println(string(out))
+	fmt.Fprintln(w, "Add the following to your Claude Code MCP settings")
+	fmt.Fprintln(w, "(~/.claude/settings.json → mcpServers):")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, string(out))
 	return nil
 }
 
-func printCursorConfig(binaryPath, configPath string) error {
+func printCursorConfig(w io.Writer, binaryPath, configPath string) error {
 	cfg := map[string]interface{}{
 		"mcpServers": map[string]interface{}{
 			"hppymcp": map[string]interface{}{
@@ -106,10 +107,10 @@ func printCursorConfig(binaryPath, configPath string) error {
 		return fmt.Errorf("marshalling config JSON: %w", err)
 	}
 
-	fmt.Println("Add the following to your Cursor MCP settings")
-	fmt.Println("(.cursor/mcp.json):")
-	fmt.Println()
-	fmt.Println(string(out))
+	fmt.Fprintln(w, "Add the following to your Cursor MCP settings")
+	fmt.Fprintln(w, "(.cursor/mcp.json):")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, string(out))
 	return nil
 }
 

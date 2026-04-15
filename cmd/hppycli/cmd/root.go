@@ -1,13 +1,8 @@
 package cmd
 
 import (
-	"bytes"
-	"encoding/csv"
-	"encoding/json"
 	"fmt"
 	"os"
-	"strings"
-	"text/tabwriter"
 
 	"github.com/findingsimple/hppy-connect/internal/api"
 	"github.com/findingsimple/hppy-connect/internal/config"
@@ -48,9 +43,9 @@ var rootCmd = &cobra.Command{
 		// Parent/grouping commands (RunE == nil) just show help and skip auth.
 		// Use full command path to avoid collisions with generic names like "init" or "show".
 		skipPaths := map[string]bool{
-			"hppycli help":       true,
-			"hppycli version":    true,
-			"hppycli completion": true,
+			"hppycli help":        true,
+			"hppycli version":     true,
+			"hppycli completion":  true,
 			"hppycli config init": true,
 			"hppycli config show": true,
 			"hppycli mcp setup":   true,
@@ -136,93 +131,3 @@ func init() {
 	rootCmd.AddCommand(workordersCmd)
 	rootCmd.AddCommand(inspectionsCmd)
 }
-
-// outputData holds structured data for the printOutput helper.
-type outputData struct {
-	Headers []string
-	Rows    [][]string
-	Items   any
-	Count   int
-	RawJSON json.RawMessage
-}
-
-func printOutput(data outputData) error {
-	switch outputFormat {
-	case "json":
-		wrapper := map[string]any{
-			"count":    data.Count,
-			"returned": len(data.Rows),
-			"items":    data.Items,
-		}
-		enc := json.NewEncoder(os.Stdout)
-		enc.SetIndent("", "  ")
-		return enc.Encode(wrapper)
-
-	case "csv":
-		w := csv.NewWriter(os.Stdout)
-		if err := w.Write(data.Headers); err != nil {
-			return err
-		}
-		for _, row := range data.Rows {
-			sanitized := make([]string, len(row))
-			for i, cell := range row {
-				sanitized[i] = sanitizeCSVCell(cell)
-			}
-			if err := w.Write(sanitized); err != nil {
-				return err
-			}
-		}
-		w.Flush()
-		return w.Error()
-
-	case "raw":
-		if data.RawJSON != nil {
-			var buf bytes.Buffer
-			if err := json.Indent(&buf, data.RawJSON, "", "  "); err != nil {
-				os.Stdout.Write(data.RawJSON)
-			} else {
-				buf.WriteTo(os.Stdout)
-			}
-			fmt.Println()
-		}
-		return nil
-
-	default: // "text"
-		w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-		fmt.Fprintln(w, strings.Join(data.Headers, "\t"))
-		for _, row := range data.Rows {
-			sanitized := make([]string, len(row))
-			for i, cell := range row {
-				sanitized[i] = sanitizeCell(cell)
-			}
-			fmt.Fprintln(w, strings.Join(sanitized, "\t"))
-		}
-		return w.Flush()
-	}
-}
-
-// formatAddress formats an address as a single line.
-func formatAddress(line1, line2, city, state, postalCode string) string {
-	parts := []string{}
-	if line1 != "" {
-		parts = append(parts, line1)
-	}
-	if line2 != "" {
-		parts = append(parts, line2)
-	}
-	cityState := []string{}
-	if city != "" {
-		cityState = append(cityState, city)
-	}
-	if state != "" {
-		cityState = append(cityState, state)
-	}
-	if len(cityState) > 0 {
-		parts = append(parts, strings.Join(cityState, ", "))
-	}
-	if postalCode != "" {
-		parts = append(parts, postalCode)
-	}
-	return strings.Join(parts, ", ")
-}
-

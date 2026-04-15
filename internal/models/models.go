@@ -1,6 +1,44 @@
 package models
 
-import "time"
+import (
+	"fmt"
+	"sort"
+	"strings"
+	"time"
+)
+
+// Valid status values per domain.
+var (
+	ValidWorkOrderStatuses  = map[string]bool{"OPEN": true, "ON_HOLD": true, "COMPLETED": true}
+	ValidInspectionStatuses = map[string]bool{"COMPLETE": true, "EXPIRED": true, "INCOMPLETE": true, "SCHEDULED": true}
+)
+
+// ValidateStatus checks that a status value is allowed, normalises it to uppercase,
+// and returns the validated status slice. Returns an error listing valid options if invalid.
+func ValidateStatus(status string, validStatuses map[string]bool) ([]string, error) {
+	if status == "" {
+		return nil, nil
+	}
+	upper := strings.ToUpper(status)
+	if !validStatuses[upper] {
+		allowed := make([]string, 0, len(validStatuses))
+		for k := range validStatuses {
+			allowed = append(allowed, k)
+		}
+		sort.Strings(allowed)
+		return nil, fmt.Errorf("invalid status %q — must be one of: %s", status, strings.Join(allowed, ", "))
+	}
+	return []string{upper}, nil
+}
+
+// ValidateDateRange checks that after is strictly before before, if both are set.
+// Equal dates are rejected since they represent an empty range.
+func ValidateDateRange(after, before *time.Time) error {
+	if after != nil && before != nil && !after.Before(*before) {
+		return fmt.Errorf("created_after must be before created_before")
+	}
+	return nil
+}
 
 type Account struct {
 	ID   string `json:"id"`
