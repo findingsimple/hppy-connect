@@ -73,23 +73,11 @@ func detectMcpBinary() string {
 }
 
 func printClaudeConfig(w io.Writer, binaryPath, configPath string) error {
-	cfg := map[string]interface{}{
-		"hppymcp": map[string]interface{}{
-			"type":    "stdio",
-			"command": binaryPath,
-			"args":    []string{"--config", configPath},
-		},
-	}
-
-	out, err := json.MarshalIndent(cfg, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshalling config JSON: %w", err)
-	}
-
-	fmt.Fprintln(w, "Add the following to your Claude Code MCP settings")
-	fmt.Fprintln(w, "(~/.claude.json → mcpServers):")
+	fmt.Fprintln(w, "Run the following command to register hppymcp with Claude Code:")
 	fmt.Fprintln(w)
-	fmt.Fprintln(w, string(out))
+	fmt.Fprintf(w, "  claude mcp add --transport stdio --scope user hppymcp -- %s --config %s\n", binaryPath, configPath)
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Then restart Claude Code and ask \"What HappyCo account am I connected to?\" to verify.")
 	return nil
 }
 

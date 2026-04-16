@@ -359,12 +359,13 @@ hppycli seed --count=5 --output json --yes
 
 ### Claude Code / Claude Desktop
 
-1. Generate the config snippet:
+1. Register the MCP server:
    ```bash
    hppycli mcp setup --client claude
+   # Then run the command it outputs, e.g.:
+   claude mcp add --transport stdio --scope user hppymcp -- hppymcp --config ~/.hppycli.yaml
    ```
-2. Add the output to the `mcpServers` object in `~/.claude.json`.
-3. Restart Claude Code. Ask "What HappyCo account am I connected to?" to verify.
+2. Restart Claude Code. Ask "What HappyCo account am I connected to?" to verify.
 
 ### Cursor
 
