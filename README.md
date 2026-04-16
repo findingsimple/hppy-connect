@@ -18,11 +18,6 @@ Built during the 2-day HappyCo AI Hackathon (April 2026).
 
 <br/>
 
-<table>
-<tr>
-<td valign="top">
-<img src="docs/images/spacer.png" width="600" height="1" />
-
 ### `hppycli` — Command Line
 
 A full-featured CLI for managing your HappyCo account. Query properties and inspections, create work orders, manage users and roles, seed test data — all from the terminal with tab completion, multiple output formats, and scriptable JSON output.
@@ -31,10 +26,6 @@ A full-featured CLI for managing your HappyCo account. Query properties and insp
 hppycli workorders list --status open --output json
 ```
 
-</td>
-<td valign="top">
-<img src="docs/images/spacer.png" width="600" height="1" />
-
 ### `hppymcp` — AI Assistant
 
 An MCP server that exposes the same capabilities to Claude Code, Cursor, and other AI clients. One command to connect, 76 tools across 8 domains. Your AI can read, create, and manage HappyCo data with built-in safety guards on destructive operations.
@@ -42,10 +33,6 @@ An MCP server that exposes the same capabilities to Claude Code, Cursor, and oth
 ```bash
 hppycli mcp setup --client claude
 ```
-
-</td>
-</tr>
-</table>
 
 Both binaries share the same internal Go API client and configuration — one codebase, two interfaces.
 
