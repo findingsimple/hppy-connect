@@ -20,9 +20,7 @@ Built during the 2-day HappyCo AI Hackathon (April 2026).
 
 A full-featured CLI for managing your HappyCo account. Query properties and inspections, create work orders, manage users and roles, seed test data — all from the terminal with tab completion, multiple output formats, and scriptable JSON output.
 
-```bash
-hppycli workorders list --status open --output json
-```
+<img src="docs/images/cli-demo.gif" alt="hppycli demo" width="100%" />
 
 ### `hppymcp` — AI Assistant
 
