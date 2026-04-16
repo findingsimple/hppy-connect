@@ -3,6 +3,7 @@
 CLI and MCP server for the HappyCo platform API. Built during the 2-day HappyCo AI Hackathon (April 2026).
 
 **hppycli** — a command-line tool for managing properties, units, inspections, work orders, projects, users, roles, and webhooks.
+
 **hppymcp** — a Model Context Protocol server that exposes the same capabilities to AI assistants (Claude Code, Cursor, etc.).
 
 Both binaries share the same internal API client and configuration.
