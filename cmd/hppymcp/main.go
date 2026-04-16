@@ -73,14 +73,14 @@ func main() {
 
 	ctx := context.Background()
 
-	// Startup auth health check — fail fast
-	if err := client.EnsureAuth(ctx); err != nil {
-		fmt.Fprintf(os.Stderr, "Authentication failed. Check your credentials in ~/.hppycli.yaml or environment variables.\n")
-		os.Exit(1)
-	}
-
+	// Auth is intentionally lazy — the API client authenticates on the first
+	// tool/resource call and handles token refresh automatically. Eager auth
+	// here would crash the MCP server on startup if credentials are temporarily
+	// invalid (e.g. expired token, network blip), causing Claude Desktop to
+	// show a cryptic "server disconnected" error instead of a actionable
+	// per-tool error message.
 	if cfg.Debug {
-		log.Printf("[debug] hppymcp %s (commit=%s, built=%s) authenticated successfully", version, commit, buildDate)
+		log.Printf("[debug] hppymcp %s (commit=%s, built=%s) starting (auth deferred to first request)", version, commit, buildDate)
 	}
 
 	server := mcp.NewServer(

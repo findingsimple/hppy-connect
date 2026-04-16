@@ -59,6 +59,7 @@ func TestDetectMcpBinaryLocalBin(t *testing.T) {
 func TestDetectMcpBinaryFallback(t *testing.T) {
 	t.Setenv("GOPATH", "/nonexistent/gopath")
 	t.Setenv("HOME", "/nonexistent/home")
+	t.Setenv("PATH", "/nonexistent/path")
 	got := detectMcpBinary()
 	assert.Equal(t, "hppymcp", got)
 }

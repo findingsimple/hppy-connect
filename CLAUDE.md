@@ -65,6 +65,7 @@ Both binaries are thin frontends over shared logic in `internal/`.
 ## Key Design Decisions
 
 ### Authentication & Token Management
+- **MCP server uses lazy auth** — authentication is deferred to the first tool/resource call instead of happening at startup. This prevents Claude Desktop from showing a cryptic "server disconnected" error when credentials are temporarily invalid (expired token, network blip on launch). The API client handles auth transparently on first request and retries on 401.
 - Tokens are cached in memory via atomic swap (`tokenState` struct). Double-checked locking ensures only one goroutine refreshes at a time.
 - If a token expires mid-pagination, `fetchPageWithRetry` detects the 401 and re-authenticates once before retrying the failed page. This is tracked via `authRetried` flag per fetch call.
 - Login cooldown (30s) only triggers on **permanent** failures (bad credentials). Transient errors (network failures, 500s) do not set the cooldown, so retries can proceed immediately. This distinction is made via `apiError.Retryable`.
