@@ -589,3 +589,91 @@ func TestPrintMutationResultOutputTextWarning(t *testing.T) {
 	require.NoError(t, json.Unmarshal(buf.Bytes(), &parsed))
 	assert.Equal(t, "abc123", parsed["id"])
 }
+
+// --- selectAccount ---
+
+func TestSelectAccountSingleAccount(t *testing.T) {
+	accounts := []accountChoice{{ID: "123", Name: "Test Corp"}}
+	var output bytes.Buffer
+
+	id, err := selectAccount(accounts, strings.NewReader(""), &output)
+
+	require.NoError(t, err)
+	assert.Equal(t, "123", id)
+	assert.Contains(t, output.String(), "Test Corp")
+	assert.Contains(t, output.String(), "123")
+}
+
+func TestSelectAccountSingleAccountNoName(t *testing.T) {
+	accounts := []accountChoice{{ID: "456"}}
+	var output bytes.Buffer
+
+	id, err := selectAccount(accounts, strings.NewReader(""), &output)
+
+	require.NoError(t, err)
+	assert.Equal(t, "456", id)
+	assert.Contains(t, output.String(), "456")
+}
+
+func TestSelectAccountMultipleSelectsFirst(t *testing.T) {
+	accounts := []accountChoice{
+		{ID: "111", Name: "Alpha Inc"},
+		{ID: "222", Name: "Beta LLC"},
+	}
+	var output bytes.Buffer
+
+	id, err := selectAccount(accounts, strings.NewReader("1\n"), &output)
+
+	require.NoError(t, err)
+	assert.Equal(t, "111", id)
+	assert.Contains(t, output.String(), "Alpha Inc")
+	assert.Contains(t, output.String(), "Beta LLC")
+}
+
+func TestSelectAccountMultipleSelectsSecond(t *testing.T) {
+	accounts := []accountChoice{
+		{ID: "111", Name: "Alpha Inc"},
+		{ID: "222", Name: "Beta LLC"},
+	}
+	var output bytes.Buffer
+
+	id, err := selectAccount(accounts, strings.NewReader("2\n"), &output)
+
+	require.NoError(t, err)
+	assert.Equal(t, "222", id)
+}
+
+func TestSelectAccountInvalidSelection(t *testing.T) {
+	accounts := []accountChoice{
+		{ID: "111"},
+		{ID: "222"},
+	}
+	var output bytes.Buffer
+
+	_, err := selectAccount(accounts, strings.NewReader("3\n"), &output)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid selection")
+}
+
+func TestSelectAccountNoInput(t *testing.T) {
+	accounts := []accountChoice{
+		{ID: "111"},
+		{ID: "222"},
+	}
+	var output bytes.Buffer
+
+	_, err := selectAccount(accounts, strings.NewReader(""), &output)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no input")
+}
+
+func TestSelectAccountEmpty(t *testing.T) {
+	var output bytes.Buffer
+
+	_, err := selectAccount(nil, strings.NewReader(""), &output)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no accessible accounts")
+}

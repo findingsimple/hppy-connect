@@ -306,3 +306,47 @@ func formatAddress(line1, line2, city, state, postalCode string) string {
 	}
 	return strings.Join(parts, ", ")
 }
+
+// accountChoice represents an account available for selection.
+type accountChoice struct {
+	ID   string
+	Name string
+}
+
+// selectAccount prompts the user to choose from multiple accounts.
+// If there is only one account, it is returned without prompting.
+func selectAccount(accounts []accountChoice, input io.Reader, output io.Writer) (string, error) {
+	if len(accounts) == 0 {
+		return "", fmt.Errorf("no accessible accounts found")
+	}
+	if len(accounts) == 1 {
+		a := accounts[0]
+		if a.Name != "" {
+			fmt.Fprintf(output, "Account: %s (%s)\n", a.Name, a.ID)
+		} else {
+			fmt.Fprintf(output, "Account: %s\n", a.ID)
+		}
+		return a.ID, nil
+	}
+
+	fmt.Fprintln(output, "\nMultiple accounts found:")
+	for i, a := range accounts {
+		if a.Name != "" {
+			fmt.Fprintf(output, "  [%d] %s (%s)\n", i+1, a.Name, a.ID)
+		} else {
+			fmt.Fprintf(output, "  [%d] %s\n", i+1, a.ID)
+		}
+	}
+	fmt.Fprintf(output, "Select account (1-%d): ", len(accounts))
+
+	scanner := bufio.NewScanner(input)
+	if !scanner.Scan() {
+		return "", fmt.Errorf("no input received")
+	}
+	selection := strings.TrimSpace(scanner.Text())
+	idx := 0
+	if _, err := fmt.Sscanf(selection, "%d", &idx); err != nil || idx < 1 || idx > len(accounts) {
+		return "", fmt.Errorf("invalid selection %q: must be 1-%d", selection, len(accounts))
+	}
+	return accounts[idx-1].ID, nil
+}

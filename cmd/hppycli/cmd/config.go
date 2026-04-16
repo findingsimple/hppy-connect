@@ -74,26 +74,28 @@ var configInitCmd = &cobra.Command{
 			return fmt.Errorf("no accessible accounts found for this user")
 		}
 
-		// Select account ID
-		accountID := result.AccountIDs[0]
+		// Resolve account names for better selection UX.
+		choices := make([]accountChoice, len(result.AccountIDs))
+		for i, id := range result.AccountIDs {
+			choices[i] = accountChoice{ID: id}
+		}
 		if len(result.AccountIDs) > 1 {
-			fmt.Println("\nMultiple accounts found:")
-			for i, id := range result.AccountIDs {
-				fmt.Printf("  [%d] %s\n", i+1, id)
+			tempClient, err := api.NewClient(email, password, result.AccountIDs[0],
+				api.WithToken(result.Token, result.ExpiresAt),
+			)
+			if err == nil {
+				for i, id := range result.AccountIDs {
+					acct, err := tempClient.GetAccountByID(cmd.Context(), id)
+					if err == nil && acct.Name != "" {
+						choices[i].Name = acct.Name
+					}
+				}
 			}
-			fmt.Printf("Select account (1-%d): ", len(result.AccountIDs))
-			selection, err := reader.ReadString('\n')
-			if err != nil {
-				return fmt.Errorf("reading selection: %w", err)
-			}
-			selection = strings.TrimSpace(selection)
-			idx := 0
-			if _, err := fmt.Sscanf(selection, "%d", &idx); err != nil || idx < 1 || idx > len(result.AccountIDs) {
-				return fmt.Errorf("invalid selection %q: must be 1-%d", selection, len(result.AccountIDs))
-			}
-			accountID = result.AccountIDs[idx-1]
-		} else {
-			fmt.Printf("Account ID: %s\n", accountID)
+		}
+
+		accountID, err := selectAccount(choices, reader, os.Stderr)
+		if err != nil {
+			return err
 		}
 
 		// Write config file

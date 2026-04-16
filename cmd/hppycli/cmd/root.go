@@ -3,10 +3,13 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"syscall"
 
 	"github.com/findingsimple/hppy-connect/internal/api"
 	"github.com/findingsimple/hppy-connect/internal/config"
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
+	"gopkg.in/yaml.v3"
 )
 
 var (
@@ -103,13 +106,23 @@ Use 'hppycli [command] --help' for details on any command.`,
 
 		configAccountID = cfg.AccountID
 
-		if cfg.Email == "" || cfg.Password == "" || cfg.AccountID == "" {
-			return fmt.Errorf(`missing required configuration
+		if cfg.Email == "" || cfg.Password == "" {
+			return fmt.Errorf(`missing required configuration (email and password)
 
 Run 'hppycli config init' to create a config file, or set environment variables:
   export HAPPYCO_EMAIL=your-email@example.com
   export HAPPYCO_PASSWORD=your-password
   export HAPPYCO_ACCOUNT_ID=your-account-id`)
+		}
+
+		// If account ID is missing, try to resolve it interactively.
+		if cfg.AccountID == "" {
+			accountID, err := resolveAccountInteractive(cmd, cfg)
+			if err != nil {
+				return err
+			}
+			cfg.AccountID = accountID
+			configAccountID = accountID
 		}
 
 		var opts []api.Option
@@ -131,6 +144,106 @@ func Execute() {
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
 	}
+}
+
+// resolveAccountInteractive authenticates, discovers accessible accounts,
+// and prompts the user to select one if multiple are available.
+// Requires an interactive terminal — fails with a clear message otherwise.
+func resolveAccountInteractive(cmd *cobra.Command, cfg *config.Config) (string, error) {
+	if !term.IsTerminal(int(syscall.Stdin)) {
+		return "", fmt.Errorf(`account ID is required but not configured
+
+Set it via one of:
+  hppycli config init                          # interactive setup
+  --account-id=<id>                            # CLI flag
+  export HAPPYCO_ACCOUNT_ID=your-account-id    # environment variable`)
+	}
+
+	stderr := cmd.ErrOrStderr()
+	fmt.Fprintln(stderr, "Account ID not configured — discovering accessible accounts...")
+
+	result, err := api.Login(cmd.Context(), cfg.Email, cfg.Password, cfg.Endpoint)
+	if err != nil {
+		return "", fmt.Errorf("authentication failed: %w", err)
+	}
+	if len(result.AccountIDs) == 0 {
+		return "", fmt.Errorf("no accessible accounts found for this user")
+	}
+
+	// Resolve account names for a better selection experience.
+	choices := make([]accountChoice, len(result.AccountIDs))
+	if len(result.AccountIDs) > 1 {
+		// Create a temporary client (pre-seeded with auth token) to look up names.
+		tempClient, err := api.NewClient(cfg.Email, cfg.Password, result.AccountIDs[0],
+			api.WithEndpoint(cfg.Endpoint),
+			api.WithToken(result.Token, result.ExpiresAt),
+		)
+		if err == nil {
+			for i, id := range result.AccountIDs {
+				choices[i] = accountChoice{ID: id}
+				acct, err := tempClient.GetAccountByID(cmd.Context(), id)
+				if err == nil && acct.Name != "" {
+					choices[i].Name = acct.Name
+				}
+			}
+		} else {
+			// Temp client creation failed — fall back to IDs only.
+			for i, id := range result.AccountIDs {
+				choices[i] = accountChoice{ID: id}
+			}
+		}
+	} else {
+		choices[0] = accountChoice{ID: result.AccountIDs[0]}
+		// Resolve name for the single account too.
+		tempClient, err := api.NewClient(cfg.Email, cfg.Password, result.AccountIDs[0],
+			api.WithEndpoint(cfg.Endpoint),
+			api.WithToken(result.Token, result.ExpiresAt),
+		)
+		if err == nil {
+			acct, err := tempClient.GetAccountByID(cmd.Context(), result.AccountIDs[0])
+			if err == nil && acct.Name != "" {
+				choices[0].Name = acct.Name
+			}
+		}
+	}
+
+	accountID, err := selectAccount(choices, os.Stdin, stderr)
+	if err != nil {
+		return "", err
+	}
+
+	// Offer to save to config file.
+	configPath := resolveConfigPath()
+	fmt.Fprintf(stderr, "\nSave account ID %s to %s? [Y/n] ", accountID, configPath)
+	var response string
+	fmt.Fscanln(os.Stdin, &response)
+	if response == "" || response == "y" || response == "Y" || response == "yes" {
+		if err := saveAccountToConfig(configPath, accountID); err != nil {
+			fmt.Fprintf(stderr, "Warning: could not save to config: %v\n", err)
+		} else {
+			fmt.Fprintf(stderr, "Saved.\n")
+		}
+	}
+
+	return accountID, nil
+}
+
+// saveAccountToConfig reads the existing config file, updates the account_id,
+// and writes it back. Creates the file if it does not exist.
+func saveAccountToConfig(configPath, accountID string) error {
+	// Read existing config as a map to preserve all fields.
+	data := make(map[string]interface{})
+	existing, err := os.ReadFile(configPath)
+	if err == nil {
+		yaml.Unmarshal(existing, &data)
+	}
+	data["account_id"] = accountID
+
+	out, err := yaml.Marshal(data)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(configPath, out, 0600)
 }
 
 func init() {

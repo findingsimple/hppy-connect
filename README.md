@@ -68,7 +68,7 @@ go install github.com/findingsimple/hppy-connect/cmd/hppymcp@latest
    hppycli config init
    ```
 
-   This prompts for your HappyCo email, password, and account ID, then writes `~/.hppycli.yaml` (chmod 600).
+   This prompts for your HappyCo email and password, authenticates, discovers your accessible accounts, and writes `~/.hppycli.yaml` (chmod 600). If you have multiple accounts, you'll be prompted to select one.
 
 2. Verify your credentials:
 
@@ -81,6 +81,8 @@ go install github.com/findingsimple/hppy-connect/cmd/hppymcp@latest
    ```bash
    hppycli properties list
    ```
+
+> **Note:** If `account_id` is not set in your config, the CLI will automatically authenticate and prompt you to select an account on first use (interactive terminal required). The selection can be saved to your config file.
 
 ## CLI Commands
 
@@ -453,7 +455,7 @@ hppycli workorders list --debug
 
 ### "missing required configuration"
 
-Run `hppycli config init` or set the environment variables `HAPPYCO_EMAIL`, `HAPPYCO_PASSWORD`, and `HAPPYCO_ACCOUNT_ID`.
+Run `hppycli config init` or set the environment variables `HAPPYCO_EMAIL` and `HAPPYCO_PASSWORD`. The `HAPPYCO_ACCOUNT_ID` is optional — if omitted, the CLI will discover your accessible accounts and prompt you to select one (interactive terminal required).
 
 ### Empty results
 

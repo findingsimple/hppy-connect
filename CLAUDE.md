@@ -112,6 +112,13 @@ Both binaries are thin frontends over shared logic in `internal/`.
 - No `--password` flag exists by design — passwords should never appear in process lists.
 - Commands requiring `--account-id` (users, memberships, roles) default to the config file's `account_id` value.
 
+### Interactive Account Selection
+- If `account_id` is missing from config/env/flags, the CLI authenticates and discovers accessible accounts via `api.Login()`.
+- For multiple accounts, a temporary client (pre-seeded with the login token via `WithToken`) resolves account names via `GetAccountByID`, then presents an interactive picker.
+- Non-interactive terminals (piped stdin) fail with a clear error directing users to `config init`, `--account-id`, or env vars.
+- After selection, the user is offered to save the account ID to their config file.
+- `config init` and `PersistentPreRunE` share the `selectAccount` helper to avoid duplication.
+
 ## Known Limitations & Accepted Trade-offs
 
 These were identified during security and resilience review and consciously accepted.

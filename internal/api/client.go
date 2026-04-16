@@ -100,6 +100,15 @@ func WithEndpoint(endpoint string) Option {
 	return func(c *Client) { c.endpoint = endpoint }
 }
 
+// WithToken pre-seeds the auth state with a token from a prior Login call.
+// This avoids a redundant login when a token is already available (e.g. during
+// interactive account selection after api.Login).
+func WithToken(token string, expiresAt time.Time) Option {
+	return func(c *Client) {
+		c.authState.Store(&tokenState{token: token, expiresAt: expiresAt})
+	}
+}
+
 // withRetryBackoff overrides retry backoff durations (for testing).
 func withRetryBackoff(backoff []time.Duration) Option {
 	return func(c *Client) { c.retryBackoff = backoff }
@@ -406,6 +415,20 @@ func (c *Client) doMutationIdempotent(ctx context.Context, query string, variabl
 func (c *Client) GetAccount(ctx context.Context) (*models.Account, error) {
 	vars := map[string]interface{}{
 		"accountId": c.accountID,
+	}
+	var resp accountResponse
+	if err := c.doQueryWithRetry(ctx, getAccountQuery, vars, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.Account, nil
+}
+
+// GetAccountByID returns account details for any accessible account ID.
+// Unlike GetAccount (which uses the client's configured account ID), this
+// queries an arbitrary account — used during interactive account selection.
+func (c *Client) GetAccountByID(ctx context.Context, accountID string) (*models.Account, error) {
+	vars := map[string]interface{}{
+		"accountId": accountID,
 	}
 	var resp accountResponse
 	if err := c.doQueryWithRetry(ctx, getAccountQuery, vars, &resp); err != nil {
