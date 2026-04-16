@@ -36,6 +36,7 @@ cmd/
       helpers.go   # Shared output formatting, flag parsing, validation, confirmAction
       workorders.go / inspections.go / properties.go / units.go / account.go
       projects.go / users.go / memberships.go / roles.go / webhooks.go
+      seed.go      # `seed` — populate account with test data (seedClient interface for testability)
       config.go / completion.go / version.go  # Utility commands
       mcp.go       # `mcp setup` — generates MCP client config JSON
   hppymcp/         # MCP server binary (stdio transport)
@@ -90,6 +91,17 @@ Both binaries are thin frontends over shared logic in `internal/`.
 - The MCP server's `apiClient` interface is composed from domain-specific sub-interfaces (`workOrderClient`, `inspectionClient`, `projectClient`, etc.).
 - Test mocks only need to implement the sub-interface their test uses (embed a no-op base struct and override specific methods).
 - This prevents adding a new mutation from breaking every existing mock.
+- The `seed` command uses the same pattern: `seedClient` interface in `seed.go` defines the 7 API methods it needs. Tests mock this interface with `mockSeedClient`.
+
+### Seed Command
+- `hppycli seed` populates a HappyCo account with realistic test data for exercising both CLI and MCP server.
+- Auto-discovers up to 3 properties and 5 units each. Creates work orders (cycling through 10 recipes), inspections, projects, and webhooks.
+- Work orders are created with their target status directly (not created-then-transitioned) to minimise API calls.
+- Descriptions are tagged with `[SEED <timestamp>]` (e.g. `[SEED 2026-04-16T15:04]`) for batch identification and future cleanup.
+- `--count` is capped at 50 (`maxSeedCount`) as defence-in-depth against runaway creation.
+- Plan is built once (`buildSeedPlan`) and iterated for both `--dry-run` display and execution — prevents drift between what's shown and what's created.
+- Core logic is in `runSeed()` which accepts `seedClient` interface and `io.Writer` parameters for full testability.
+- Supports `--output json` for programmatic access to created entity IDs.
 
 ### Plugins Exclusion
 - The Plugin domain (5 mutations) is excluded: wrong audience (integration partners, not property managers), secrets in process lists (`pluginLogin`), and disproportionate complexity (`setPluginData` nested input shape).
@@ -145,6 +157,7 @@ Full API reference is in `.scratch/API Runtime Findings.md`.
 - Tests use `require` for preconditions and `assert` for the actual checks (testify convention).
 - **Mutation client tests** use `httptest.Server` to verify GraphQL mutation strings, variable marshalling, and response unmarshalling.
 - **`confirmAction` tests** use `io.Reader` injection (matching the project's testable I/O pattern).
+- **Seed command tests** use `mockSeedClient` (implements `seedClient` interface) with `bytes.Buffer` for stdout/stderr. Tests cover plan building, discovery failures, partial failures, context cancellation, and JSON output.
 
 ## Reference Documentation
 

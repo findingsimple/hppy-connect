@@ -208,6 +208,7 @@ go install github.com/findingsimple/hppy-connect/cmd/hppymcp@latest
 
 | Command | Description |
 |---------|-------------|
+| `hppycli seed` | Populate account with test data (work orders, inspections, projects, webhooks) |
 | `hppycli config init` | Create config file interactively |
 | `hppycli config show` | Display current configuration (password masked) |
 | `hppycli mcp setup` | Generate MCP server config for AI clients |
@@ -258,7 +259,7 @@ hppycli workorders archive --id=abc123          # prompts: "About to archive wor
 hppycli workorders archive --id=abc123 --yes    # skips confirmation
 ```
 
-The `--yes` flag is available on: `workorders archive`, `workorders remove-attachment`, `inspections archive`, `inspections expire`, `inspections delete-section`, `inspections delete-item`, `inspections remove-item-photo`, `memberships deactivate`, `memberships set-roles`, `properties revoke-access`, `properties set-account-wide-access`, `users revoke-property-access`, and `roles set-permissions`.
+The `--yes` flag is available on: `seed`, `workorders archive`, `workorders remove-attachment`, `inspections archive`, `inspections expire`, `inspections delete-section`, `inspections delete-item`, `inspections remove-item-photo`, `memberships deactivate`, `memberships set-roles`, `properties revoke-access`, `properties set-account-wide-access`, `users revoke-property-access`, and `roles set-permissions`.
 
 ### Mutation Output
 
@@ -300,6 +301,12 @@ hppycli roles create --name="Inspector" --grant=inspection:inspection.create,ins
 
 # Webhook setup
 hppycli webhooks create --subscriber-id=54522 --subscriber-type=ACCOUNT --url=https://hooks.example.com/happyco --subjects=INSPECTIONS,WORK_ORDERS
+
+# Seed test data (preview first, then create)
+hppycli seed --dry-run
+hppycli seed --yes
+hppycli seed --inspection-template-id=tmpl123 --project-template-id=ptmpl456 --yes
+hppycli seed --count=5 --output json --yes
 ```
 
 ## MCP Server Setup

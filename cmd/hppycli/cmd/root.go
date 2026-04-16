@@ -50,6 +50,8 @@ Getting started:
 Available domains: account, properties, units (read), work orders, inspections,
 projects, users, memberships, roles, webhooks (read + write).
 
+Utilities: seed (populate test data), config, completion, mcp, version.
+
 Use 'hppycli [command] --help' for details on any command.`,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		// Skip config loading for commands that don't need the API client.
@@ -149,4 +151,5 @@ func init() {
 	rootCmd.AddCommand(membershipsCmd)
 	rootCmd.AddCommand(rolesCmd)
 	rootCmd.AddCommand(webhooksCmd)
+	rootCmd.AddCommand(seedCmd)
 }
