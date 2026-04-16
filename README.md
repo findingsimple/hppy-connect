@@ -1,12 +1,60 @@
+<div align="center">
+
+<img src="docs/images/HappyCo-Logo-Green-Circle.svg" alt="HappyCo" width="80" />
+
 # hppy-connect
 
-CLI and MCP server for the HappyCo platform API. Built during the 2-day HappyCo AI Hackathon (April 2026).
+**The HappyCo platform, from your terminal and your AI.**
 
-**hppycli** — a command-line tool for managing properties, units, inspections, work orders, projects, users, roles, and webhooks.
+A CLI and MCP server that gives developers and AI assistants full access to the HappyCo External GraphQL API — properties, inspections, work orders, projects, users, roles, webhooks, and more.
 
-**hppymcp** — a Model Context Protocol server that exposes the same capabilities to AI assistants (Claude Code, Cursor, etc.).
+Built during the 2-day HappyCo AI Hackathon (April 2026).
 
-Both binaries share the same internal API client and configuration.
+[Getting Started](#quick-start) | [CLI Commands](#cli-commands) | [MCP Server](#mcp-server-setup) | [Architecture](#architecture)
+
+---
+
+<table>
+<tr>
+<td align="center"><strong>76</strong><br/>MCP Tools</td>
+<td align="center"><strong>71</strong><br/>Mutations</td>
+<td align="center"><strong>8</strong><br/>Domains</td>
+<td align="center"><strong>4</strong><br/>Output Formats</td>
+</tr>
+</table>
+
+</div>
+
+<br/>
+
+<table>
+<tr>
+<td width="50%" valign="top">
+
+### `hppycli` — Command Line
+
+A full-featured CLI for managing your HappyCo account. Query properties and inspections, create work orders, manage users and roles, seed test data — all from the terminal with tab completion, multiple output formats, and scriptable JSON output.
+
+```bash
+hppycli workorders list --status open --output json
+```
+
+</td>
+<td width="50%" valign="top">
+
+### `hppymcp` — AI Assistant
+
+An MCP server that exposes the same capabilities to Claude Code, Cursor, and other AI clients. One command to connect, 76 tools across 8 domains. Your AI can read, create, and manage HappyCo data with built-in safety guards on destructive operations.
+
+```bash
+hppycli mcp setup --client claude
+```
+
+</td>
+</tr>
+</table>
+
+Both binaries share the same internal Go API client and configuration — one codebase, two interfaces.
 
 ## Architecture
 
