@@ -18,14 +18,8 @@ var membershipsCreateCmd = &cobra.Command{
 	Short:   "Create a user's membership in an account",
 	Example: `  hppycli memberships create --user-id=user456 --account-id=acct123`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		accountID, _ := cmd.Flags().GetString("account-id")
-		if accountID == "" {
-			accountID = configAccountID
-		}
-		if accountID == "" {
-			return fmt.Errorf("--account-id is required (or set account_id in config)")
-		}
-		if err := models.ValidateID("account-id", accountID); err != nil {
+		accountID, err := resolveAccountID(cmd)
+		if err != nil {
 			return err
 		}
 		userID, _ := cmd.Flags().GetString("user-id")
@@ -61,14 +55,8 @@ var membershipsActivateCmd = &cobra.Command{
 	Short:   "Activate a user's membership in an account",
 	Example: `  hppycli memberships activate --user-id=user456 --account-id=acct123`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		accountID, _ := cmd.Flags().GetString("account-id")
-		if accountID == "" {
-			accountID = configAccountID
-		}
-		if accountID == "" {
-			return fmt.Errorf("--account-id is required (or set account_id in config)")
-		}
-		if err := models.ValidateID("account-id", accountID); err != nil {
+		accountID, err := resolveAccountID(cmd)
+		if err != nil {
 			return err
 		}
 		userID, _ := cmd.Flags().GetString("user-id")
@@ -95,14 +83,8 @@ var membershipsDeactivateCmd = &cobra.Command{
 	Short:   "Deactivate a user's membership in an account",
 	Example: `  hppycli memberships deactivate --user-id=user456 --account-id=acct123`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		accountID, _ := cmd.Flags().GetString("account-id")
-		if accountID == "" {
-			accountID = configAccountID
-		}
-		if accountID == "" {
-			return fmt.Errorf("--account-id is required (or set account_id in config)")
-		}
-		if err := models.ValidateID("account-id", accountID); err != nil {
+		accountID, err := resolveAccountID(cmd)
+		if err != nil {
 			return err
 		}
 		userID, _ := cmd.Flags().GetString("user-id")
@@ -133,14 +115,8 @@ var membershipsSetRolesCmd = &cobra.Command{
 	Short:   "Set the roles for a user's membership",
 	Example: `  hppycli memberships set-roles --user-id=user456 --role-id=role1,role2 --account-id=acct123`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		accountID, _ := cmd.Flags().GetString("account-id")
-		if accountID == "" {
-			accountID = configAccountID
-		}
-		if accountID == "" {
-			return fmt.Errorf("--account-id is required (or set account_id in config)")
-		}
-		if err := models.ValidateID("account-id", accountID); err != nil {
+		accountID, err := resolveAccountID(cmd)
+		if err != nil {
 			return err
 		}
 		userID, _ := cmd.Flags().GetString("user-id")

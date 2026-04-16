@@ -18,14 +18,8 @@ var rolesCreateCmd = &cobra.Command{
 	Short:   "Create a new permission role in an account",
 	Example: `  hppycli roles create --name="Inspector" --grant=inspection:inspection.create,inspection:inspection.view --account-id=acct123`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		accountID, _ := cmd.Flags().GetString("account-id")
-		if accountID == "" {
-			accountID = configAccountID
-		}
-		if accountID == "" {
-			return fmt.Errorf("--account-id is required (or set account_id in config)")
-		}
-		if err := models.ValidateID("account-id", accountID); err != nil {
+		accountID, err := resolveAccountID(cmd)
+		if err != nil {
 			return err
 		}
 
@@ -74,14 +68,8 @@ var rolesSetNameCmd = &cobra.Command{
 	Short:   "Update a role's display name",
 	Example: `  hppycli roles set-name --id=role123 --name="Senior Inspector" --account-id=acct123`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		accountID, _ := cmd.Flags().GetString("account-id")
-		if accountID == "" {
-			accountID = configAccountID
-		}
-		if accountID == "" {
-			return fmt.Errorf("--account-id is required (or set account_id in config)")
-		}
-		if err := models.ValidateID("account-id", accountID); err != nil {
+		accountID, err := resolveAccountID(cmd)
+		if err != nil {
 			return err
 		}
 
@@ -118,14 +106,8 @@ var rolesSetDescriptionCmd = &cobra.Command{
 	Short:   "Update or clear a role's description",
 	Example: `  hppycli roles set-description --id=role123 --description="Can perform inspections" --account-id=acct123`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		accountID, _ := cmd.Flags().GetString("account-id")
-		if accountID == "" {
-			accountID = configAccountID
-		}
-		if accountID == "" {
-			return fmt.Errorf("--account-id is required (or set account_id in config)")
-		}
-		if err := models.ValidateID("account-id", accountID); err != nil {
+		accountID, err := resolveAccountID(cmd)
+		if err != nil {
 			return err
 		}
 
@@ -165,14 +147,8 @@ var rolesSetPermissionsCmd = &cobra.Command{
 	Short:   "Update permissions for a role",
 	Example: `  hppycli roles set-permissions --id=role123 --grant=inspection:inspection.create --revoke=task:task.delete --account-id=acct123`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		accountID, _ := cmd.Flags().GetString("account-id")
-		if accountID == "" {
-			accountID = configAccountID
-		}
-		if accountID == "" {
-			return fmt.Errorf("--account-id is required (or set account_id in config)")
-		}
-		if err := models.ValidateID("account-id", accountID); err != nil {
+		accountID, err := resolveAccountID(cmd)
+		if err != nil {
 			return err
 		}
 

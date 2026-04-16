@@ -266,7 +266,7 @@ func doLogin(ctx context.Context, httpClient *http.Client, endpoint, email, pass
 	}
 
 	if resp.StatusCode == http.StatusTooManyRequests {
-		return nil, errRateLimited("login rate limited")
+		return nil, errRateLimitedWithRetryAfter("login rate limited", resp.Header.Get("Retry-After"))
 	}
 	if resp.StatusCode >= 500 {
 		return nil, errAPI(fmt.Sprintf("login returned HTTP %d", resp.StatusCode))
@@ -1531,7 +1531,7 @@ func (c *Client) ListPropertiesRaw(ctx context.Context, opts models.ListOptions)
 		vars["filter"] = filter
 	}
 	var raw json.RawMessage
-	return raw, c.doQuery(ctx, listPropertiesQuery, vars, &raw)
+	return raw, c.doQueryWithRetry(ctx, listPropertiesQuery, vars, &raw)
 }
 
 // ListUnitsRaw returns the raw GraphQL response for the first page of units.
@@ -1542,7 +1542,7 @@ func (c *Client) ListUnitsRaw(ctx context.Context, propertyID string, limit int)
 		"propertiesFilter": map[string]interface{}{"propertyId": []string{propertyID}},
 	}
 	var raw json.RawMessage
-	return raw, c.doQuery(ctx, listUnitsQuery, vars, &raw)
+	return raw, c.doQueryWithRetry(ctx, listUnitsQuery, vars, &raw)
 }
 
 // ListWorkOrdersRaw returns the raw GraphQL response for the first page of work orders.
@@ -1567,7 +1567,7 @@ func (c *Client) listRawWithDateFilter(ctx context.Context, query string, opts m
 		vars["filter"] = filter
 	}
 	var raw json.RawMessage
-	return raw, c.doQuery(ctx, query, vars, &raw)
+	return raw, c.doQueryWithRetry(ctx, query, vars, &raw)
 }
 
 // rawPageFirst returns the page size for raw queries, honouring the limit if set.

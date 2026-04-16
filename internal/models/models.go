@@ -18,7 +18,7 @@ var (
 // Mutation-specific validation maps.
 var (
 	ValidWorkOrderPriorities    = map[string]bool{"NORMAL": true, "URGENT": true}
-	ValidWorkOrderTypes         = map[string]bool{"SERVICE_REQUEST": true, "TURN": true, "CAPITAL_IMPROVEMENT": true, "INSPECTION_RELATED": true, "APPLIANCE_REPLACEMENT": true}
+	ValidWorkOrderTypes         = map[string]bool{"CAPITAL_IMPROVEMENT": true, "CURB_APPEAL": true, "INCIDENT": true, "INVENTORY": true, "LIFE_SAFETY": true, "PREVENTATIVE_MAINTENANCE": true, "REGULATORY": true, "SEASONAL_MAINTENANCE": true, "SERVICE_REQUEST": true, "TURN": true}
 	ValidWorkOrderSubStatuses   = map[string]bool{"CANCELLED": true, "UNKNOWN": true}
 	ValidWorkOrderAssigneeTypes = map[string]bool{"USER": true, "VENDOR": true}
 	ValidProjectPriorities      = map[string]bool{"NORMAL": true, "URGENT": true}

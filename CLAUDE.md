@@ -40,7 +40,7 @@ cmd/
   hppymcp/         # MCP server binary (stdio transport)
     main.go        # Entry point — server setup
     tools.go       # MCP read tool handlers + composed apiClient interface
-    tools_mutations.go  # MCP mutation tool handlers (67 tools across 8 domains)
+    tools_mutations.go  # MCP mutation tool handlers (71 tools across 8 domains)
     resources.go   # MCP resource handlers (account, property details)
     prompts.go     # MCP prompt definitions (property_summary, maintenance_report)
 internal/
@@ -104,7 +104,7 @@ Both binaries are thin frontends over shared logic in `internal/`.
 These were identified during security and resilience review and consciously accepted.
 
 ### A. DNS Rebinding in Webhook URL Validation
-`ValidateWebhookURL` checks hostnames at parse time only. A public domain that later re-resolves to a private IP (169.254.169.254, 127.0.0.1) would bypass the check. **Accepted because:** this client validates before sending to the HappyCo API — the actual HTTP request to the webhook URL is made server-side by HappyCo's infrastructure, not by this client. The inline comment at `validation.go:190-192` documents this.
+`ValidateWebhookURL` checks hostnames at parse time only. A public domain that later re-resolves to a private IP (169.254.169.254, 127.0.0.1) would bypass the check. **Accepted because:** this client validates before sending to the HappyCo API — the actual HTTP request to the webhook URL is made server-side by HappyCo's infrastructure, not by this client. The inline comment at `validation.go:197-199` documents this.
 
 ### B. Hex/Octal/Decimal IP Encoding in Webhook URLs
 Hostnames like `0x7f000001` (hex 127.0.0.1) or `2130706433` (decimal) bypass `net.ParseIP` (returns nil), skipping private IP checks. **Accepted because:** same as (A) — server-side concern. The HappyCo API performs its own validation on webhook delivery.

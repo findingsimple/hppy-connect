@@ -167,7 +167,7 @@ type InspectionDeleteItemInput struct {
 
 // InspectionAddItemPhotoInput adds a photo to an inspection item.
 type InspectionAddItemPhotoInput struct {
-	InspectionID string `json:"inspectionId"`
+	InspectionID string `json:"inspectionID"`
 	SectionName  string `json:"sectionName"`
 	ItemName     string `json:"itemName"`
 	MimeType     string `json:"mimeType"`

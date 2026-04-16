@@ -70,6 +70,8 @@ func gqlErrorResponse(message string) map[string]interface{} {
 	}
 }
 
+func ptrFloat64(f float64) *float64 { return &f }
+
 func propertiesPage(count, n int, hasNext bool, cursor string) map[string]interface{} {
 	return gqlResponse(map[string]interface{}{
 		"account": map[string]interface{}{
@@ -2355,6 +2357,178 @@ func TestWorkOrderStopTimerRoundTrip(t *testing.T) {
 	assert.Equal(t, "2026-04-16T09:30:00Z", inputVar["stoppedAt"])
 }
 
+// --- Inspection Round-Trip Tests ---
+
+func TestInspectionCreateRoundTrip(t *testing.T) {
+	var capturedBody map[string]interface{}
+	srv, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		json.Unmarshal(body, &capturedBody)
+		json.NewEncoder(w).Encode(gqlResponse(map[string]interface{}{
+			"inspectionCreate": map[string]interface{}{
+				"id":     "insp-new-1",
+				"name":   "Move-in",
+				"status": "SCHEDULED",
+			},
+		}))
+	})
+	_ = srv
+
+	input := models.InspectionCreateInput{
+		LocationID:   "loc-1",
+		TemplateID:   "tpl-1",
+		ScheduledFor: "2026-06-01T00:00:00Z",
+		AssignedToID: "user-1",
+	}
+	insp, err := c.InspectionCreate(context.Background(), input)
+	require.NoError(t, err)
+	assert.Equal(t, "insp-new-1", insp.ID)
+	assert.Equal(t, "SCHEDULED", insp.Status)
+
+	query, ok := capturedBody["query"].(string)
+	require.True(t, ok)
+	assert.Contains(t, query, "inspectionCreate")
+
+	vars, ok := capturedBody["variables"].(map[string]interface{})
+	require.True(t, ok)
+	inputVar, ok := vars["input"].(map[string]interface{})
+	require.True(t, ok)
+	assert.Equal(t, "loc-1", inputVar["locationId"])
+	assert.Equal(t, "tpl-1", inputVar["templateId"])
+	assert.Equal(t, "2026-06-01T00:00:00Z", inputVar["scheduledFor"])
+	assert.Equal(t, "user-1", inputVar["assignedToID"])
+}
+
+func TestInspectionRateItemRoundTrip(t *testing.T) {
+	var capturedBody map[string]interface{}
+	srv, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		json.Unmarshal(body, &capturedBody)
+		json.NewEncoder(w).Encode(gqlResponse(map[string]interface{}{
+			"inspectionRateItem": map[string]interface{}{
+				"id":     "insp-1",
+				"status": "INCOMPLETE",
+			},
+		}))
+	})
+	_ = srv
+
+	input := models.InspectionRateItemInput{
+		InspectionID: "insp-1",
+		SectionName:  "Bedroom",
+		ItemName:     "Walls",
+		Rating: models.InspectionRatingInput{
+			Key:   "condition",
+			Score: ptrFloat64(4.0),
+			Value: "Good",
+		},
+	}
+	insp, err := c.InspectionRateItem(context.Background(), input)
+	require.NoError(t, err)
+	assert.Equal(t, "insp-1", insp.ID)
+
+	vars, ok := capturedBody["variables"].(map[string]interface{})
+	require.True(t, ok)
+	inputVar, ok := vars["input"].(map[string]interface{})
+	require.True(t, ok)
+	assert.Equal(t, "insp-1", inputVar["inspectionId"])
+	assert.Equal(t, "Bedroom", inputVar["sectionName"])
+	assert.Equal(t, "Walls", inputVar["itemName"])
+	rating, ok := inputVar["rating"].(map[string]interface{})
+	require.True(t, ok)
+	assert.Equal(t, "condition", rating["key"])
+	assert.Equal(t, float64(4), rating["score"])
+	assert.Equal(t, "Good", rating["value"])
+}
+
+// --- Webhook Round-Trip Tests ---
+
+func TestWebhookCreateRoundTrip(t *testing.T) {
+	var capturedBody map[string]interface{}
+	srv, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		json.Unmarshal(body, &capturedBody)
+		json.NewEncoder(w).Encode(gqlResponse(map[string]interface{}{
+			"webhookCreate": map[string]interface{}{
+				"id":     "wh-new-1",
+				"url":    "https://example.com/hook",
+				"status": "ENABLED",
+			},
+		}))
+	})
+	_ = srv
+
+	input := models.WebhookCreateInput{
+		SubscriberID:   "acct-1",
+		SubscriberType: "ACCOUNT",
+		URL:            "https://example.com/hook",
+		Subjects:       []string{"WORK_ORDERS", "INSPECTIONS"},
+		Status:         "ENABLED",
+	}
+	wh, err := c.WebhookCreate(context.Background(), input)
+	require.NoError(t, err)
+	assert.Equal(t, "wh-new-1", wh.ID)
+	assert.Equal(t, "https://example.com/hook", wh.URL)
+
+	vars, ok := capturedBody["variables"].(map[string]interface{})
+	require.True(t, ok)
+	inputVar, ok := vars["input"].(map[string]interface{})
+	require.True(t, ok)
+	assert.Equal(t, "acct-1", inputVar["subscriberId"])
+	assert.Equal(t, "ACCOUNT", inputVar["subscriberType"])
+	assert.Equal(t, "https://example.com/hook", inputVar["url"])
+	subjects, ok := inputVar["subjects"].([]interface{})
+	require.True(t, ok)
+	assert.Len(t, subjects, 2)
+}
+
+// --- Role Round-Trip Tests ---
+
+func TestRoleCreateRoundTrip(t *testing.T) {
+	var capturedBody map[string]interface{}
+	srv, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		json.Unmarshal(body, &capturedBody)
+		json.NewEncoder(w).Encode(gqlResponse(map[string]interface{}{
+			"roleCreate": map[string]interface{}{
+				"id":   "role-new-1",
+				"name": "Inspector",
+			},
+		}))
+	})
+	_ = srv
+
+	input := models.RoleCreateInput{
+		AccountID:   "acct-1",
+		Name:        "Inspector",
+		Description: "Can perform inspections",
+		Permissions: models.PermissionsInput{
+			Grant:  []string{"inspection:inspection.create", "inspection:inspection.view"},
+			Revoke: []string{"task:task.delete"},
+		},
+	}
+	role, err := c.RoleCreate(context.Background(), input)
+	require.NoError(t, err)
+	assert.Equal(t, "role-new-1", role.ID)
+	assert.Equal(t, "Inspector", role.Name)
+
+	vars, ok := capturedBody["variables"].(map[string]interface{})
+	require.True(t, ok)
+	inputVar, ok := vars["input"].(map[string]interface{})
+	require.True(t, ok)
+	assert.Equal(t, "acct-1", inputVar["accountId"])
+	assert.Equal(t, "Inspector", inputVar["name"])
+	assert.Equal(t, "Can perform inspections", inputVar["description"])
+	perms, ok := inputVar["permissions"].(map[string]interface{})
+	require.True(t, ok)
+	grant, ok := perms["grant"].([]interface{})
+	require.True(t, ok)
+	assert.Len(t, grant, 2)
+	revoke, ok := perms["revoke"].([]interface{})
+	require.True(t, ok)
+	assert.Len(t, revoke, 1)
+}
+
 // TestMutationRetryClassification verifies that non-idempotent mutations (Create,
 // AddComment, AddTime, AddAttachment) do NOT retry on 500, while idempotent
 // mutations (all set*, archive, remove, start, stop) DO retry.
@@ -2404,6 +2578,42 @@ func TestMutationRetryClassification(t *testing.T) {
 		}, true},
 		{"WorkOrderStopTimer", func(ctx context.Context, c *Client) error {
 			_, err := c.WorkOrderStopTimer(ctx, "wo-1", "2026-01-01T01:00:00Z")
+			return err
+		}, true},
+		{"WorkOrderSetStatusAndSubStatus", func(ctx context.Context, c *Client) error {
+			_, err := c.WorkOrderSetStatusAndSubStatus(ctx, models.WorkOrderSetStatusAndSubStatusInput{WorkOrderID: "wo-1", Status: models.WorkOrderStatusInput{Status: "COMPLETED"}})
+			return err
+		}, true},
+		{"WorkOrderSetAssignee", func(ctx context.Context, c *Client) error {
+			_, err := c.WorkOrderSetAssignee(ctx, models.WorkOrderSetAssigneeInput{WorkOrderID: "wo-1"})
+			return err
+		}, true},
+		{"WorkOrderSetScheduledFor", func(ctx context.Context, c *Client) error {
+			_, err := c.WorkOrderSetScheduledFor(ctx, "wo-1", "2026-01-01T00:00:00Z")
+			return err
+		}, true},
+		{"WorkOrderSetLocation", func(ctx context.Context, c *Client) error {
+			_, err := c.WorkOrderSetLocation(ctx, "wo-1", "loc-1")
+			return err
+		}, true},
+		{"WorkOrderSetType", func(ctx context.Context, c *Client) error {
+			_, err := c.WorkOrderSetType(ctx, "wo-1", "SERVICE_REQUEST")
+			return err
+		}, true},
+		{"WorkOrderSetEntryNotes", func(ctx context.Context, c *Client) error {
+			_, err := c.WorkOrderSetEntryNotes(ctx, "wo-1", "notes")
+			return err
+		}, true},
+		{"WorkOrderSetPermissionToEnter", func(ctx context.Context, c *Client) error {
+			_, err := c.WorkOrderSetPermissionToEnter(ctx, "wo-1", true)
+			return err
+		}, true},
+		{"WorkOrderSetResidentApprovedEntry", func(ctx context.Context, c *Client) error {
+			_, err := c.WorkOrderSetResidentApprovedEntry(ctx, "wo-1", true)
+			return err
+		}, true},
+		{"WorkOrderSetUnitEntered", func(ctx context.Context, c *Client) error {
+			_, err := c.WorkOrderSetUnitEntered(ctx, "wo-1", true)
 			return err
 		}, true},
 
@@ -2456,6 +2666,54 @@ func TestMutationRetryClassification(t *testing.T) {
 			_, err := c.InspectionRemoveItemPhoto(ctx, models.InspectionRemoveItemPhotoInput{InspectionID: "insp-1", PhotoID: "p-1", SectionName: "s", ItemName: "i"})
 			return err
 		}, true},
+		{"InspectionReopen", func(ctx context.Context, c *Client) error {
+			_, err := c.InspectionReopen(ctx, "insp-1")
+			return err
+		}, true},
+		{"InspectionExpire", func(ctx context.Context, c *Client) error {
+			_, err := c.InspectionExpire(ctx, "insp-1")
+			return err
+		}, true},
+		{"InspectionUnexpire", func(ctx context.Context, c *Client) error {
+			_, err := c.InspectionUnexpire(ctx, "insp-1")
+			return err
+		}, true},
+		{"InspectionSetDueBy", func(ctx context.Context, c *Client) error {
+			_, err := c.InspectionSetDueBy(ctx, models.InspectionSetDueByInput{InspectionID: "insp-1", DueBy: "2026-01-01T00:00:00Z"})
+			return err
+		}, true},
+		{"InspectionSetScheduledFor", func(ctx context.Context, c *Client) error {
+			_, err := c.InspectionSetScheduledFor(ctx, "insp-1", "2026-01-01T00:00:00Z")
+			return err
+		}, true},
+		{"InspectionSetHeaderField", func(ctx context.Context, c *Client) error {
+			_, err := c.InspectionSetHeaderField(ctx, models.InspectionSetHeaderFieldInput{InspectionID: "insp-1", Label: "l", Value: "v"})
+			return err
+		}, true},
+		{"InspectionSetFooterField", func(ctx context.Context, c *Client) error {
+			_, err := c.InspectionSetFooterField(ctx, models.InspectionSetFooterFieldInput{InspectionID: "insp-1", Label: "l", Value: "v"})
+			return err
+		}, true},
+		{"InspectionSetItemNotes", func(ctx context.Context, c *Client) error {
+			_, err := c.InspectionSetItemNotes(ctx, models.InspectionSetItemNotesInput{InspectionID: "insp-1", SectionName: "s", ItemName: "i", Notes: "n"})
+			return err
+		}, true},
+		{"InspectionRateItem", func(ctx context.Context, c *Client) error {
+			_, err := c.InspectionRateItem(ctx, models.InspectionRateItemInput{InspectionID: "insp-1", SectionName: "s", ItemName: "i", Rating: models.InspectionRatingInput{Key: "k"}})
+			return err
+		}, true},
+		{"InspectionRenameSection", func(ctx context.Context, c *Client) error {
+			_, err := c.InspectionRenameSection(ctx, models.InspectionRenameSectionInput{InspectionID: "insp-1", SectionName: "s", NewSectionName: "n"})
+			return err
+		}, true},
+		{"InspectionDeleteItem", func(ctx context.Context, c *Client) error {
+			_, err := c.InspectionDeleteItem(ctx, models.InspectionDeleteItemInput{InspectionID: "insp-1", SectionName: "s", ItemName: "i"})
+			return err
+		}, true},
+		{"InspectionMoveItemPhoto", func(ctx context.Context, c *Client) error {
+			_, err := c.InspectionMoveItemPhoto(ctx, models.InspectionMoveItemPhotoInput{InspectionID: "insp-1", PhotoID: "p-1", FromSectionName: "s1", FromItemName: "i1", ToSectionName: "s2", ToItemName: "i2"})
+			return err
+		}, true},
 
 		// --- Project domain ---
 		{"ProjectCreate", func(ctx context.Context, c *Client) error {
@@ -2470,6 +2728,27 @@ func TestMutationRetryClassification(t *testing.T) {
 			_, err := c.ProjectSetOnHold(ctx, "proj-1", true)
 			return err
 		}, true},
+		{"ProjectSetAssignee", func(ctx context.Context, c *Client) error {
+			_, err := c.ProjectSetAssignee(ctx, models.ProjectSetAssigneeInput{ProjectID: "proj-1"})
+			return err
+		}, true},
+		{"ProjectSetNotes", func(ctx context.Context, c *Client) error {
+			_, err := c.ProjectSetNotes(ctx, "proj-1", "notes")
+			return err
+		}, true},
+		{"ProjectSetDueAt", func(ctx context.Context, c *Client) error {
+			_, err := c.ProjectSetDueAt(ctx, "proj-1", "2026-01-01T00:00:00Z")
+			return err
+		}, true},
+		{"ProjectSetStartAt", func(ctx context.Context, c *Client) error {
+			_, err := c.ProjectSetStartAt(ctx, "proj-1", "2026-01-01T00:00:00Z")
+			return err
+		}, true},
+		{"ProjectSetAvailabilityTargetAt", func(ctx context.Context, c *Client) error {
+			at := "2026-01-01T00:00:00Z"
+			_, err := c.ProjectSetAvailabilityTargetAt(ctx, "proj-1", &at)
+			return err
+		}, true},
 
 		// --- User domain ---
 		{"UserCreate", func(ctx context.Context, c *Client) error {
@@ -2478,6 +2757,20 @@ func TestMutationRetryClassification(t *testing.T) {
 		}, false},
 		{"UserSetEmail", func(ctx context.Context, c *Client) error {
 			_, err := c.UserSetEmail(ctx, "user-1", "a@b.com")
+			return err
+		}, true},
+		{"UserSetName", func(ctx context.Context, c *Client) error {
+			_, err := c.UserSetName(ctx, "user-1", "Name")
+			return err
+		}, true},
+		{"UserSetShortName", func(ctx context.Context, c *Client) error {
+			sn := "SN"
+			_, err := c.UserSetShortName(ctx, "user-1", &sn)
+			return err
+		}, true},
+		{"UserSetPhone", func(ctx context.Context, c *Client) error {
+			ph := "555-0100"
+			_, err := c.UserSetPhone(ctx, "user-1", &ph)
 			return err
 		}, true},
 
@@ -2494,6 +2787,10 @@ func TestMutationRetryClassification(t *testing.T) {
 			_, err := c.AccountMembershipDeactivate(ctx, models.AccountMembershipDeactivateInput{AccountID: "acct-1", UserID: "user-1"})
 			return err
 		}, true},
+		{"AccountMembershipSetRoles", func(ctx context.Context, c *Client) error {
+			_, err := c.AccountMembershipSetRoles(ctx, models.AccountMembershipSetRolesInput{AccountID: "acct-1", UserID: "user-1"})
+			return err
+		}, true},
 
 		// --- Property Access domain ---
 		{"PropertyGrantUserAccess", func(ctx context.Context, c *Client) error {
@@ -2502,6 +2799,18 @@ func TestMutationRetryClassification(t *testing.T) {
 		}, true},
 		{"PropertyRevokeUserAccess", func(ctx context.Context, c *Client) error {
 			_, err := c.PropertyRevokeUserAccess(ctx, models.PropertyRevokeUserAccessInput{PropertyID: "prop-1", UserID: []string{"u-1"}})
+			return err
+		}, true},
+		{"PropertySetAccountWideAccess", func(ctx context.Context, c *Client) error {
+			_, err := c.PropertySetAccountWideAccess(ctx, models.PropertySetAccountWideAccessInput{PropertyID: "prop-1", AccountWideAccess: true})
+			return err
+		}, true},
+		{"UserGrantPropertyAccess", func(ctx context.Context, c *Client) error {
+			_, err := c.UserGrantPropertyAccess(ctx, models.UserGrantPropertyAccessInput{UserID: "user-1", PropertyID: []string{"prop-1"}})
+			return err
+		}, true},
+		{"UserRevokePropertyAccess", func(ctx context.Context, c *Client) error {
+			_, err := c.UserRevokePropertyAccess(ctx, models.UserRevokePropertyAccessInput{UserID: "user-1", PropertyID: []string{"prop-1"}})
 			return err
 		}, true},
 
@@ -2516,6 +2825,11 @@ func TestMutationRetryClassification(t *testing.T) {
 		}, true},
 		{"RoleSetPermissions", func(ctx context.Context, c *Client) error {
 			_, err := c.RoleSetPermissions(ctx, models.RoleSetPermissionsInput{AccountID: "acct-1", RoleID: "role-1", Permissions: models.PermissionsInput{Grant: []string{"p"}}})
+			return err
+		}, true},
+		{"RoleSetDescription", func(ctx context.Context, c *Client) error {
+			desc := "d"
+			_, err := c.RoleSetDescription(ctx, models.RoleSetDescriptionInput{AccountID: "acct-1", RoleID: "role-1", Description: &desc})
 			return err
 		}, true},
 

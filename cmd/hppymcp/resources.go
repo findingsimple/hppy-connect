@@ -45,6 +45,9 @@ func registerResources(server *mcp.Server, client apiClient) {
 			Description: "Returns property name, address, and unit count",
 		},
 		func(ctx context.Context, req *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
+			ctx, cancel := context.WithTimeout(ctx, toolTimeout)
+			defer cancel()
+
 			propertyID := extractPropertyID(req.Params.URI)
 			if propertyID == "" {
 				return nil, fmt.Errorf("missing property ID in URI")

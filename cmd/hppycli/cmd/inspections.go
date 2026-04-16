@@ -869,9 +869,15 @@ var inspectionsSendToGuestCmd = &cobra.Command{
 			Email:        email,
 		}
 		if v, _ := cmd.Flags().GetString("name"); v != "" {
+			if err := models.ValidateFreeText("name", v); err != nil {
+				return err
+			}
 			input.Name = v
 		}
 		if v, _ := cmd.Flags().GetString("message"); v != "" {
+			if err := models.ValidateFreeText("message", v); err != nil {
+				return err
+			}
 			input.Message = v
 		}
 		if v, _ := cmd.Flags().GetString("due-date"); v != "" {

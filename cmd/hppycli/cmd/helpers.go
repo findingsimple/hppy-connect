@@ -238,6 +238,22 @@ func confirmAction(cmd *cobra.Command, action string, input io.Reader, output io
 	return fmt.Errorf("aborted")
 }
 
+// resolveAccountID resolves the account ID from the --account-id flag, falling back to
+// the config file's account_id. Returns an error if neither is set or the ID is invalid.
+func resolveAccountID(cmd *cobra.Command) (string, error) {
+	accountID, _ := cmd.Flags().GetString("account-id")
+	if accountID == "" {
+		accountID = configAccountID
+	}
+	if accountID == "" {
+		return "", fmt.Errorf("--account-id is required (or set account_id in config)")
+	}
+	if err := models.ValidateID("account-id", accountID); err != nil {
+		return "", err
+	}
+	return accountID, nil
+}
+
 // parseIDList splits a comma-separated string into validated IDs.
 // Returns an error if any ID fails validation. Empty segments are skipped.
 func parseIDList(flagName, raw string) ([]string, error) {

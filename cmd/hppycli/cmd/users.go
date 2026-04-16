@@ -18,14 +18,8 @@ var usersCreateCmd = &cobra.Command{
 	Short:   "Create a new user in an account",
 	Example: `  hppycli users create --email=user@example.com --name="Jane Doe" --account-id=acct123`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		accountID, _ := cmd.Flags().GetString("account-id")
-		if accountID == "" {
-			accountID = configAccountID
-		}
-		if accountID == "" {
-			return fmt.Errorf("--account-id is required (or set account_id in config)")
-		}
-		if err := models.ValidateID("account-id", accountID); err != nil {
+		accountID, err := resolveAccountID(cmd)
+		if err != nil {
 			return err
 		}
 

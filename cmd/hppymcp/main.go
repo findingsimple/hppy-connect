@@ -19,7 +19,7 @@ var (
 	buildDate = "unknown"
 )
 
-const serverInstructions = `HappyCo property management API — read-only access to account properties, units, work orders, and inspections. Property ID is required for unit queries. Use resources for quick lookups; use tools for filtered/paginated queries.`
+const serverInstructions = `HappyCo property management API — read and manage account properties, units, work orders, inspections, projects, users, roles, and webhooks. Includes 71 mutation tools for creating and modifying resources. Property ID is required for unit queries. Use resources for quick lookups; use tools for filtered/paginated queries.`
 
 func main() {
 	configPath := flag.String("config", "", "path to config file")

@@ -1677,6 +1677,9 @@ func registerInspectionMutationTools(server *mcp.Server, client apiClient, debug
 		&mcp.Tool{
 			Name:        "inspection_send_to_guest",
 			Description: "Send an inspection to a guest via email. Returns a guest link",
+			Annotations: &mcp.ToolAnnotations{
+				DestructiveHint: &destructive,
+			},
 		},
 		wrapTool(debug, "inspection_send_to_guest", func(ctx context.Context, _ *mcp.CallToolRequest, input InspectionSendToGuestMCPInput) (*mcp.CallToolResult, any, error) {
 			if errResult := requireID("inspection_id", input.InspectionID); errResult != nil {
@@ -2693,6 +2696,9 @@ func registerWebhookMutationTools(server *mcp.Server, client apiClient, debug bo
 			if err != nil {
 				return toolError(err), nil, nil
 			}
+			// Redact signing secret — it would otherwise persist in the LLM's
+			// context window and conversation logs.
+			webhook.SigningSecret = "[redacted — use CLI for signing secret]"
 			return toolJSON(webhook)
 		}),
 	)
