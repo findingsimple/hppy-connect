@@ -10,7 +10,7 @@ A CLI and MCP server that gives developers and AI assistants full access to the 
 
 Built during the 2-day HappyCo AI Hackathon (April 2026).
 
-[Getting Started](#quick-start) | [CLI Commands](#cli-commands) | [MCP Server](#mcp-server-setup) | [Architecture](#architecture)
+[Installation](#installation) | [Getting Started](#quick-start) | [CLI Commands](#cli-commands) | [MCP Server](#mcp-server-setup) | [Architecture](#architecture)
 
 ---
 
