@@ -359,17 +359,35 @@ hppycli seed --count=5 --output json --yes
 
 ## MCP Server Setup
 
-Generate configuration for your AI client:
+### Claude Code / Claude Desktop
 
-```bash
-# Claude Code / Claude Desktop
-hppycli mcp setup --client claude
+1. Generate the config snippet:
+   ```bash
+   hppycli mcp setup --client claude
+   ```
+2. Open `~/.claude/settings.json` and add the output to the `mcpServers` object.
+3. Restart Claude Code. Ask "What HappyCo account am I connected to?" to verify.
 
-# Cursor
-hppycli mcp setup --client cursor
-```
+### Cursor
 
-The output is a JSON snippet to add to your client's MCP configuration. The server binary (`hppymcp`) runs via stdio transport and reads the same `~/.hppycli.yaml` config file.
+1. Generate the config snippet:
+   ```bash
+   hppycli mcp setup --client cursor
+   ```
+2. Add the output to `.cursor/mcp.json` in your project root (or globally in `~/.cursor/mcp.json`).
+3. Restart Cursor. The hppymcp server should appear in your MCP server list.
+
+The server binary (`hppymcp`) runs via stdio transport and reads the same `~/.hppycli.yaml` config file.
+
+### Things to try
+
+Once connected, try asking your AI assistant:
+
+- "List all properties in my HappyCo account"
+- "Show me open work orders for property 225393"
+- "Create a work order for a leaking faucet in unit 4B"
+- "Generate a maintenance report for the last 30 days"
+- "Who are the users in my account and what roles do they have?"
 
 ### MCP Tools (76 total: 5 read + 71 mutation)
 
