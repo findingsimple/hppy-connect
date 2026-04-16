@@ -192,7 +192,7 @@ var rolesSetPermissionsCmd = &cobra.Command{
 			return fmt.Errorf("at least one of --grant or --revoke is required")
 		}
 
-		if err := confirmAction(cmd, "set role permissions", os.Stdin); err != nil {
+		if err := confirmAction(cmd, "set role permissions", os.Stdin, os.Stderr); err != nil {
 			return err
 		}
 

@@ -161,6 +161,13 @@ func SplitCSV(s string) []string {
 // ValidateWebhookURL validates a webhook URL for safety.
 // Rejects non-HTTPS schemes, private/internal IPs, cloud metadata endpoints,
 // embedded credentials, and IPv6 zone IDs.
+//
+// Known gaps (accepted — see CLAUDE.md "Known Limitations" items A and B):
+//   - DNS rebinding: a public hostname that later resolves to a private IP bypasses this check.
+//   - Encoded IPs: hex (0x7f000001) and decimal (2130706433) hostnames bypass net.ParseIP.
+//
+// Both are mitigated by the fact that this client only validates the URL before sending
+// it to the HappyCo API — the actual HTTP request is made server-side.
 func ValidateWebhookURL(rawURL string) error {
 	u, err := url.Parse(rawURL)
 	if err != nil {

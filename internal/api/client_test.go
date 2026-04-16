@@ -2406,6 +2406,128 @@ func TestMutationRetryClassification(t *testing.T) {
 			_, err := c.WorkOrderStopTimer(ctx, "wo-1", "2026-01-01T01:00:00Z")
 			return err
 		}, true},
+
+		// --- Inspection domain ---
+		{"InspectionCreate", func(ctx context.Context, c *Client) error {
+			_, err := c.InspectionCreate(ctx, models.InspectionCreateInput{LocationID: "loc-1", TemplateID: "tpl-1", ScheduledFor: "2026-01-01T00:00:00Z"})
+			return err
+		}, false},
+		{"InspectionAddSection", func(ctx context.Context, c *Client) error {
+			_, err := c.InspectionAddSection(ctx, models.InspectionAddSectionInput{InspectionID: "insp-1", Name: "s"})
+			return err
+		}, false},
+		{"InspectionAddItem", func(ctx context.Context, c *Client) error {
+			_, err := c.InspectionAddItem(ctx, models.InspectionAddItemInput{InspectionID: "insp-1", SectionName: "s", Name: "i", RatingGroupID: "rg-1"})
+			return err
+		}, false},
+		{"InspectionAddItemPhoto", func(ctx context.Context, c *Client) error {
+			_, err := c.InspectionAddItemPhoto(ctx, models.InspectionAddItemPhotoInput{InspectionID: "insp-1", SectionName: "s", ItemName: "i", MimeType: "image/jpeg"})
+			return err
+		}, false},
+		{"InspectionDuplicateSection", func(ctx context.Context, c *Client) error {
+			_, err := c.InspectionDuplicateSection(ctx, models.InspectionDuplicateSectionInput{InspectionID: "insp-1", SectionName: "s"})
+			return err
+		}, false},
+		{"InspectionSendToGuest", func(ctx context.Context, c *Client) error {
+			_, err := c.InspectionSendToGuest(ctx, models.InspectionSendToGuestInput{InspectionID: "insp-1", Email: "a@b.com"})
+			return err
+		}, false},
+		{"InspectionStart", func(ctx context.Context, c *Client) error {
+			_, err := c.InspectionStart(ctx, "insp-1")
+			return err
+		}, true},
+		{"InspectionComplete", func(ctx context.Context, c *Client) error {
+			_, err := c.InspectionComplete(ctx, "insp-1")
+			return err
+		}, true},
+		{"InspectionArchive", func(ctx context.Context, c *Client) error {
+			_, err := c.InspectionArchive(ctx, "insp-1")
+			return err
+		}, true},
+		{"InspectionSetAssignee", func(ctx context.Context, c *Client) error {
+			_, err := c.InspectionSetAssignee(ctx, models.InspectionSetAssigneeInput{InspectionID: "insp-1"})
+			return err
+		}, true},
+		{"InspectionDeleteSection", func(ctx context.Context, c *Client) error {
+			_, err := c.InspectionDeleteSection(ctx, models.InspectionDeleteSectionInput{InspectionID: "insp-1", SectionName: "s"})
+			return err
+		}, true},
+		{"InspectionRemoveItemPhoto", func(ctx context.Context, c *Client) error {
+			_, err := c.InspectionRemoveItemPhoto(ctx, models.InspectionRemoveItemPhotoInput{InspectionID: "insp-1", PhotoID: "p-1", SectionName: "s", ItemName: "i"})
+			return err
+		}, true},
+
+		// --- Project domain ---
+		{"ProjectCreate", func(ctx context.Context, c *Client) error {
+			_, err := c.ProjectCreate(ctx, models.ProjectCreateInput{ProjectTemplateID: "tpl-1", LocationID: "loc-1", StartAt: "2026-01-01T00:00:00Z"})
+			return err
+		}, false},
+		{"ProjectSetPriority", func(ctx context.Context, c *Client) error {
+			_, err := c.ProjectSetPriority(ctx, "proj-1", "HIGH")
+			return err
+		}, true},
+		{"ProjectSetOnHold", func(ctx context.Context, c *Client) error {
+			_, err := c.ProjectSetOnHold(ctx, "proj-1", true)
+			return err
+		}, true},
+
+		// --- User domain ---
+		{"UserCreate", func(ctx context.Context, c *Client) error {
+			_, err := c.UserCreate(ctx, models.UserCreateInput{AccountID: "acct-1", Email: "a@b.com", Name: "Test"})
+			return err
+		}, false},
+		{"UserSetEmail", func(ctx context.Context, c *Client) error {
+			_, err := c.UserSetEmail(ctx, "user-1", "a@b.com")
+			return err
+		}, true},
+
+		// --- Membership domain ---
+		{"AccountMembershipCreate", func(ctx context.Context, c *Client) error {
+			_, err := c.AccountMembershipCreate(ctx, models.AccountMembershipCreateInput{AccountID: "acct-1", UserID: "user-1"})
+			return err
+		}, false},
+		{"AccountMembershipActivate", func(ctx context.Context, c *Client) error {
+			_, err := c.AccountMembershipActivate(ctx, models.AccountMembershipActivateInput{AccountID: "acct-1", UserID: "user-1"})
+			return err
+		}, true},
+		{"AccountMembershipDeactivate", func(ctx context.Context, c *Client) error {
+			_, err := c.AccountMembershipDeactivate(ctx, models.AccountMembershipDeactivateInput{AccountID: "acct-1", UserID: "user-1"})
+			return err
+		}, true},
+
+		// --- Property Access domain ---
+		{"PropertyGrantUserAccess", func(ctx context.Context, c *Client) error {
+			_, err := c.PropertyGrantUserAccess(ctx, models.PropertyGrantUserAccessInput{PropertyID: "prop-1", UserID: []string{"u-1"}})
+			return err
+		}, true},
+		{"PropertyRevokeUserAccess", func(ctx context.Context, c *Client) error {
+			_, err := c.PropertyRevokeUserAccess(ctx, models.PropertyRevokeUserAccessInput{PropertyID: "prop-1", UserID: []string{"u-1"}})
+			return err
+		}, true},
+
+		// --- Role domain ---
+		{"RoleCreate", func(ctx context.Context, c *Client) error {
+			_, err := c.RoleCreate(ctx, models.RoleCreateInput{AccountID: "acct-1", Name: "r", Permissions: models.PermissionsInput{Grant: []string{"p"}}})
+			return err
+		}, false},
+		{"RoleSetName", func(ctx context.Context, c *Client) error {
+			_, err := c.RoleSetName(ctx, models.RoleSetNameInput{AccountID: "acct-1", RoleID: "role-1", Name: "n"})
+			return err
+		}, true},
+		{"RoleSetPermissions", func(ctx context.Context, c *Client) error {
+			_, err := c.RoleSetPermissions(ctx, models.RoleSetPermissionsInput{AccountID: "acct-1", RoleID: "role-1", Permissions: models.PermissionsInput{Grant: []string{"p"}}})
+			return err
+		}, true},
+
+		// --- Webhook domain ---
+		{"WebhookCreate", func(ctx context.Context, c *Client) error {
+			_, err := c.WebhookCreate(ctx, models.WebhookCreateInput{SubscriberID: "sub-1", SubscriberType: "ACCOUNT", URL: "https://example.com/hook"})
+			return err
+		}, false},
+		{"WebhookUpdate", func(ctx context.Context, c *Client) error {
+			_, err := c.WebhookUpdate(ctx, models.WebhookUpdateInput{ID: "wh-1"})
+			return err
+		}, true},
 	}
 
 	for _, tt := range tests {

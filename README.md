@@ -2,8 +2,8 @@
 
 CLI and MCP server for the HappyCo platform API. Built during the 2-day HappyCo AI Hackathon (April 2026).
 
-**hppycli** — a command-line tool for querying properties, units, inspections, and work orders.
-**hppymcp** — a Model Context Protocol server that exposes the same data to AI assistants (Claude Code, Cursor, etc.).
+**hppycli** — a command-line tool for managing properties, units, inspections, work orders, projects, users, roles, and webhooks.
+**hppymcp** — a Model Context Protocol server that exposes the same capabilities to AI assistants (Claude Code, Cursor, etc.).
 
 Both binaries share the same internal API client and configuration.
 
@@ -34,7 +34,7 @@ Both binaries share the same internal API client and configuration.
         └────────────┘          └─────────────┘
 ```
 
-The shared API client in `internal/` handles authentication, Relay-style cursor pagination, retries with exponential backoff, and mid-pagination auth recovery. Both binaries are thin frontends over this shared logic.
+The shared API client in `internal/` handles authentication, Relay-style cursor pagination, retries with exponential backoff, mid-pagination auth recovery, and write mutations with appropriate retry semantics. Both binaries are thin frontends over this shared logic.
 
 ## Installation
 
@@ -83,6 +83,8 @@ go install github.com/findingsimple/hppy-connect/cmd/hppymcp@latest
 
 ## CLI Commands
 
+### Queries
+
 | Command | Description |
 |---------|-------------|
 | `hppycli account` | Show account details |
@@ -90,6 +92,122 @@ go install github.com/findingsimple/hppy-connect/cmd/hppymcp@latest
 | `hppycli units list --property-id <id>` | List units for a property |
 | `hppycli inspections list` | List inspections |
 | `hppycli workorders list` | List work orders |
+
+### Work Order Mutations (19)
+
+| Command | Description |
+|---------|-------------|
+| `workorders create` | Create a work order |
+| `workorders set-status` | Set status and optional sub-status |
+| `workorders set-assignee` | Assign to a user or vendor |
+| `workorders set-description` | Update description |
+| `workorders set-priority` | Set priority (NORMAL/URGENT) |
+| `workorders set-scheduled-for` | Set scheduled date |
+| `workorders set-location` | Change location |
+| `workorders set-type` | Set work order type |
+| `workorders set-entry-notes` | Set entry notes |
+| `workorders set-permission-to-enter` | Set permission to enter flag |
+| `workorders set-resident-approved-entry` | Set resident approved entry flag |
+| `workorders set-unit-entered` | Set unit entered flag |
+| `workorders archive` | Archive a work order |
+| `workorders add-comment` | Add a comment |
+| `workorders add-time` | Log time (ISO 8601 duration) |
+| `workorders add-attachment` | Add an attachment (returns signed upload URL) |
+| `workorders remove-attachment` | Remove an attachment |
+| `workorders start-timer` | Start a time tracking timer |
+| `workorders stop-timer` | Stop a time tracking timer |
+
+### Inspection Mutations (24)
+
+| Command | Description |
+|---------|-------------|
+| `inspections create` | Create an inspection |
+| `inspections start` | Start an inspection |
+| `inspections complete` | Complete an inspection |
+| `inspections reopen` | Reopen a completed inspection |
+| `inspections archive` | Archive an inspection |
+| `inspections expire` | Expire an inspection |
+| `inspections unexpire` | Unexpire an inspection |
+| `inspections set-assignee` | Set assignee |
+| `inspections set-due-by` | Set due date and expiry |
+| `inspections set-scheduled-for` | Set scheduled date |
+| `inspections set-header-field` | Set a header field value |
+| `inspections set-footer-field` | Set a footer field value |
+| `inspections set-item-notes` | Set notes on an item |
+| `inspections rate-item` | Rate an inspection item |
+| `inspections add-section` | Add a new section |
+| `inspections delete-section` | Delete a section |
+| `inspections duplicate-section` | Duplicate a section |
+| `inspections rename-section` | Rename a section |
+| `inspections add-item` | Add an item to a section |
+| `inspections delete-item` | Delete an item |
+| `inspections add-item-photo` | Add a photo to an item (returns signed upload URL) |
+| `inspections remove-item-photo` | Remove a photo from an item |
+| `inspections move-item-photo` | Move a photo between items |
+| `inspections send-to-guest` | Send inspection to a guest via email |
+
+### Project Mutations (8)
+
+| Command | Description |
+|---------|-------------|
+| `projects create` | Create a project |
+| `projects set-assignee` | Set or clear assignee |
+| `projects set-notes` | Set project notes |
+| `projects set-due-at` | Set due date |
+| `projects set-start-at` | Set start date |
+| `projects set-priority` | Set priority |
+| `projects set-on-hold` | Set on-hold status |
+| `projects set-availability-target-at` | Set availability target date |
+
+### User Mutations (7)
+
+| Command | Description |
+|---------|-------------|
+| `users create` | Create a user and optionally assign a role |
+| `users set-email` | Update user email |
+| `users set-name` | Update user name |
+| `users set-short-name` | Set or clear short name |
+| `users set-phone` | Set or clear phone number |
+| `users grant-property-access` | Grant a user access to properties |
+| `users revoke-property-access` | Revoke a user's property access |
+
+### Membership Mutations (4)
+
+| Command | Description |
+|---------|-------------|
+| `memberships create` | Create an account membership |
+| `memberships activate` | Activate a membership |
+| `memberships deactivate` | Deactivate a membership |
+| `memberships set-roles` | Set roles on a membership |
+
+### Property Access Mutations (3)
+
+| Command | Description |
+|---------|-------------|
+| `properties grant-access` | Grant users access to a property |
+| `properties revoke-access` | Revoke users' property access |
+| `properties set-account-wide-access` | Set account-wide access on a property |
+
+### Role Mutations (4)
+
+| Command | Description |
+|---------|-------------|
+| `roles create` | Create a role with permissions |
+| `roles set-name` | Update role name |
+| `roles set-description` | Set or clear role description |
+| `roles set-permissions` | Modify role permissions |
+
+### Webhook Mutations (2)
+
+| Command | Description |
+|---------|-------------|
+| `webhooks create` | Create a webhook subscription |
+| `webhooks update` | Update a webhook's URL, status, or subjects |
+
+### Utility Commands
+
+| Command | Description |
+|---------|-------------|
 | `hppycli config init` | Create config file interactively |
 | `hppycli config show` | Display current configuration (password masked) |
 | `hppycli mcp setup` | Generate MCP server config for AI clients |
@@ -131,6 +249,21 @@ The `properties list` command only supports `--limit`.
 
 Status values are case-insensitive (e.g. `--status open` is normalised to `OPEN`).
 
+### Destructive Operations
+
+Commands that archive, delete, revoke access, or change permissions prompt for confirmation before executing. Use `--yes` to skip the prompt (e.g. in scripts):
+
+```bash
+hppycli workorders archive --id=abc123          # prompts: "About to archive work order. Continue? [y/N]"
+hppycli workorders archive --id=abc123 --yes    # skips confirmation
+```
+
+The `--yes` flag is available on: `workorders archive`, `workorders remove-attachment`, `inspections archive`, `inspections expire`, `inspections delete-section`, `inspections delete-item`, `inspections remove-item-photo`, `memberships deactivate`, `memberships set-roles`, `properties revoke-access`, `properties set-account-wide-access`, `users revoke-property-access`, and `roles set-permissions`.
+
+### Mutation Output
+
+All mutation commands output JSON (formatted with indentation). If `--output text` is set, a note is printed to stderr and JSON is still used.
+
 ### Examples
 
 ```bash
@@ -148,6 +281,25 @@ hppycli inspections list --created-after 2026-01-01 --created-before 2026-04-01
 
 # Raw GraphQL response for debugging
 hppycli workorders list --output raw
+
+# Create a work order and then assign it (chaining with jq)
+ID=$(hppycli workorders create --location-id=225393 --description="Fix leak in unit 4B" | jq -r '.id')
+hppycli workorders set-assignee --id=$ID --assignee-id=U123 --assignee-type=USER
+hppycli workorders set-priority --id=$ID --priority=URGENT
+
+# Create an inspection from a template
+hppycli inspections create --location-id=225393 --template-id=c71sn3-a-0-928286 --scheduled-for=2026-05-01T00:00:00Z
+
+# Create a project and set it on hold
+ID=$(hppycli projects create --template-id=TPL1 --location-id=225393 --start-at=2026-05-01T00:00:00Z | jq -r '.id')
+hppycli projects set-on-hold --id=$ID --on-hold=true
+
+# User management
+hppycli users create --email=new@example.com --name="New User" --role-id=ROLE1
+hppycli roles create --name="Inspector" --grant=inspection:inspection.create,inspection:inspection.view
+
+# Webhook setup
+hppycli webhooks create --subscriber-id=54522 --subscriber-type=ACCOUNT --url=https://hooks.example.com/happyco --subjects=INSPECTIONS,WORK_ORDERS
 ```
 
 ## MCP Server Setup
@@ -166,6 +318,8 @@ The output is a JSON snippet to add to your client's MCP configuration. The serv
 
 ### MCP Tools
 
+#### Read Tools
+
 | Tool | Description | Parameters |
 |------|-------------|------------|
 | `get_account` | Get authenticated account info (name, ID) | None |
@@ -175,6 +329,23 @@ The output is a JSON snippet to add to your client's MCP configuration. The serv
 | `list_inspections` | List inspections with optional filters | `property_id`, `unit_id`, `status`, `created_after`, `created_before`, `limit` |
 
 Date parameters use ISO 8601 format (e.g. `2026-01-15T00:00:00Z`). Status values are the same as the CLI (see [Status Values](#status-values)).
+
+#### Mutation Tools (71 total)
+
+Mutation tools follow the naming pattern `{domain}_{action}` in snake_case. All ID parameters are validated against a safe character set.
+
+| Domain | Tools | Count |
+|--------|-------|-------|
+| Work Orders | `work_order_create`, `work_order_set_status`, `work_order_set_assignee`, `work_order_set_description`, `work_order_set_priority`, `work_order_set_scheduled_for`, `work_order_set_location`, `work_order_set_type`, `work_order_set_entry_notes`, `work_order_set_permission_to_enter`, `work_order_set_resident_approved_entry`, `work_order_set_unit_entered`, `work_order_archive`, `work_order_add_comment`, `work_order_add_time`, `work_order_add_attachment`, `work_order_remove_attachment`, `work_order_start_timer`, `work_order_stop_timer` | 19 |
+| Inspections | `inspection_create`, `inspection_start`, `inspection_complete`, `inspection_reopen`, `inspection_archive`, `inspection_expire`, `inspection_unexpire`, `inspection_set_assignee`, `inspection_set_due_by`, `inspection_set_scheduled_for`, `inspection_set_header_field`, `inspection_set_footer_field`, `inspection_set_item_notes`, `inspection_rate_item`, `inspection_add_section`, `inspection_delete_section`, `inspection_duplicate_section`, `inspection_rename_section`, `inspection_add_item`, `inspection_delete_item`, `inspection_add_item_photo`, `inspection_remove_item_photo`, `inspection_move_item_photo`, `inspection_send_to_guest` | 24 |
+| Projects | `project_create`, `project_set_assignee`, `project_set_notes`, `project_set_due_at`, `project_set_start_at`, `project_set_priority`, `project_set_on_hold`, `project_set_availability_target_at` | 8 |
+| Users | `user_create`, `user_set_email`, `user_set_name`, `user_set_short_name`, `user_set_phone`, `user_grant_property_access`, `user_revoke_property_access` | 7 |
+| Memberships | `membership_create`, `membership_activate`, `membership_deactivate`, `membership_set_roles` | 4 |
+| Properties | `property_grant_access`, `property_revoke_access`, `property_set_account_wide_access` | 3 |
+| Roles | `role_create`, `role_set_name`, `role_set_description`, `role_set_permissions` | 4 |
+| Webhooks | `webhook_create`, `webhook_update` | 2 |
+
+Destructive mutation tools (archive, delete, revoke, etc.) are annotated with `DestructiveHint` so MCP clients can gate them with human-in-the-loop confirmation.
 
 ### MCP Resources
 
@@ -244,13 +415,15 @@ hppycli workorders list --output csv
 - MCP server sanitises error messages — internal details (URLs, HTTP codes) are never exposed to AI clients
 - ID parameters are validated against a safe character set before use in API calls
 - CSV output is sanitised against formula injection (cells starting with `=`, `+`, `-`, `@`)
+- Webhook URLs are validated: must use HTTPS, no private/internal IPs, no cloud metadata endpoints
+- Destructive CLI operations require interactive confirmation (bypass with `--yes`)
+- Destructive MCP tools are annotated with `DestructiveHint` for client-side gating
 
 ## Limitations
 
 - **Hackathon scope** — built in 2 days, not production-hardened
 - **Account login only** — requires non-SSO admin credentials (no OAuth/SSO support)
-- **No plugin auth** — single auth mechanism (email/password)
-- **Read-only** — CLI and MCP server only query data (no create/update/delete)
+- **No plugin auth** — single auth mechanism (email/password); Plugin domain mutations are excluded (see CLAUDE.md for rationale)
 - **No offline mode** — requires network access to the HappyCo API
 
 ## Troubleshooting

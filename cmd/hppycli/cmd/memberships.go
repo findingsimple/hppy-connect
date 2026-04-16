@@ -3,7 +3,6 @@ package cmd
 import (
 	"fmt"
 	"os"
-	"strings"
 
 	"github.com/findingsimple/hppy-connect/internal/models"
 	"github.com/spf13/cobra"
@@ -42,16 +41,11 @@ var membershipsCreateCmd = &cobra.Command{
 			UserID:    userID,
 		}
 		if v, _ := cmd.Flags().GetString("role-id"); v != "" {
-			for _, p := range strings.Split(v, ",") {
-				id := strings.TrimSpace(p)
-				if id == "" {
-					continue
-				}
-				if err := models.ValidateID("role-id", id); err != nil {
-					return err
-				}
-				input.RoleID = append(input.RoleID, id)
+			ids, err := parseIDList("role-id", v)
+			if err != nil {
+				return err
 			}
+			input.RoleID = ids
 		}
 
 		membership, err := apiClient.AccountMembershipCreate(cmd.Context(), input)
@@ -119,7 +113,7 @@ var membershipsDeactivateCmd = &cobra.Command{
 			return err
 		}
 
-		if err := confirmAction(cmd, "deactivate membership", os.Stdin); err != nil {
+		if err := confirmAction(cmd, "deactivate membership", os.Stdin, os.Stderr); err != nil {
 			return err
 		}
 
@@ -157,7 +151,7 @@ var membershipsSetRolesCmd = &cobra.Command{
 			return err
 		}
 
-		if err := confirmAction(cmd, "set membership roles", os.Stdin); err != nil {
+		if err := confirmAction(cmd, "set membership roles", os.Stdin, os.Stderr); err != nil {
 			return err
 		}
 
@@ -166,16 +160,11 @@ var membershipsSetRolesCmd = &cobra.Command{
 			UserID:    userID,
 		}
 		if v, _ := cmd.Flags().GetString("role-id"); v != "" {
-			for _, p := range strings.Split(v, ",") {
-				id := strings.TrimSpace(p)
-				if id == "" {
-					continue
-				}
-				if err := models.ValidateID("role-id", id); err != nil {
-					return err
-				}
-				input.RoleID = append(input.RoleID, id)
+			ids, err := parseIDList("role-id", v)
+			if err != nil {
+				return err
 			}
+			input.RoleID = ids
 		}
 
 		membership, err := apiClient.AccountMembershipSetRoles(cmd.Context(), input)

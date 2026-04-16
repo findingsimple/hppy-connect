@@ -3,7 +3,6 @@ package cmd
 import (
 	"fmt"
 	"os"
-	"strings"
 
 	"github.com/findingsimple/hppy-connect/internal/models"
 	"github.com/spf13/cobra"
@@ -79,16 +78,9 @@ var propertiesGrantAccessCmd = &cobra.Command{
 		if userIDsRaw == "" {
 			return fmt.Errorf("--user-id is required")
 		}
-		var userIDs []string
-		for _, p := range strings.Split(userIDsRaw, ",") {
-			uid := strings.TrimSpace(p)
-			if uid == "" {
-				continue
-			}
-			if err := models.ValidateID("user-id", uid); err != nil {
-				return err
-			}
-			userIDs = append(userIDs, uid)
+		userIDs, err := parseIDList("user-id", userIDsRaw)
+		if err != nil {
+			return err
 		}
 
 		result, err := apiClient.PropertyGrantUserAccess(cmd.Context(), models.PropertyGrantUserAccessInput{
@@ -118,19 +110,12 @@ var propertiesRevokeAccessCmd = &cobra.Command{
 		if userIDsRaw == "" {
 			return fmt.Errorf("--user-id is required")
 		}
-		var userIDs []string
-		for _, p := range strings.Split(userIDsRaw, ",") {
-			uid := strings.TrimSpace(p)
-			if uid == "" {
-				continue
-			}
-			if err := models.ValidateID("user-id", uid); err != nil {
-				return err
-			}
-			userIDs = append(userIDs, uid)
+		userIDs, err := parseIDList("user-id", userIDsRaw)
+		if err != nil {
+			return err
 		}
 
-		if err := confirmAction(cmd, "revoke user access", os.Stdin); err != nil {
+		if err := confirmAction(cmd, "revoke user access", os.Stdin, os.Stderr); err != nil {
 			return err
 		}
 
@@ -162,7 +147,7 @@ var propertiesSetAccountWideAccessCmd = &cobra.Command{
 		}
 		accountWideAccess, _ := cmd.Flags().GetBool("account-wide-access")
 
-		if err := confirmAction(cmd, "set account-wide access", os.Stdin); err != nil {
+		if err := confirmAction(cmd, "set account-wide access", os.Stdin, os.Stderr); err != nil {
 			return err
 		}
 

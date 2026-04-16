@@ -83,9 +83,24 @@ func registerWorkOrderMutationTools(server *mcp.Server, client apiClient, debug 
 			}
 
 			apiInput := models.WorkOrderCreateInput{LocationID: input.LocationID}
-			apiInput.Description = input.Description
-			apiInput.ScheduledFor = input.ScheduledFor
-			apiInput.EntryNotes = input.EntryNotes
+			if input.Description != "" {
+				if err := models.ValidateFreeText("description", input.Description); err != nil {
+					return toolInputError(err.Error()), nil, nil
+				}
+				apiInput.Description = input.Description
+			}
+			if input.ScheduledFor != "" {
+				if err := models.ValidateTimestamp("scheduled_for", input.ScheduledFor); err != nil {
+					return toolInputError(err.Error()), nil, nil
+				}
+				apiInput.ScheduledFor = input.ScheduledFor
+			}
+			if input.EntryNotes != "" {
+				if err := models.ValidateFreeText("entry_notes", input.EntryNotes); err != nil {
+					return toolInputError(err.Error()), nil, nil
+				}
+				apiInput.EntryNotes = input.EntryNotes
+			}
 			apiInput.PermissionToEnter = input.PermissionToEnter
 
 			if input.Priority != "" {

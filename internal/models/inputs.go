@@ -167,7 +167,7 @@ type InspectionDeleteItemInput struct {
 
 // InspectionAddItemPhotoInput adds a photo to an inspection item.
 type InspectionAddItemPhotoInput struct {
-	InspectionID string `json:"inspectionID"`
+	InspectionID string `json:"inspectionId"`
 	SectionName  string `json:"sectionName"`
 	ItemName     string `json:"itemName"`
 	MimeType     string `json:"mimeType"`
@@ -330,13 +330,6 @@ type RoleSetPermissionsInput struct {
 	AccountID   string           `json:"accountId"`
 	RoleID      string           `json:"roleId"`
 	Permissions PermissionsInput `json:"permissions"`
-}
-
-// InspectionAddItemPhotoResult is the multi-field response from addItemPhoto.
-type InspectionAddItemPhotoResult struct {
-	Inspection      Inspection      `json:"inspection"`
-	InspectionPhoto InspectionPhoto `json:"inspectionPhoto"`
-	SignedURL       string          `json:"signedURL"`
 }
 
 // --- Webhook Inputs ---

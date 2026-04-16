@@ -509,7 +509,7 @@ var workordersArchiveCmd = &cobra.Command{
 		if err := models.ValidateID("id", id); err != nil {
 			return err
 		}
-		if err := confirmAction(cmd, "archive work order "+id, os.Stdin); err != nil {
+		if err := confirmAction(cmd, "archive work order "+id, os.Stdin, os.Stderr); err != nil {
 			return err
 		}
 
@@ -641,7 +641,7 @@ var workordersRemoveAttachmentCmd = &cobra.Command{
 		if err := models.ValidateID("attachment-id", attachmentID); err != nil {
 			return err
 		}
-		if err := confirmAction(cmd, "remove attachment "+attachmentID+" from work order "+id, os.Stdin); err != nil {
+		if err := confirmAction(cmd, "remove attachment "+attachmentID+" from work order "+id, os.Stdin, os.Stderr); err != nil {
 			return err
 		}
 

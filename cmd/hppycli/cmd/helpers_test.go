@@ -362,6 +362,9 @@ func captureStdout(t *testing.T, fn func()) string {
 	return buf.String()
 }
 
+// NOTE: printOutput tests mutate the package-level outputFormat variable.
+// Do NOT add t.Parallel() — they would race on the shared global.
+
 func TestPrintOutputText(t *testing.T) {
 	origFormat := outputFormat
 	defer func() { outputFormat = origFormat }()
@@ -466,24 +469,30 @@ func TestConfirmActionYesFlag(t *testing.T) {
 	cmd := &cobra.Command{Use: "test"}
 	cmd.Flags().Bool("yes", true, "")
 
-	// Should skip prompt entirely — input is never read
-	err := confirmAction(cmd, "delete everything", strings.NewReader(""))
+	var prompt bytes.Buffer
+	// Should skip prompt entirely — input is never read, no prompt written
+	err := confirmAction(cmd, "delete everything", strings.NewReader(""), &prompt)
 	assert.NoError(t, err)
+	assert.Empty(t, prompt.String(), "no prompt when --yes is set")
 }
 
 func TestConfirmActionUserTypesY(t *testing.T) {
 	cmd := &cobra.Command{Use: "test"}
 	cmd.Flags().Bool("yes", false, "")
 
-	err := confirmAction(cmd, "archive work order", strings.NewReader("y\n"))
+	var prompt bytes.Buffer
+	err := confirmAction(cmd, "archive work order", strings.NewReader("y\n"), &prompt)
 	assert.NoError(t, err)
+	assert.Contains(t, prompt.String(), "archive work order")
+	assert.Contains(t, prompt.String(), "[y/N]")
 }
 
 func TestConfirmActionUserTypesUpperY(t *testing.T) {
 	cmd := &cobra.Command{Use: "test"}
 	cmd.Flags().Bool("yes", false, "")
 
-	err := confirmAction(cmd, "archive work order", strings.NewReader("Y\n"))
+	var prompt bytes.Buffer
+	err := confirmAction(cmd, "archive work order", strings.NewReader("Y\n"), &prompt)
 	assert.NoError(t, err)
 }
 
@@ -491,7 +500,8 @@ func TestConfirmActionUserTypesYes(t *testing.T) {
 	cmd := &cobra.Command{Use: "test"}
 	cmd.Flags().Bool("yes", false, "")
 
-	err := confirmAction(cmd, "archive work order", strings.NewReader("yes\n"))
+	var prompt bytes.Buffer
+	err := confirmAction(cmd, "archive work order", strings.NewReader("yes\n"), &prompt)
 	assert.NoError(t, err)
 }
 
@@ -499,7 +509,8 @@ func TestConfirmActionUserTypesYesMixedCase(t *testing.T) {
 	cmd := &cobra.Command{Use: "test"}
 	cmd.Flags().Bool("yes", false, "")
 
-	err := confirmAction(cmd, "archive work order", strings.NewReader("Yes\n"))
+	var prompt bytes.Buffer
+	err := confirmAction(cmd, "archive work order", strings.NewReader("Yes\n"), &prompt)
 	assert.NoError(t, err)
 }
 
@@ -507,16 +518,19 @@ func TestConfirmActionUserTypesN(t *testing.T) {
 	cmd := &cobra.Command{Use: "test"}
 	cmd.Flags().Bool("yes", false, "")
 
-	err := confirmAction(cmd, "archive work order", strings.NewReader("n\n"))
+	var prompt bytes.Buffer
+	err := confirmAction(cmd, "archive work order", strings.NewReader("n\n"), &prompt)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "aborted")
+	assert.Contains(t, prompt.String(), "archive work order")
 }
 
 func TestConfirmActionEmptyInput(t *testing.T) {
 	cmd := &cobra.Command{Use: "test"}
 	cmd.Flags().Bool("yes", false, "")
 
-	err := confirmAction(cmd, "archive work order", strings.NewReader("\n"))
+	var prompt bytes.Buffer
+	err := confirmAction(cmd, "archive work order", strings.NewReader("\n"), &prompt)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "aborted")
 }
@@ -525,7 +539,8 @@ func TestConfirmActionEOF(t *testing.T) {
 	cmd := &cobra.Command{Use: "test"}
 	cmd.Flags().Bool("yes", false, "")
 
-	err := confirmAction(cmd, "archive work order", strings.NewReader(""))
+	var prompt bytes.Buffer
+	err := confirmAction(cmd, "archive work order", strings.NewReader(""), &prompt)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "aborted")
 }

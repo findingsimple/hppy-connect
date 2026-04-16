@@ -33,21 +33,29 @@ cmd/
     main.go        # Entry point — version injection via ldflags
     cmd/           # Cobra command definitions
       root.go      # Global flags, config loading, API client init
-      helpers.go   # Shared output formatting, flag parsing, validation
+      helpers.go   # Shared output formatting, flag parsing, validation, confirmAction
       workorders.go / inspections.go / properties.go / units.go / account.go
+      projects.go / users.go / memberships.go / roles.go / webhooks.go
       mcp.go       # `mcp setup` — generates MCP client config JSON
   hppymcp/         # MCP server binary (stdio transport)
     main.go        # Entry point — server setup
-    tools.go       # MCP tool handlers + input validation + buildListOpts
+    tools.go       # MCP read tool handlers + composed apiClient interface
+    tools_mutations.go  # MCP mutation tool handlers (67 tools across 8 domains)
     resources.go   # MCP resource handlers (account, property details)
     prompts.go     # MCP prompt definitions (property_summary, maintenance_report)
 internal/
   api/             # GraphQL client (shared by both binaries)
-    client.go      # HTTP client, auth, pagination, retry logic
-    queries.go     # GraphQL query strings
+    client.go      # HTTP client, auth, pagination, retry logic, mutation methods
+    queries.go     # GraphQL query strings (reads)
+    mutations.go   # GraphQL mutation strings (writes)
     responses.go   # Generic response/connection types
+    mutation_responses.go  # Mutation-specific response structs
   config/          # YAML config loading + env var overrides
-  models/          # Domain model structs + shared validation (ValidateStatus, ValidateDateRange)
+  models/          # Domain model structs + shared validation
+    models.go      # Entity types (WorkOrder, Inspection, etc.) + validation maps
+    inputs.go      # Mutation input structs (WorkOrderCreateInput, etc.)
+    entities.go    # Additional entity types for mutation responses (User, Role, Webhook, etc.)
+    validation.go  # Webhook URL validation (ValidateWebhookURL)
 ```
 
 Both binaries are thin frontends over shared logic in `internal/`.
@@ -72,10 +80,46 @@ Both binaries are thin frontends over shared logic in `internal/`.
 - `toolError()` logs full error details to stderr but only returns a sanitised category to the MCP client (e.g. "auth_failed: Authentication failed"). Internal details like URLs and HTTP status codes are never exposed.
 - `toolInputError()` returns validation errors with an `invalid_input:` prefix.
 
+### Mutation Retry Semantics
+- `doMutation` — single auth-retry on 401, no transient error retry. Used for non-idempotent operations (creates, adds) to prevent duplicates.
+- `doMutationIdempotent` — full retry with backoff (same as reads). Used for idempotent setters, archives, deletes, state transitions.
+- Exception: `InspectionDuplicateSection` uses `doMutation` despite the "duplicate" name — it creates a new copy on each call.
+
+### Composed API Client Interface
+- The MCP server's `apiClient` interface is composed from domain-specific sub-interfaces (`workOrderClient`, `inspectionClient`, `projectClient`, etc.).
+- Test mocks only need to implement the sub-interface their test uses (embed a no-op base struct and override specific methods).
+- This prevents adding a new mutation from breaking every existing mock.
+
+### Plugins Exclusion
+- The Plugin domain (5 mutations) is excluded: wrong audience (integration partners, not property managers), secrets in process lists (`pluginLogin`), and disproportionate complexity (`setPluginData` nested input shape).
+
 ### Config Precedence
 - 3-layer: CLI flags > environment variables > config file > defaults.
 - Config file is YAML at `~/.hppycli.yaml` with chmod 600 enforcement.
 - No `--password` flag exists by design — passwords should never appear in process lists.
+- Commands requiring `--account-id` (users, memberships, roles) default to the config file's `account_id` value.
+
+## Known Limitations & Accepted Trade-offs
+
+These were identified during security and resilience review and consciously accepted.
+
+### A. DNS Rebinding in Webhook URL Validation
+`ValidateWebhookURL` checks hostnames at parse time only. A public domain that later re-resolves to a private IP (169.254.169.254, 127.0.0.1) would bypass the check. **Accepted because:** this client validates before sending to the HappyCo API — the actual HTTP request to the webhook URL is made server-side by HappyCo's infrastructure, not by this client. The inline comment at `validation.go:190-192` documents this.
+
+### B. Hex/Octal/Decimal IP Encoding in Webhook URLs
+Hostnames like `0x7f000001` (hex 127.0.0.1) or `2130706433` (decimal) bypass `net.ParseIP` (returns nil), skipping private IP checks. **Accepted because:** same as (A) — server-side concern. The HappyCo API performs its own validation on webhook delivery.
+
+### C. Non-Idempotent Mutation Auth-Retry Assumption
+`doMutation` retries once on 401 after re-authentication. If the federated gateway returns 401 *after* the downstream service has already committed the mutation, a duplicate could be created. **Accepted because:** the HappyCo gateway rejects auth failures before executing mutations (verified at runtime). The assumption is documented in the `doMutation` comment at `client.go:373-377`. `InspectionSendToGuest` is the highest-risk case since it triggers an email — noted here for awareness.
+
+### D. Ambiguous State on Network Timeout for Non-Idempotent Mutations
+If a non-idempotent mutation times out, the client returns an error but the server may have committed the change. The error message does not indicate possible partial success. **Accepted because:** this is inherent to non-idempotent HTTP operations. The correct behaviour is to fail and let the user check, which is what happens. Improving the error message ("operation may have been executed — check before retrying") is a nice-to-have.
+
+### E. MCP Mutations Bypass Concurrency Semaphore
+The semaphore (`sem`) limits concurrent pagination loops to 3 but mutation tools are not gated. A misbehaving MCP client could fire many mutations concurrently. **Accepted because:** mutations are single HTTP requests (no pagination memory concern), and the upstream HappyCo API has its own rate limiting. For `InspectionSendToGuest` specifically, rapid concurrent calls could send duplicate emails — but the MCP client (typically an LLM) is unlikely to do this without user intent.
+
+### F. GraphQL Error Messages Forwarded to CLI Users
+The CLI returns GraphQL error messages verbatim from `gqlResp.Errors[0].Message`. If the HappyCo API returns verbose errors with internal details, these would be shown to CLI users. **Accepted because:** the MCP path sanitises errors through `toolError()`/`sanitiseErrorCategory()`, and the CLI is a developer tool where full error context is useful. The API is external (HappyCo-controlled) so error content is predictable.
 
 ## API Gotchas
 
@@ -96,8 +140,10 @@ Full API reference is in `.scratch/API Runtime Findings.md`.
 
 - **No global state mutation in tests.** Output functions accept `io.Writer`; tests pass `bytes.Buffer` instead of replacing `os.Stdout`.
 - **Channel-based synchronisation** for concurrent tests (e.g. `TestConcurrentAuth` uses `goroutinesReady` and `loginLatch` channels instead of `time.Sleep`).
-- **Mock interface for MCP tests** — `apiClient` interface in `tools.go` allows tests to mock the API client without importing `internal/api`.
+- **Mock interface for MCP tests** — `apiClient` composed interface in `tools.go` allows tests to mock the API client without importing `internal/api`. Mutation tests use domain sub-interfaces with no-op base structs.
 - Tests use `require` for preconditions and `assert` for the actual checks (testify convention).
+- **Mutation client tests** use `httptest.Server` to verify GraphQL mutation strings, variable marshalling, and response unmarshalling.
+- **`confirmAction` tests** use `io.Reader` injection (matching the project's testable I/O pattern).
 
 ## Reference Documentation
 

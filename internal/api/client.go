@@ -371,9 +371,14 @@ func (c *Client) doQuery(ctx context.Context, query string, variables map[string
 }
 
 // doMutation sends a mutation with a single auth-retry but no transient-error retry.
-// If the request gets a 401, re-authenticates once and retries. This is safe because
-// the server either executed the mutation or rejected it — a fresh token retry resolves
-// the ambiguity without risking duplicates.
+// If the request gets a 401, re-authenticates once and retries. This assumes the
+// HappyCo gateway rejects auth failures before executing the mutation — if the
+// gateway ever commits before returning 401, the retry could create duplicates.
+// See CLAUDE.md "Known Limitations" item C for the full rationale.
+//
+// On network timeout, the error is returned without retry. The caller cannot know
+// whether the server committed — this is inherent to non-idempotent HTTP operations.
+//
 // Use for non-idempotent operations: creates, adds, sends, duplicates.
 func (c *Client) doMutation(ctx context.Context, query string, variables map[string]interface{}, result interface{}) error {
 	err := c.doQuery(ctx, query, variables, result)
@@ -410,7 +415,7 @@ func (c *Client) GetAccount(ctx context.Context) (*models.Account, error) {
 }
 
 // doQueryWithRetry wraps doQuery with the same retry logic used by paginated fetches.
-// Suitable for idempotent (read-only) queries like GetAccount.
+// Suitable for idempotent operations (reads, setters, state transitions).
 func (c *Client) doQueryWithRetry(ctx context.Context, query string, variables map[string]interface{}, result interface{}) error {
 	var lastErr error
 	authRetried := false

@@ -3,7 +3,6 @@ package cmd
 import (
 	"fmt"
 	"os"
-	"strings"
 
 	"github.com/findingsimple/hppy-connect/internal/models"
 	"github.com/spf13/cobra"
@@ -53,17 +52,11 @@ var usersCreateCmd = &cobra.Command{
 		}
 
 		if v, _ := cmd.Flags().GetString("role-id"); v != "" {
-			parts := strings.Split(v, ",")
-			for _, p := range parts {
-				id := strings.TrimSpace(p)
-				if id == "" {
-					continue
-				}
-				if err := models.ValidateID("role-id", id); err != nil {
-					return err
-				}
-				input.RoleID = append(input.RoleID, id)
+			ids, err := parseIDList("role-id", v)
+			if err != nil {
+				return err
 			}
+			input.RoleID = ids
 		}
 		if v, _ := cmd.Flags().GetString("short-name"); v != "" {
 			if err := models.ValidateFreeText("short-name", v); err != nil {
@@ -220,16 +213,9 @@ var usersGrantPropertyAccessCmd = &cobra.Command{
 		if propIDsRaw == "" {
 			return fmt.Errorf("--property-id is required")
 		}
-		var propIDs []string
-		for _, p := range strings.Split(propIDsRaw, ",") {
-			pid := strings.TrimSpace(p)
-			if pid == "" {
-				continue
-			}
-			if err := models.ValidateID("property-id", pid); err != nil {
-				return err
-			}
-			propIDs = append(propIDs, pid)
+		propIDs, err := parseIDList("property-id", propIDsRaw)
+		if err != nil {
+			return err
 		}
 
 		result, err := apiClient.UserGrantPropertyAccess(cmd.Context(), models.UserGrantPropertyAccessInput{
@@ -259,19 +245,12 @@ var usersRevokePropertyAccessCmd = &cobra.Command{
 		if propIDsRaw == "" {
 			return fmt.Errorf("--property-id is required")
 		}
-		var propIDs []string
-		for _, p := range strings.Split(propIDsRaw, ",") {
-			pid := strings.TrimSpace(p)
-			if pid == "" {
-				continue
-			}
-			if err := models.ValidateID("property-id", pid); err != nil {
-				return err
-			}
-			propIDs = append(propIDs, pid)
+		propIDs, err := parseIDList("property-id", propIDsRaw)
+		if err != nil {
+			return err
 		}
 
-		if err := confirmAction(cmd, "revoke property access", os.Stdin); err != nil {
+		if err := confirmAction(cmd, "revoke property access", os.Stdin, os.Stderr); err != nil {
 			return err
 		}
 

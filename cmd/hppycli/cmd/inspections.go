@@ -3,7 +3,6 @@ package cmd
 import (
 	"fmt"
 	"os"
-	"strings"
 
 	"github.com/findingsimple/hppy-connect/internal/models"
 	"github.com/spf13/cobra"
@@ -207,7 +206,7 @@ var inspectionsArchiveCmd = &cobra.Command{
 		if err := models.ValidateID("id", id); err != nil {
 			return err
 		}
-		if err := confirmAction(cmd, "archive inspection "+id, os.Stdin); err != nil {
+		if err := confirmAction(cmd, "archive inspection "+id, os.Stdin, os.Stderr); err != nil {
 			return err
 		}
 
@@ -231,7 +230,7 @@ var inspectionsExpireCmd = &cobra.Command{
 		if err := models.ValidateID("id", id); err != nil {
 			return err
 		}
-		if err := confirmAction(cmd, "expire inspection "+id, os.Stdin); err != nil {
+		if err := confirmAction(cmd, "expire inspection "+id, os.Stdin, os.Stderr); err != nil {
 			return err
 		}
 
@@ -545,7 +544,7 @@ var inspectionsDeleteSectionCmd = &cobra.Command{
 		if section == "" {
 			return fmt.Errorf("--section is required")
 		}
-		if err := confirmAction(cmd, "delete section \""+section+"\" from inspection "+id, os.Stdin); err != nil {
+		if err := confirmAction(cmd, "delete section \""+section+"\" from inspection "+id, os.Stdin, os.Stderr); err != nil {
 			return err
 		}
 
@@ -687,7 +686,7 @@ var inspectionsDeleteItemCmd = &cobra.Command{
 		if item == "" {
 			return fmt.Errorf("--item is required")
 		}
-		if err := confirmAction(cmd, "delete item \""+item+"\" from section \""+section+"\" in inspection "+id, os.Stdin); err != nil {
+		if err := confirmAction(cmd, "delete item \""+item+"\" from section \""+section+"\" in inspection "+id, os.Stdin, os.Stderr); err != nil {
 			return err
 		}
 
@@ -777,7 +776,7 @@ var inspectionsRemoveItemPhotoCmd = &cobra.Command{
 		if item == "" {
 			return fmt.Errorf("--item is required")
 		}
-		if err := confirmAction(cmd, "remove photo "+photoID+" from item \""+item+"\" in inspection "+id, os.Stdin); err != nil {
+		if err := confirmAction(cmd, "remove photo "+photoID+" from item \""+item+"\" in inspection "+id, os.Stdin, os.Stderr); err != nil {
 			return err
 		}
 
@@ -861,8 +860,8 @@ var inspectionsSendToGuestCmd = &cobra.Command{
 		if email == "" {
 			return fmt.Errorf("--email is required")
 		}
-		if !strings.Contains(email, "@") {
-			return fmt.Errorf("--email must be a valid email address")
+		if err := models.ValidateEmail(email); err != nil {
+			return err
 		}
 
 		input := models.InspectionSendToGuestInput{

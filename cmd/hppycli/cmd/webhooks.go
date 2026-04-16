@@ -36,7 +36,8 @@ var webhooksCreateCmd = &cobra.Command{
 			return fmt.Errorf("--subscriber-type must be ACCOUNT or PLUGIN")
 		}
 
-		webhookURL := strings.TrimSpace(mustGetString(cmd, "url"))
+		v, _ := cmd.Flags().GetString("url")
+		webhookURL := strings.TrimSpace(v)
 		if webhookURL == "" {
 			return fmt.Errorf("--url is required")
 		}
@@ -95,11 +96,12 @@ var webhooksUpdateCmd = &cobra.Command{
 
 		hasUpdate := false
 
-		if v := strings.TrimSpace(mustGetString(cmd, "url")); v != "" {
-			if err := models.ValidateWebhookURL(v); err != nil {
+		if v, _ := cmd.Flags().GetString("url"); strings.TrimSpace(v) != "" {
+			urlVal := strings.TrimSpace(v)
+			if err := models.ValidateWebhookURL(urlVal); err != nil {
 				return err
 			}
-			input.URL = v
+			input.URL = urlVal
 			hasUpdate = true
 		}
 
@@ -133,13 +135,6 @@ var webhooksUpdateCmd = &cobra.Command{
 		}
 		return printMutationResult(cmd, os.Stdout, webhook)
 	},
-}
-
-// mustGetString is a helper to avoid the error return from GetString for flags
-// that are guaranteed to be registered.
-func mustGetString(cmd *cobra.Command, name string) string {
-	v, _ := cmd.Flags().GetString(name)
-	return v
 }
 
 func init() {

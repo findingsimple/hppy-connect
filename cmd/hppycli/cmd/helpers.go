@@ -220,14 +220,14 @@ func printOutput(data outputData) error {
 }
 
 // confirmAction prompts the user for y/n confirmation on destructive operations.
-// Skipped when --yes flag is set. Accepts an io.Reader for testability
-// (pass os.Stdin in production).
-func confirmAction(cmd *cobra.Command, action string, input io.Reader) error {
+// Skipped when --yes flag is set. Accepts io.Reader and io.Writer for testability
+// (pass os.Stdin/os.Stderr in production).
+func confirmAction(cmd *cobra.Command, action string, input io.Reader, output io.Writer) error {
 	yes, _ := cmd.Flags().GetBool("yes")
 	if yes {
 		return nil
 	}
-	fmt.Fprintf(os.Stderr, "About to %s. Continue? [y/N] ", action)
+	fmt.Fprintf(output, "About to %s. Continue? [y/N] ", action)
 	scanner := bufio.NewScanner(input)
 	if scanner.Scan() {
 		response := strings.ToLower(strings.TrimSpace(scanner.Text()))
@@ -236,6 +236,23 @@ func confirmAction(cmd *cobra.Command, action string, input io.Reader) error {
 		}
 	}
 	return fmt.Errorf("aborted")
+}
+
+// parseIDList splits a comma-separated string into validated IDs.
+// Returns an error if any ID fails validation. Empty segments are skipped.
+func parseIDList(flagName, raw string) ([]string, error) {
+	var ids []string
+	for _, p := range strings.Split(raw, ",") {
+		id := strings.TrimSpace(p)
+		if id == "" {
+			continue
+		}
+		if err := models.ValidateID(flagName, id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, nil
 }
 
 // printMutationResult outputs a mutation result as indented JSON to the given writer.

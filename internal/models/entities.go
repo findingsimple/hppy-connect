@@ -136,3 +136,10 @@ type WorkOrderAddAttachmentResult struct {
 	Attachment WorkOrderAttachment `json:"attachment"`
 	SignedURL  string              `json:"signedURL"`
 }
+
+// InspectionAddItemPhotoResult is the multi-field response from addItemPhoto.
+type InspectionAddItemPhotoResult struct {
+	Inspection      Inspection      `json:"inspection"`
+	InspectionPhoto InspectionPhoto `json:"inspectionPhoto"`
+	SignedURL       string          `json:"signedURL"`
+}
