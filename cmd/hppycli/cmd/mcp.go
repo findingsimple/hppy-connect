@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 )
@@ -72,10 +73,16 @@ func detectMcpBinary() string {
 	return "hppymcp"
 }
 
+// shellQuote wraps a string in single quotes with proper escaping for POSIX shells.
+// Interior single quotes are replaced with the standard '\'' sequence.
+func shellQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'"
+}
+
 func printClaudeConfig(w io.Writer, binaryPath, configPath string) error {
 	fmt.Fprintln(w, "Run the following command to register hppymcp with Claude Code:")
 	fmt.Fprintln(w)
-	fmt.Fprintf(w, "  claude mcp add --transport stdio --scope user hppymcp -- %s --config %s\n", binaryPath, configPath)
+	fmt.Fprintf(w, "  claude mcp add --transport stdio --scope user hppymcp -- %s --config %s\n", shellQuote(binaryPath), shellQuote(configPath))
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Then restart Claude Code and ask \"What HappyCo account am I connected to?\" to verify.")
 	return nil
