@@ -504,6 +504,21 @@ func (c *Client) doQueryWithRetry(ctx context.Context, query string, variables m
 	}
 }
 
+// ListMembers returns account memberships with optional search and inactive filtering.
+func (c *Client) ListMembers(ctx context.Context, opts models.ListOptions) ([]models.AccountMembership, int, error) {
+	return paginate(ctx, c, "memberships", opts, func(vars map[string]interface{}) {
+		if filter := buildMembersFilter(opts); len(filter) > 0 {
+			vars["filter"] = filter
+		}
+	}, func(vars map[string]interface{}) (*connection[models.AccountMembership], error) {
+		var resp membersResponse
+		if err := c.doQuery(ctx, listMembersQuery, vars, &resp); err != nil {
+			return nil, err
+		}
+		return &resp.Account.Memberships, nil
+	})
+}
+
 // ListProperties returns properties for the account.
 func (c *Client) ListProperties(ctx context.Context, opts models.ListOptions) ([]models.Property, int, error) {
 	return paginate(ctx, c, "properties", opts, func(vars map[string]interface{}) {
@@ -1559,6 +1574,19 @@ func (c *Client) GetAccountRaw(ctx context.Context) (json.RawMessage, error) {
 	return raw, c.doQueryWithRetry(ctx, getAccountQuery, vars, &raw)
 }
 
+// ListMembersRaw returns the raw GraphQL response for the first page of memberships.
+func (c *Client) ListMembersRaw(ctx context.Context, opts models.ListOptions) (json.RawMessage, error) {
+	vars := map[string]interface{}{
+		"accountId": c.accountID,
+		"first":     rawPageFirst(opts.Limit),
+	}
+	if filter := buildMembersFilter(opts); len(filter) > 0 {
+		vars["filter"] = filter
+	}
+	var raw json.RawMessage
+	return raw, c.doQueryWithRetry(ctx, listMembersQuery, vars, &raw)
+}
+
 // ListPropertiesRaw returns the raw GraphQL response for the first page of properties.
 func (c *Client) ListPropertiesRaw(ctx context.Context, opts models.ListOptions) (json.RawMessage, error) {
 	vars := map[string]interface{}{
@@ -1615,6 +1643,17 @@ func rawPageFirst(limit int) int {
 		return limit
 	}
 	return pageSize
+}
+
+func buildMembersFilter(opts models.ListOptions) map[string]interface{} {
+	f := map[string]interface{}{}
+	if opts.Search != "" {
+		f["search"] = opts.Search
+	}
+	if opts.IncludeInactive {
+		f["includeInactive"] = true
+	}
+	return f
 }
 
 func buildPropertiesFilter(opts models.ListOptions) map[string]interface{} {

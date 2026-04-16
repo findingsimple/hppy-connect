@@ -42,6 +42,12 @@ type ListWorkOrdersInput struct {
 	Limit         int    `json:"limit,omitempty" jsonschema:"Maximum number of work orders to return."`
 }
 
+type ListMembersInput struct {
+	Search          string `json:"search,omitempty" jsonschema:"Search by user name or email."`
+	IncludeInactive bool   `json:"include_inactive,omitempty" jsonschema:"Include deactivated memberships. Default false (active only)."`
+	Limit           int    `json:"limit,omitempty" jsonschema:"Maximum number of members to return."`
+}
+
 type ListInspectionsInput struct {
 	PropertyID    string `json:"property_id,omitempty" jsonschema:"Property ID to scope results."`
 	UnitID        string `json:"unit_id,omitempty" jsonschema:"Unit ID to scope results."`
@@ -67,6 +73,10 @@ type propertyReader interface {
 
 type workOrderReader interface {
 	ListWorkOrders(ctx context.Context, opts models.ListOptions) ([]models.WorkOrder, int, error)
+}
+
+type membershipReader interface {
+	ListMembers(ctx context.Context, opts models.ListOptions) ([]models.AccountMembership, int, error)
 }
 
 type inspectionReader interface {
@@ -170,6 +180,7 @@ type apiClient interface {
 	propertyReader
 	workOrderReader
 	inspectionReader
+	membershipReader
 	workOrderMutator
 	inspectionMutator
 	projectMutator
@@ -312,6 +323,41 @@ func registerTools(server *mcp.Server, client apiClient, debug bool) {
 				"total":       total,
 				"count":       len(inspections),
 				"inspections": emptyIfNil(inspections),
+			})
+		}),
+	)
+
+	// list_members
+	mcp.AddTool(server,
+		&mcp.Tool{
+			Name:        "list_members",
+			Description: "List account members (users with memberships). Can search by name or email and optionally include inactive members",
+		},
+		wrapTool(debug, "list_members", func(ctx context.Context, _ *mcp.CallToolRequest, input ListMembersInput) (*mcp.CallToolResult, any, error) {
+			if err := models.ValidateFreeText("search", input.Search); err != nil {
+				return toolInputError(err.Error()), nil, nil
+			}
+
+			ctx, cancel := context.WithTimeout(ctx, toolTimeout)
+			defer cancel()
+			if err := acquireSem(ctx, sem); err != nil {
+				return toolError(err), nil, nil
+			}
+			defer releaseSem(sem)
+
+			opts := models.ListOptions{
+				Limit:           clampLimit(input.Limit),
+				Search:          input.Search,
+				IncludeInactive: input.IncludeInactive,
+			}
+			members, total, err := client.ListMembers(ctx, opts)
+			if err != nil {
+				return toolError(err), nil, nil
+			}
+			return toolJSON(map[string]any{
+				"total":   total,
+				"count":   len(members),
+				"members": emptyIfNil(members),
 			})
 		}),
 	)

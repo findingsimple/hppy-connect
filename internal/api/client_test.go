@@ -768,6 +768,218 @@ func TestListInspectionsWithFilters(t *testing.T) {
 	assert.Equal(t, "2026-06-01T00:00:00Z", receivedFilter["createdBefore"])
 }
 
+func TestListMembersHappyPath(t *testing.T) {
+	_, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(gqlResponse(map[string]interface{}{
+			"account": map[string]interface{}{
+				"memberships": map[string]interface{}{
+					"count":    2,
+					"pageInfo": map[string]interface{}{"hasNextPage": false, "endCursor": ""},
+					"edges": []interface{}{
+						map[string]interface{}{"cursor": "m1", "node": map[string]interface{}{
+							"isActive":  true,
+							"createdAt": "2026-01-01T00:00:00Z",
+							"account":   map[string]interface{}{"id": "acct-1", "name": "Test Account"},
+							"user":      map[string]interface{}{"id": "u1", "name": "Alice", "email": "alice@example.com", "shortName": "A"},
+							"roles":     map[string]interface{}{"nodes": []interface{}{map[string]interface{}{"id": "r1", "name": "Admin"}}},
+						}},
+						map[string]interface{}{"cursor": "m2", "node": map[string]interface{}{
+							"isActive":      false,
+							"createdAt":     "2026-02-01T00:00:00Z",
+							"inactivatedAt": "2026-03-01T00:00:00Z",
+							"user":          map[string]interface{}{"id": "u2", "name": "Bob", "email": "bob@example.com"},
+						}},
+					},
+				},
+			},
+		}))
+	})
+
+	members, count, err := c.ListMembers(context.Background(), models.ListOptions{})
+	require.NoError(t, err)
+	assert.Equal(t, 2, count)
+	require.Len(t, members, 2)
+
+	assert.True(t, members[0].IsActive)
+	require.NotNil(t, members[0].User)
+	assert.Equal(t, "u1", members[0].User.ID)
+	assert.Equal(t, "Alice", members[0].User.Name)
+	assert.Equal(t, "alice@example.com", members[0].User.Email)
+	assert.Equal(t, "A", members[0].User.ShortName)
+	require.NotNil(t, members[0].Account)
+	assert.Equal(t, "acct-1", members[0].Account.ID)
+	require.NotNil(t, members[0].Roles)
+	require.Len(t, members[0].Roles.Nodes, 1)
+	assert.Equal(t, "r1", members[0].Roles.Nodes[0].ID)
+	assert.Equal(t, "Admin", members[0].Roles.Nodes[0].Name)
+
+	assert.False(t, members[1].IsActive)
+	assert.Equal(t, "2026-03-01T00:00:00Z", members[1].InactivatedAt)
+	require.NotNil(t, members[1].User)
+	assert.Equal(t, "u2", members[1].User.ID)
+}
+
+func TestListMembersWithFilters(t *testing.T) {
+	var receivedFilter map[string]interface{}
+	_, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Variables map[string]interface{} `json:"variables"`
+		}
+		json.NewDecoder(r.Body).Decode(&body)
+		receivedFilter, _ = body.Variables["filter"].(map[string]interface{})
+
+		json.NewEncoder(w).Encode(gqlResponse(map[string]interface{}{
+			"account": map[string]interface{}{
+				"memberships": map[string]interface{}{
+					"count":    0,
+					"pageInfo": map[string]interface{}{"hasNextPage": false, "endCursor": ""},
+					"edges":    []interface{}{},
+				},
+			},
+		}))
+	})
+
+	_, _, err := c.ListMembers(context.Background(), models.ListOptions{
+		Search:          "alice",
+		IncludeInactive: true,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, receivedFilter, "filter should be present in request")
+	assert.Equal(t, "alice", receivedFilter["search"])
+	assert.Equal(t, true, receivedFilter["includeInactive"])
+}
+
+func TestListMembersNoFilterWhenDefault(t *testing.T) {
+	var receivedVars map[string]interface{}
+	_, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Variables map[string]interface{} `json:"variables"`
+		}
+		json.NewDecoder(r.Body).Decode(&body)
+		receivedVars = body.Variables
+
+		json.NewEncoder(w).Encode(gqlResponse(map[string]interface{}{
+			"account": map[string]interface{}{
+				"memberships": map[string]interface{}{
+					"count":    0,
+					"pageInfo": map[string]interface{}{"hasNextPage": false, "endCursor": ""},
+					"edges":    []interface{}{},
+				},
+			},
+		}))
+	})
+
+	_, _, err := c.ListMembers(context.Background(), models.ListOptions{})
+	require.NoError(t, err)
+	_, hasFilter := receivedVars["filter"]
+	assert.False(t, hasFilter, "filter should not be sent when no search or include_inactive set")
+}
+
+func TestListMembersNilUser(t *testing.T) {
+	_, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(gqlResponse(map[string]interface{}{
+			"account": map[string]interface{}{
+				"memberships": map[string]interface{}{
+					"count":    1,
+					"pageInfo": map[string]interface{}{"hasNextPage": false, "endCursor": ""},
+					"edges": []interface{}{
+						map[string]interface{}{"cursor": "m1", "node": map[string]interface{}{
+							"isActive":  true,
+							"createdAt": "2026-01-01T00:00:00Z",
+							"user":      nil,
+						}},
+					},
+				},
+			},
+		}))
+	})
+
+	members, count, err := c.ListMembers(context.Background(), models.ListOptions{})
+	require.NoError(t, err)
+	assert.Equal(t, 1, count)
+	require.Len(t, members, 1)
+	assert.Nil(t, members[0].User)
+	assert.True(t, members[0].IsActive)
+}
+
+func TestListMembersRaw(t *testing.T) {
+	_, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(gqlResponse(map[string]interface{}{
+			"account": map[string]interface{}{
+				"memberships": map[string]interface{}{
+					"count":    3,
+					"pageInfo": map[string]interface{}{"hasNextPage": false, "endCursor": ""},
+					"edges":    []interface{}{},
+				},
+			},
+		}))
+	})
+
+	raw, err := c.ListMembersRaw(context.Background(), models.ListOptions{})
+	require.NoError(t, err)
+	require.NotNil(t, raw, "raw response should not be nil")
+
+	var parsed map[string]interface{}
+	require.NoError(t, json.Unmarshal(raw, &parsed))
+	acct := parsed["account"].(map[string]interface{})
+	memberships := acct["memberships"].(map[string]interface{})
+	assert.Equal(t, float64(3), memberships["count"])
+}
+
+func TestListMembersRawHonoursLimit(t *testing.T) {
+	var receivedFirst float64
+	_, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Variables map[string]interface{} `json:"variables"`
+		}
+		json.NewDecoder(r.Body).Decode(&body)
+		receivedFirst, _ = body.Variables["first"].(float64)
+		json.NewEncoder(w).Encode(gqlResponse(map[string]interface{}{
+			"account": map[string]interface{}{
+				"memberships": map[string]interface{}{
+					"count":    100,
+					"pageInfo": map[string]interface{}{"hasNextPage": false, "endCursor": ""},
+					"edges":    []interface{}{},
+				},
+			},
+		}))
+	})
+
+	_, err := c.ListMembersRaw(context.Background(), models.ListOptions{Limit: 10})
+	require.NoError(t, err)
+	assert.Equal(t, float64(10), receivedFirst, "raw query should use limit as page size")
+}
+
+func TestListMembersRawForwardsFilters(t *testing.T) {
+	var receivedFilter map[string]interface{}
+	_, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Variables map[string]interface{} `json:"variables"`
+		}
+		json.NewDecoder(r.Body).Decode(&body)
+		receivedFilter, _ = body.Variables["filter"].(map[string]interface{})
+
+		json.NewEncoder(w).Encode(gqlResponse(map[string]interface{}{
+			"account": map[string]interface{}{
+				"memberships": map[string]interface{}{
+					"count":    0,
+					"pageInfo": map[string]interface{}{"hasNextPage": false, "endCursor": ""},
+					"edges":    []interface{}{},
+				},
+			},
+		}))
+	})
+
+	_, err := c.ListMembersRaw(context.Background(), models.ListOptions{
+		Search:          "bob",
+		IncludeInactive: true,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, receivedFilter)
+	assert.Equal(t, "bob", receivedFilter["search"])
+	assert.Equal(t, true, receivedFilter["includeInactive"])
+}
+
 // --- Debug Logging Security ---
 
 func TestDebugNeverLogsCredentials(t *testing.T) {

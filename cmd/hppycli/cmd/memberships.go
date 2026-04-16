@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/findingsimple/hppy-connect/internal/models"
 	"github.com/spf13/cobra"
@@ -11,6 +12,84 @@ import (
 var membershipsCmd = &cobra.Command{
 	Use:   "memberships",
 	Short: "Manage account memberships",
+}
+
+var membershipsListCmd = &cobra.Command{
+	Use:   "list",
+	Short: "List account memberships",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		ctx := cmd.Context()
+
+		search, _ := cmd.Flags().GetString("search")
+		includeInactive, _ := cmd.Flags().GetBool("include-inactive")
+		limit, _ := cmd.Flags().GetInt("limit")
+
+		if err := validateLimit(limit); err != nil {
+			return err
+		}
+		if err := models.ValidateFreeText("search", search); err != nil {
+			return err
+		}
+
+		opts := models.ListOptions{
+			Limit:           limit,
+			Search:          search,
+			IncludeInactive: includeInactive,
+		}
+
+		if outputFormat == "raw" {
+			raw, err := apiClient.ListMembersRaw(ctx, opts)
+			if err != nil {
+				return fmt.Errorf("listing members: %w", err)
+			}
+			return printOutput(outputData{RawJSON: raw})
+		}
+
+		members, total, err := apiClient.ListMembers(ctx, opts)
+		if err != nil {
+			return fmt.Errorf("listing members: %w", err)
+		}
+
+		rows := make([][]string, len(members))
+		for i, m := range members {
+			userName := ""
+			userEmail := ""
+			userID := ""
+			if m.User != nil {
+				userName = m.User.Name
+				userEmail = m.User.Email
+				userID = m.User.ID
+			}
+			active := "yes"
+			if !m.IsActive {
+				active = "no"
+			}
+			roleNames := ""
+			if m.Roles != nil {
+				names := make([]string, len(m.Roles.Nodes))
+				for j, r := range m.Roles.Nodes {
+					names[j] = r.Name
+				}
+				roleNames = strings.Join(names, ", ")
+			}
+			rows[i] = []string{userID, userName, userEmail, active, roleNames}
+		}
+
+		if err := printOutput(outputData{
+			Headers: []string{"USER ID", "NAME", "EMAIL", "ACTIVE", "ROLES"},
+			Rows:    rows,
+			Items:   members,
+			Count:   total,
+		}); err != nil {
+			return err
+		}
+
+		if total > len(members) {
+			fmt.Fprintf(cmd.ErrOrStderr(), "Showing %d of %d members\n", len(members), total)
+		}
+
+		return nil
+	},
 }
 
 var membershipsCreateCmd = &cobra.Command{
@@ -152,6 +231,12 @@ var membershipsSetRolesCmd = &cobra.Command{
 }
 
 func init() {
+	// List
+	membershipsListCmd.Flags().String("search", "", "search by user name or email")
+	membershipsListCmd.Flags().Bool("include-inactive", false, "include deactivated memberships")
+	membershipsListCmd.Flags().Int("limit", 0, "maximum number of members to return (0 = default cap)")
+	membershipsCmd.AddCommand(membershipsListCmd)
+
 	// Create
 	membershipsCreateCmd.Flags().String("account-id", "", "account ID (defaults from config)")
 	membershipsCreateCmd.Flags().String("user-id", "", "user ID (required)")

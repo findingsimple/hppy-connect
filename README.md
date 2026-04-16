@@ -217,10 +217,11 @@ go install github.com/findingsimple/hppy-connect/cmd/hppymcp@latest
 | `users grant-property-access` | Grant a user access to properties |
 | `users revoke-property-access` | Revoke a user's property access |
 
-### Membership Mutations (4)
+### Memberships (5)
 
 | Command | Description |
 |---------|-------------|
+| `memberships list` | List account memberships (`--search`, `--include-inactive`, `--limit`) |
 | `memberships create` | Create an account membership |
 | `memberships activate` | Activate a membership |
 | `memberships deactivate` | Deactivate a membership |
@@ -406,7 +407,7 @@ Once connected, try asking your AI assistant:
 - "Generate a maintenance report for the last 30 days"
 - "Who are the users in my account and what roles do they have?"
 
-### MCP Tools (76 total: 5 read + 71 mutation)
+### MCP Tools (77 total: 6 read + 71 mutation)
 
 #### Read Tools
 
@@ -415,6 +416,7 @@ Once connected, try asking your AI assistant:
 | `get_account` | Get authenticated account info (name, ID) | None |
 | `list_properties` | List all properties with name, address, creation date | `limit` |
 | `list_units` | List units within a property | `property_id` (required), `limit` |
+| `list_members` | List account members (users with memberships) | `search`, `include_inactive`, `limit` |
 | `list_work_orders` | List work orders with optional filters | `property_id`, `unit_id`, `status`, `created_after`, `created_before`, `limit` |
 | `list_inspections` | List inspections with optional filters | `property_id`, `unit_id`, `status`, `created_after`, `created_before`, `limit` |
 

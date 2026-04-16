@@ -74,7 +74,7 @@ func detectMcpBinary() string {
 }
 
 // shellQuote wraps a string in single quotes with proper escaping for POSIX shells.
-// Interior single quotes are replaced with the standard '\'' sequence.
+// Interior single quotes are replaced with the standard '\” sequence.
 func shellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'"
 }

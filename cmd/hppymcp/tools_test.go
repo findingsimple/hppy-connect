@@ -23,6 +23,8 @@ type mockClient struct {
 	propTotal   int
 	units       []models.Unit
 	unitTotal   int
+	members     []models.AccountMembership
+	memberTotal int
 	workOrders  []models.WorkOrder
 	woTotal     int
 	inspections []models.Inspection
@@ -126,6 +128,14 @@ func (m *mockClient) ListUnits(_ context.Context, propertyID string, opts models
 		return nil, 0, m.err
 	}
 	return m.units, m.unitTotal, nil
+}
+
+func (m *mockClient) ListMembers(_ context.Context, opts models.ListOptions) ([]models.AccountMembership, int, error) {
+	m.lastListOpts = opts
+	if m.err != nil {
+		return nil, 0, m.err
+	}
+	return m.members, m.memberTotal, nil
 }
 
 func (m *mockClient) ListWorkOrders(_ context.Context, opts models.ListOptions) ([]models.WorkOrder, int, error) {
@@ -1157,6 +1167,104 @@ func TestToolListInspections(t *testing.T) {
 		assert.Contains(t, text, "invalid_input")
 		// OPEN is valid for work orders but not inspections
 		assert.Contains(t, text, "OPEN")
+	})
+}
+
+func TestToolListMembers(t *testing.T) {
+	t.Run("happy path with payload verification", func(t *testing.T) {
+		mock := &mockClient{
+			members: []models.AccountMembership{
+				{
+					IsActive:  true,
+					User:      &models.User{ID: "u1", Name: "Alice Smith", Email: "alice@example.com"},
+					CreatedAt: "2026-01-01T00:00:00Z",
+					Roles:     &models.MembershipRoles{Nodes: []models.Role{{ID: "r1", Name: "Admin"}}},
+				},
+				{
+					IsActive: false,
+					User:     &models.User{ID: "u2", Name: "Bob Jones", Email: "bob@example.com"},
+				},
+			},
+			memberTotal: 2,
+		}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "list_members", nil)
+		assert.False(t, result.IsError)
+
+		var parsed struct {
+			Total   int                        `json:"total"`
+			Count   int                        `json:"count"`
+			Members []models.AccountMembership `json:"members"`
+		}
+		require.NoError(t, json.Unmarshal([]byte(toolText(t, result)), &parsed))
+		assert.Equal(t, 2, parsed.Total)
+		assert.Equal(t, 2, parsed.Count)
+		require.Len(t, parsed.Members, 2)
+		assert.Equal(t, "u1", parsed.Members[0].User.ID)
+		assert.Equal(t, "Alice Smith", parsed.Members[0].User.Name)
+		assert.True(t, parsed.Members[0].IsActive)
+		require.NotNil(t, parsed.Members[0].Roles)
+		require.Len(t, parsed.Members[0].Roles.Nodes, 1)
+		assert.Equal(t, "r1", parsed.Members[0].Roles.Nodes[0].ID)
+		assert.Equal(t, "Admin", parsed.Members[0].Roles.Nodes[0].Name)
+		assert.Equal(t, "u2", parsed.Members[1].User.ID)
+		assert.False(t, parsed.Members[1].IsActive)
+	})
+
+	t.Run("default include_inactive is false", func(t *testing.T) {
+		mock := &mockClient{memberTotal: 0}
+		cs := newTestServer(t, mock)
+
+		callTool(t, cs, "list_members", nil)
+		assert.False(t, mock.lastListOpts.IncludeInactive)
+	})
+
+	t.Run("with search and include_inactive", func(t *testing.T) {
+		mock := &mockClient{memberTotal: 0}
+		cs := newTestServer(t, mock)
+
+		callTool(t, cs, "list_members", map[string]any{
+			"search":           "alice",
+			"include_inactive": true,
+			"limit":            25,
+		})
+		assert.Equal(t, "alice", mock.lastListOpts.Search)
+		assert.True(t, mock.lastListOpts.IncludeInactive)
+		assert.Equal(t, 25, mock.lastListOpts.Limit)
+	})
+
+	t.Run("nil user in membership serialises safely", func(t *testing.T) {
+		mock := &mockClient{
+			members:     []models.AccountMembership{{IsActive: true, User: nil}},
+			memberTotal: 1,
+		}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "list_members", nil)
+		assert.False(t, result.IsError)
+		text := toolText(t, result)
+		assert.Contains(t, text, `"user":null`)
+	})
+
+	t.Run("nil slice serialises as empty array", func(t *testing.T) {
+		mock := &mockClient{members: nil, memberTotal: 0}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "list_members", nil)
+		assert.False(t, result.IsError)
+		text := toolText(t, result)
+		assert.Contains(t, text, `"members":[]`)
+		assert.NotContains(t, text, "null")
+	})
+
+	t.Run("API error propagated", func(t *testing.T) {
+		mock := &mockClient{err: fmt.Errorf("api_error: HTTP 500")}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "list_members", nil)
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "api_error")
 	})
 }
 

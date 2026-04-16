@@ -47,6 +47,21 @@ const listWorkOrdersQuery = `query ListWorkOrders($accountId: ID!, $first: Int, 
   }
 }`
 
+const listMembersQuery = `query ListMembers($accountId: ID!, $first: Int, $after: String, $filter: AccountMembershipFilter) {
+  account(accountId: $accountId) {
+    memberships(first: $first, after: $after, filter: $filter) {
+      count
+      pageInfo { hasNextPage endCursor }
+      edges { cursor node {
+        isActive createdAt updatedAt inactivatedAt
+        account { id name }
+        user { id email name shortName createdAt updatedAt }
+        roles(first: 20) { nodes { id name } }
+      } }
+    }
+  }
+}`
+
 const listInspectionsQuery = `query ListInspections($accountId: ID!, $first: Int, $after: String, $filter: AccountInspectionFilter, $orderBy: [InspectionOrderBy!]) {
   account(accountId: $accountId) {
     inspections(first: $first, after: $after, filter: $filter, orderBy: $orderBy) {

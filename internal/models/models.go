@@ -148,10 +148,11 @@ type Inspection struct {
 // ListOptions holds the shared filter and pagination parameters used by both
 // the CLI (via parseListFlags) and the MCP server (via buildListOpts).
 type ListOptions struct {
-	Limit         int
-	CreatedAfter  *time.Time
-	CreatedBefore *time.Time
-	LocationID    string
-	Status        []string
-	Search        string
+	Limit           int
+	CreatedAfter    *time.Time
+	CreatedBefore   *time.Time
+	LocationID      string
+	Status          []string
+	Search          string
+	IncludeInactive bool
 }

@@ -54,6 +54,12 @@ type unitsResponse struct {
 	} `json:"account"`
 }
 
+type membersResponse struct {
+	Account struct {
+		Memberships connection[models.AccountMembership] `json:"memberships"`
+	} `json:"account"`
+}
+
 type workOrdersResponse struct {
 	Account struct {
 		WorkOrders connection[models.WorkOrder] `json:"workOrders"`
