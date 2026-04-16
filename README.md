@@ -16,8 +16,6 @@ Built during the 2-day HappyCo AI Hackathon (April 2026).
 
 </div>
 
-<br/>
-
 ### `hppycli` — Command Line
 
 A full-featured CLI for managing your HappyCo account. Query properties and inspections, create work orders, manage users and roles, seed test data — all from the terminal with tab completion, multiple output formats, and scriptable JSON output.
