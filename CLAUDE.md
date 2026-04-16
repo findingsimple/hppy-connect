@@ -114,10 +114,11 @@ Both binaries are thin frontends over shared logic in `internal/`.
 
 ### Interactive Account Selection
 - If `account_id` is missing from config/env/flags, the CLI authenticates and discovers accessible accounts via `api.Login()`.
-- For multiple accounts, a temporary client (pre-seeded with the login token via `WithToken`) resolves account names via `GetAccountByID`, then presents an interactive picker.
+- Account names are resolved via `resolveAccountNames()` (shared helper using a temporary client pre-seeded with `WithToken`), used by both `config init` and `PersistentPreRunE`.
+- For multiple accounts, an interactive picker is shown (capped at 20 displayed; all remain selectable by number). After selection, the user is offered to save the account ID to config.
+- Single accounts are auto-selected and auto-saved to the config file without prompting.
 - Non-interactive terminals (piped stdin) fail with a clear error directing users to `config init`, `--account-id`, or env vars.
-- After selection, the user is offered to save the account ID to their config file.
-- `config init` and `PersistentPreRunE` share the `selectAccount` helper to avoid duplication.
+- `saveAccountToConfig` uses atomic write (temp file + rename) and always enforces 0600 permissions. Rejects invalid YAML in existing config files to prevent silent data loss.
 
 ## Known Limitations & Accepted Trade-offs
 

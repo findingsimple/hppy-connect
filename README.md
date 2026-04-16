@@ -82,7 +82,7 @@ go install github.com/findingsimple/hppy-connect/cmd/hppymcp@latest
    hppycli properties list
    ```
 
-> **Note:** If `account_id` is not set in your config, the CLI will automatically authenticate and prompt you to select an account on first use (interactive terminal required). The selection can be saved to your config file.
+> **Note:** If `account_id` is not set in your config, the CLI will automatically authenticate and discover your accessible accounts on first use (interactive terminal required). Single accounts are auto-saved; multiple accounts prompt you to select one and offer to save the choice.
 
 ## CLI Commands
 

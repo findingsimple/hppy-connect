@@ -1,8 +1,11 @@
 package cmd
 
 import (
+	"bufio"
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 	"syscall"
 
 	"github.com/findingsimple/hppy-connect/internal/api"
@@ -170,58 +173,38 @@ Set it via one of:
 		return "", fmt.Errorf("no accessible accounts found for this user")
 	}
 
-	// Resolve account names for a better selection experience.
-	choices := make([]accountChoice, len(result.AccountIDs))
-	if len(result.AccountIDs) > 1 {
-		// Create a temporary client (pre-seeded with auth token) to look up names.
-		tempClient, err := api.NewClient(cfg.Email, cfg.Password, result.AccountIDs[0],
-			api.WithEndpoint(cfg.Endpoint),
-			api.WithToken(result.Token, result.ExpiresAt),
-		)
-		if err == nil {
-			for i, id := range result.AccountIDs {
-				choices[i] = accountChoice{ID: id}
-				acct, err := tempClient.GetAccountByID(cmd.Context(), id)
-				if err == nil && acct.Name != "" {
-					choices[i].Name = acct.Name
-				}
-			}
-		} else {
-			// Temp client creation failed — fall back to IDs only.
-			for i, id := range result.AccountIDs {
-				choices[i] = accountChoice{ID: id}
-			}
-		}
-	} else {
-		choices[0] = accountChoice{ID: result.AccountIDs[0]}
-		// Resolve name for the single account too.
-		tempClient, err := api.NewClient(cfg.Email, cfg.Password, result.AccountIDs[0],
-			api.WithEndpoint(cfg.Endpoint),
-			api.WithToken(result.Token, result.ExpiresAt),
-		)
-		if err == nil {
-			acct, err := tempClient.GetAccountByID(cmd.Context(), result.AccountIDs[0])
-			if err == nil && acct.Name != "" {
-				choices[0].Name = acct.Name
-			}
-		}
-	}
+	choices := resolveAccountNames(cmd.Context(), result.AccountIDs, cfg.Email, cfg.Password, cfg.Endpoint, result.Token, result.ExpiresAt)
 
-	accountID, err := selectAccount(choices, os.Stdin, stderr)
+	// Single buffered reader for all stdin prompts — prevents data loss from
+	// mixing buffered and unbuffered reads on the same file descriptor.
+	stdinReader := bufio.NewReader(os.Stdin)
+	accountID, err := selectAccount(choices, stdinReader, stderr)
 	if err != nil {
 		return "", err
 	}
 
-	// Offer to save to config file.
+	// Auto-save for single accounts (no choice was made, so no need to confirm).
+	// Prompt for multiple accounts.
 	configPath := resolveConfigPath()
-	fmt.Fprintf(stderr, "\nSave account ID %s to %s? [Y/n] ", accountID, configPath)
-	var response string
-	fmt.Fscanln(os.Stdin, &response)
-	if response == "" || response == "y" || response == "Y" || response == "yes" {
+	if len(result.AccountIDs) == 1 {
 		if err := saveAccountToConfig(configPath, accountID); err != nil {
 			fmt.Fprintf(stderr, "Warning: could not save to config: %v\n", err)
 		} else {
-			fmt.Fprintf(stderr, "Saved.\n")
+			fmt.Fprintf(stderr, "Saved account ID to %s\n", configPath)
+		}
+	} else {
+		fmt.Fprintf(stderr, "\nSave account ID %s to %s? [Y/n] ", accountID, configPath)
+		line, readErr := stdinReader.ReadString('\n')
+		response := strings.TrimSpace(line)
+		if readErr != nil && response == "" {
+			// EOF or read error — don't save without explicit consent.
+			fmt.Fprintln(stderr)
+		} else if response == "" || response == "y" || response == "Y" || response == "yes" {
+			if err := saveAccountToConfig(configPath, accountID); err != nil {
+				fmt.Fprintf(stderr, "Warning: could not save to config: %v\n", err)
+			} else {
+				fmt.Fprintf(stderr, "Saved.\n")
+			}
 		}
 	}
 
@@ -229,13 +212,16 @@ Set it via one of:
 }
 
 // saveAccountToConfig reads the existing config file, updates the account_id,
-// and writes it back. Creates the file if it does not exist.
+// and writes it back atomically. Creates the file if it does not exist.
+// Returns an error if the existing file contains invalid YAML (to prevent
+// silently destroying other config fields like email and password).
 func saveAccountToConfig(configPath, accountID string) error {
-	// Read existing config as a map to preserve all fields.
 	data := make(map[string]interface{})
 	existing, err := os.ReadFile(configPath)
 	if err == nil {
-		yaml.Unmarshal(existing, &data)
+		if err := yaml.Unmarshal(existing, &data); err != nil {
+			return fmt.Errorf("existing config has invalid YAML: %w", err)
+		}
 	}
 	data["account_id"] = accountID
 
@@ -243,7 +229,30 @@ func saveAccountToConfig(configPath, accountID string) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(configPath, out, 0600)
+
+	// Atomic write: temp file in same directory + rename prevents partial writes
+	// and ensures 0600 permissions even if the existing file was loosened.
+	dir := filepath.Dir(configPath)
+	tmp, err := os.CreateTemp(dir, ".hppycli-*.yaml")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmp.Name()
+
+	if _, err := tmp.Write(out); err != nil {
+		tmp.Close()
+		os.Remove(tmpPath)
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		os.Remove(tmpPath)
+		return err
+	}
+	if err := os.Chmod(tmpPath, 0600); err != nil {
+		os.Remove(tmpPath)
+		return err
+	}
+	return os.Rename(tmpPath, configPath)
 }
 
 func init() {

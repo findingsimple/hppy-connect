@@ -3,16 +3,19 @@ package cmd
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
 	"io"
 	"math"
 	"os"
+	"strconv"
 	"strings"
 	"text/tabwriter"
 	"time"
 
+	"github.com/findingsimple/hppy-connect/internal/api"
 	"github.com/findingsimple/hppy-connect/internal/models"
 	"github.com/spf13/cobra"
 )
@@ -313,9 +316,16 @@ type accountChoice struct {
 	Name string
 }
 
+// maxDisplayAccounts caps the numbered list shown during account selection.
+// Accounts beyond this limit are still selectable by number.
+const maxDisplayAccounts = 20
+
 // selectAccount prompts the user to choose from multiple accounts.
 // If there is only one account, it is returned without prompting.
-func selectAccount(accounts []accountChoice, input io.Reader, output io.Writer) (string, error) {
+// The input must be a *bufio.Reader so callers can reuse the same buffered
+// reader for subsequent prompts (mixing buffered/unbuffered reads on the same
+// file descriptor causes data loss).
+func selectAccount(accounts []accountChoice, input *bufio.Reader, output io.Writer) (string, error) {
 	if len(accounts) == 0 {
 		return "", fmt.Errorf("no accessible accounts found")
 	}
@@ -330,23 +340,57 @@ func selectAccount(accounts []accountChoice, input io.Reader, output io.Writer) 
 	}
 
 	fmt.Fprintln(output, "\nMultiple accounts found:")
-	for i, a := range accounts {
+	displayCount := len(accounts)
+	if displayCount > maxDisplayAccounts {
+		displayCount = maxDisplayAccounts
+	}
+	for i := 0; i < displayCount; i++ {
+		a := accounts[i]
 		if a.Name != "" {
 			fmt.Fprintf(output, "  [%d] %s (%s)\n", i+1, a.Name, a.ID)
 		} else {
 			fmt.Fprintf(output, "  [%d] %s\n", i+1, a.ID)
 		}
 	}
+	if len(accounts) > maxDisplayAccounts {
+		fmt.Fprintf(output, "  ... and %d more (use --account-id to specify directly)\n", len(accounts)-maxDisplayAccounts)
+	}
 	fmt.Fprintf(output, "Select account (1-%d): ", len(accounts))
 
-	scanner := bufio.NewScanner(input)
-	if !scanner.Scan() {
+	line, err := input.ReadString('\n')
+	if err != nil && line == "" {
 		return "", fmt.Errorf("no input received")
 	}
-	selection := strings.TrimSpace(scanner.Text())
-	idx := 0
-	if _, err := fmt.Sscanf(selection, "%d", &idx); err != nil || idx < 1 || idx > len(accounts) {
+	selection := strings.TrimSpace(line)
+	idx, err := strconv.Atoi(selection)
+	if err != nil || idx < 1 || idx > len(accounts) {
 		return "", fmt.Errorf("invalid selection %q: must be 1-%d", selection, len(accounts))
 	}
 	return accounts[idx-1].ID, nil
+}
+
+// resolveAccountNames creates account choices with resolved display names.
+// Creates a temporary API client pre-seeded with the login token to look up
+// names. Falls back to ID-only choices if name resolution fails for any account.
+func resolveAccountNames(ctx context.Context, accountIDs []string, email, password, endpoint, token string, expiresAt time.Time) []accountChoice {
+	choices := make([]accountChoice, len(accountIDs))
+	for i, id := range accountIDs {
+		choices[i] = accountChoice{ID: id}
+	}
+
+	tempClient, err := api.NewClient(email, password, accountIDs[0],
+		api.WithEndpoint(endpoint),
+		api.WithToken(token, expiresAt),
+	)
+	if err != nil {
+		return choices
+	}
+
+	for i, id := range accountIDs {
+		acct, err := tempClient.GetAccountByID(ctx, id)
+		if err == nil && acct.Name != "" {
+			choices[i].Name = acct.Name
+		}
+	}
+	return choices
 }

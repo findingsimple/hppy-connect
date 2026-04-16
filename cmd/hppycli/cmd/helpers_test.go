@@ -1,10 +1,12 @@
 package cmd
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"math"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -13,6 +15,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v3"
 )
 
 // --- truncateString ---
@@ -592,11 +595,15 @@ func TestPrintMutationResultOutputTextWarning(t *testing.T) {
 
 // --- selectAccount ---
 
+func bufReader(s string) *bufio.Reader {
+	return bufio.NewReader(strings.NewReader(s))
+}
+
 func TestSelectAccountSingleAccount(t *testing.T) {
 	accounts := []accountChoice{{ID: "123", Name: "Test Corp"}}
 	var output bytes.Buffer
 
-	id, err := selectAccount(accounts, strings.NewReader(""), &output)
+	id, err := selectAccount(accounts, bufReader(""), &output)
 
 	require.NoError(t, err)
 	assert.Equal(t, "123", id)
@@ -608,7 +615,7 @@ func TestSelectAccountSingleAccountNoName(t *testing.T) {
 	accounts := []accountChoice{{ID: "456"}}
 	var output bytes.Buffer
 
-	id, err := selectAccount(accounts, strings.NewReader(""), &output)
+	id, err := selectAccount(accounts, bufReader(""), &output)
 
 	require.NoError(t, err)
 	assert.Equal(t, "456", id)
@@ -622,7 +629,7 @@ func TestSelectAccountMultipleSelectsFirst(t *testing.T) {
 	}
 	var output bytes.Buffer
 
-	id, err := selectAccount(accounts, strings.NewReader("1\n"), &output)
+	id, err := selectAccount(accounts, bufReader("1\n"), &output)
 
 	require.NoError(t, err)
 	assert.Equal(t, "111", id)
@@ -637,7 +644,7 @@ func TestSelectAccountMultipleSelectsSecond(t *testing.T) {
 	}
 	var output bytes.Buffer
 
-	id, err := selectAccount(accounts, strings.NewReader("2\n"), &output)
+	id, err := selectAccount(accounts, bufReader("2\n"), &output)
 
 	require.NoError(t, err)
 	assert.Equal(t, "222", id)
@@ -650,7 +657,7 @@ func TestSelectAccountInvalidSelection(t *testing.T) {
 	}
 	var output bytes.Buffer
 
-	_, err := selectAccount(accounts, strings.NewReader("3\n"), &output)
+	_, err := selectAccount(accounts, bufReader("3\n"), &output)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid selection")
@@ -663,7 +670,7 @@ func TestSelectAccountNoInput(t *testing.T) {
 	}
 	var output bytes.Buffer
 
-	_, err := selectAccount(accounts, strings.NewReader(""), &output)
+	_, err := selectAccount(accounts, bufReader(""), &output)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no input")
@@ -672,8 +679,187 @@ func TestSelectAccountNoInput(t *testing.T) {
 func TestSelectAccountEmpty(t *testing.T) {
 	var output bytes.Buffer
 
-	_, err := selectAccount(nil, strings.NewReader(""), &output)
+	_, err := selectAccount(nil, bufReader(""), &output)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no accessible accounts")
+}
+
+func TestSelectAccountRejectsGarbageSuffix(t *testing.T) {
+	accounts := []accountChoice{{ID: "111"}, {ID: "222"}}
+	var output bytes.Buffer
+
+	_, err := selectAccount(accounts, bufReader("1abc\n"), &output)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid selection")
+}
+
+func TestSelectAccountRejectsZero(t *testing.T) {
+	accounts := []accountChoice{{ID: "111"}, {ID: "222"}}
+	var output bytes.Buffer
+
+	_, err := selectAccount(accounts, bufReader("0\n"), &output)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid selection")
+}
+
+func TestSelectAccountRejectsNegative(t *testing.T) {
+	accounts := []accountChoice{{ID: "111"}, {ID: "222"}}
+	var output bytes.Buffer
+
+	_, err := selectAccount(accounts, bufReader("-1\n"), &output)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid selection")
+}
+
+func TestSelectAccountRejectsFloat(t *testing.T) {
+	accounts := []accountChoice{{ID: "111"}, {ID: "222"}}
+	var output bytes.Buffer
+
+	_, err := selectAccount(accounts, bufReader("1.0\n"), &output)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid selection")
+}
+
+func TestSelectAccountRejectsWhitespaceOnly(t *testing.T) {
+	accounts := []accountChoice{{ID: "111"}, {ID: "222"}}
+	var output bytes.Buffer
+
+	_, err := selectAccount(accounts, bufReader("   \n"), &output)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid selection")
+}
+
+func TestSelectAccountTrimsWhitespace(t *testing.T) {
+	accounts := []accountChoice{{ID: "111"}, {ID: "222"}}
+	var output bytes.Buffer
+
+	id, err := selectAccount(accounts, bufReader("  1  \n"), &output)
+
+	require.NoError(t, err)
+	assert.Equal(t, "111", id)
+}
+
+func TestSelectAccountLargeListCapped(t *testing.T) {
+	accounts := make([]accountChoice, 25)
+	for i := range accounts {
+		accounts[i] = accountChoice{ID: strings.Repeat("x", 3) + string(rune('a'+i))}
+	}
+	var output bytes.Buffer
+
+	id, err := selectAccount(accounts, bufReader("25\n"), &output)
+
+	require.NoError(t, err)
+	assert.Equal(t, accounts[24].ID, id)
+	assert.Contains(t, output.String(), "and 5 more")
+	assert.Contains(t, output.String(), "--account-id")
+}
+
+// --- saveAccountToConfig ---
+
+func TestSaveAccountToConfigCreatesNewFile(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "config.yaml")
+
+	err := saveAccountToConfig(configPath, "acc-123")
+	require.NoError(t, err)
+
+	data, err := os.ReadFile(configPath)
+	require.NoError(t, err)
+
+	var parsed map[string]interface{}
+	require.NoError(t, yaml.Unmarshal(data, &parsed))
+	assert.Equal(t, "acc-123", parsed["account_id"])
+
+	info, err := os.Stat(configPath)
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0600), info.Mode().Perm())
+}
+
+func TestSaveAccountToConfigPreservesExistingFields(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "config.yaml")
+
+	initial := "email: test@example.com\npassword: secret\nendpoint: https://api.example.com\n"
+	require.NoError(t, os.WriteFile(configPath, []byte(initial), 0600))
+
+	err := saveAccountToConfig(configPath, "acc-456")
+	require.NoError(t, err)
+
+	data, err := os.ReadFile(configPath)
+	require.NoError(t, err)
+
+	var parsed map[string]interface{}
+	require.NoError(t, yaml.Unmarshal(data, &parsed))
+	assert.Equal(t, "acc-456", parsed["account_id"])
+	assert.Equal(t, "test@example.com", parsed["email"])
+	assert.Equal(t, "secret", parsed["password"])
+	assert.Equal(t, "https://api.example.com", parsed["endpoint"])
+}
+
+func TestSaveAccountToConfigRejectsInvalidYAML(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "config.yaml")
+
+	require.NoError(t, os.WriteFile(configPath, []byte(":\n  bad:\n  - [unclosed"), 0600))
+
+	err := saveAccountToConfig(configPath, "acc-789")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid YAML")
+}
+
+func TestSaveAccountToConfigEmptyFile(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "config.yaml")
+
+	require.NoError(t, os.WriteFile(configPath, []byte(""), 0600))
+
+	err := saveAccountToConfig(configPath, "acc-empty")
+	require.NoError(t, err)
+
+	data, err := os.ReadFile(configPath)
+	require.NoError(t, err)
+
+	var parsed map[string]interface{}
+	require.NoError(t, yaml.Unmarshal(data, &parsed))
+	assert.Equal(t, "acc-empty", parsed["account_id"])
+}
+
+func TestSaveAccountToConfigUpdatesExistingAccountID(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "config.yaml")
+
+	initial := "email: test@example.com\naccount_id: old-id\n"
+	require.NoError(t, os.WriteFile(configPath, []byte(initial), 0600))
+
+	err := saveAccountToConfig(configPath, "new-id")
+	require.NoError(t, err)
+
+	data, err := os.ReadFile(configPath)
+	require.NoError(t, err)
+
+	var parsed map[string]interface{}
+	require.NoError(t, yaml.Unmarshal(data, &parsed))
+	assert.Equal(t, "new-id", parsed["account_id"])
+	assert.Equal(t, "test@example.com", parsed["email"])
+}
+
+func TestSaveAccountToConfigEnforcesPermissions(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "config.yaml")
+
+	// Create with overly permissive perms.
+	require.NoError(t, os.WriteFile(configPath, []byte("email: test@example.com\n"), 0644))
+
+	err := saveAccountToConfig(configPath, "acc-perms")
+	require.NoError(t, err)
+
+	info, err := os.Stat(configPath)
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0600), info.Mode().Perm())
 }

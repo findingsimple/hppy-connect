@@ -74,24 +74,7 @@ var configInitCmd = &cobra.Command{
 			return fmt.Errorf("no accessible accounts found for this user")
 		}
 
-		// Resolve account names for better selection UX.
-		choices := make([]accountChoice, len(result.AccountIDs))
-		for i, id := range result.AccountIDs {
-			choices[i] = accountChoice{ID: id}
-		}
-		if len(result.AccountIDs) > 1 {
-			tempClient, err := api.NewClient(email, password, result.AccountIDs[0],
-				api.WithToken(result.Token, result.ExpiresAt),
-			)
-			if err == nil {
-				for i, id := range result.AccountIDs {
-					acct, err := tempClient.GetAccountByID(cmd.Context(), id)
-					if err == nil && acct.Name != "" {
-						choices[i].Name = acct.Name
-					}
-				}
-			}
-		}
+		choices := resolveAccountNames(cmd.Context(), result.AccountIDs, email, password, api.DefaultEndpoint, result.Token, result.ExpiresAt)
 
 		accountID, err := selectAccount(choices, reader, os.Stderr)
 		if err != nil {
