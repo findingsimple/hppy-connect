@@ -75,6 +75,7 @@ func detectMcpBinary() string {
 func printClaudeConfig(w io.Writer, binaryPath, configPath string) error {
 	cfg := map[string]interface{}{
 		"hppymcp": map[string]interface{}{
+			"type":    "stdio",
 			"command": binaryPath,
 			"args":    []string{"--config", configPath},
 		},
@@ -86,7 +87,7 @@ func printClaudeConfig(w io.Writer, binaryPath, configPath string) error {
 	}
 
 	fmt.Fprintln(w, "Add the following to your Claude Code MCP settings")
-	fmt.Fprintln(w, "(~/.claude/settings.json → mcpServers):")
+	fmt.Fprintln(w, "(~/.claude.json → mcpServers):")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, string(out))
 	return nil

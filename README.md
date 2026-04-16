@@ -363,7 +363,7 @@ hppycli seed --count=5 --output json --yes
    ```bash
    hppycli mcp setup --client claude
    ```
-2. Open `~/.claude/settings.json` and add the output to the `mcpServers` object.
+2. Add the output to the `mcpServers` object in `~/.claude.json`.
 3. Restart Claude Code. Ask "What HappyCo account am I connected to?" to verify.
 
 ### Cursor
