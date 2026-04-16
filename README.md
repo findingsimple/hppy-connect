@@ -105,13 +105,23 @@ go install github.com/findingsimple/hppy-connect/cmd/hppymcp@latest
 
    This prompts for your HappyCo email and password, authenticates, discovers your accessible accounts, and writes `~/.hppycli.yaml` (chmod 600). If you have multiple accounts, you'll be prompted to select one.
 
-2. Verify your credentials:
+2. Enable tab completion (optional):
+
+   ```bash
+   # Zsh (add to ~/.zshrc)
+   source <(hppycli completion zsh)
+
+   # Bash (add to ~/.bashrc)
+   source <(hppycli completion bash)
+   ```
+
+3. Verify your credentials:
 
    ```bash
    hppycli account
    ```
 
-3. List properties:
+4. List properties:
 
    ```bash
    hppycli properties list
