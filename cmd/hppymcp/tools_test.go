@@ -1416,7 +1416,7 @@ func TestToolWorkOrderSetPriority(t *testing.T) {
 
 		result := callTool(t, cs, "work_order_set_priority", map[string]any{
 			"work_order_id": "wo-123",
-			"value":         "URGENT",
+			"priority":      "URGENT",
 		})
 		assert.False(t, result.IsError)
 	})
@@ -1427,7 +1427,7 @@ func TestToolWorkOrderSetPriority(t *testing.T) {
 
 		result := callTool(t, cs, "work_order_set_priority", map[string]any{
 			"work_order_id": "wo-123",
-			"value":         "HIGH",
+			"priority":      "HIGH",
 		})
 		assert.True(t, result.IsError)
 		assert.Contains(t, toolText(t, result), "NORMAL or URGENT")
@@ -1441,7 +1441,7 @@ func TestToolWorkOrderSetDescription(t *testing.T) {
 
 		result := callTool(t, cs, "work_order_set_description", map[string]any{
 			"work_order_id": "wo-123",
-			"value":         "Fix the leaky faucet in unit 4B",
+			"description":   "Fix the leaky faucet in unit 4B",
 		})
 		assert.False(t, result.IsError)
 		assert.Equal(t, "wo-123", mock.lastMutationID)
@@ -1453,7 +1453,7 @@ func TestToolWorkOrderSetDescription(t *testing.T) {
 		cs := newTestServer(t, mock)
 
 		result := callTool(t, cs, "work_order_set_description", map[string]any{
-			"value": "some description",
+			"description": "some description",
 		})
 		assert.True(t, result.IsError)
 		assert.Contains(t, toolText(t, result), "work_order_id")
@@ -1465,7 +1465,7 @@ func TestToolWorkOrderSetDescription(t *testing.T) {
 
 		result := callTool(t, cs, "work_order_set_description", map[string]any{
 			"work_order_id": "wo-123",
-			"value":         "",
+			"description":   "",
 		})
 		assert.True(t, result.IsError)
 		assert.Contains(t, toolText(t, result), "invalid_input")
@@ -1477,7 +1477,7 @@ func TestToolWorkOrderSetDescription(t *testing.T) {
 
 		result := callTool(t, cs, "work_order_set_description", map[string]any{
 			"work_order_id": "wo-123",
-			"value":         string(make([]byte, models.MaxFreeTextLength+1)),
+			"description":   string(make([]byte, models.MaxFreeTextLength+1)),
 		})
 		assert.True(t, result.IsError)
 		assert.Contains(t, toolText(t, result), "invalid_input")
@@ -1491,7 +1491,7 @@ func TestToolWorkOrderSetScheduledFor(t *testing.T) {
 
 		result := callTool(t, cs, "work_order_set_scheduled_for", map[string]any{
 			"work_order_id": "wo-123",
-			"value":         "2026-05-01T09:00:00Z",
+			"scheduled_for": "2026-05-01T09:00:00Z",
 		})
 		assert.False(t, result.IsError)
 		assert.Equal(t, "wo-123", mock.lastMutationID)
@@ -1502,7 +1502,7 @@ func TestToolWorkOrderSetScheduledFor(t *testing.T) {
 		cs := newTestServer(t, mock)
 
 		result := callTool(t, cs, "work_order_set_scheduled_for", map[string]any{
-			"value": "2026-05-01T09:00:00Z",
+			"scheduled_for": "2026-05-01T09:00:00Z",
 		})
 		assert.True(t, result.IsError)
 		assert.Contains(t, toolText(t, result), "work_order_id")
@@ -1514,7 +1514,7 @@ func TestToolWorkOrderSetScheduledFor(t *testing.T) {
 
 		result := callTool(t, cs, "work_order_set_scheduled_for", map[string]any{
 			"work_order_id": "wo-123",
-			"value":         "",
+			"scheduled_for": "",
 		})
 		assert.True(t, result.IsError)
 		assert.Contains(t, toolText(t, result), "invalid_input")
@@ -1526,7 +1526,7 @@ func TestToolWorkOrderSetScheduledFor(t *testing.T) {
 
 		result := callTool(t, cs, "work_order_set_scheduled_for", map[string]any{
 			"work_order_id": "wo-123",
-			"value":         "not-a-timestamp",
+			"scheduled_for": "not-a-timestamp",
 		})
 		assert.True(t, result.IsError)
 		assert.Contains(t, toolText(t, result), "invalid_input")
@@ -1540,7 +1540,7 @@ func TestToolWorkOrderSetLocation(t *testing.T) {
 
 		result := callTool(t, cs, "work_order_set_location", map[string]any{
 			"work_order_id": "wo-123",
-			"value":         "loc-456",
+			"location_id":   "loc-456",
 		})
 		assert.False(t, result.IsError)
 		assert.Equal(t, "wo-123", mock.lastMutationID)
@@ -1551,7 +1551,7 @@ func TestToolWorkOrderSetLocation(t *testing.T) {
 		cs := newTestServer(t, mock)
 
 		result := callTool(t, cs, "work_order_set_location", map[string]any{
-			"value": "loc-456",
+			"location_id": "loc-456",
 		})
 		assert.True(t, result.IsError)
 		assert.Contains(t, toolText(t, result), "work_order_id")
@@ -1563,7 +1563,7 @@ func TestToolWorkOrderSetLocation(t *testing.T) {
 
 		result := callTool(t, cs, "work_order_set_location", map[string]any{
 			"work_order_id": "wo-123",
-			"value":         "",
+			"location_id":   "",
 		})
 		assert.True(t, result.IsError)
 		assert.Contains(t, toolText(t, result), "invalid_input")
@@ -1575,7 +1575,7 @@ func TestToolWorkOrderSetLocation(t *testing.T) {
 
 		result := callTool(t, cs, "work_order_set_location", map[string]any{
 			"work_order_id": "wo-123",
-			"value":         "../../etc/passwd",
+			"location_id":   "../../etc/passwd",
 		})
 		assert.True(t, result.IsError)
 		assert.Contains(t, toolText(t, result), "invalid_input")
@@ -1588,8 +1588,8 @@ func TestToolWorkOrderSetType(t *testing.T) {
 		cs := newTestServer(t, mock)
 
 		result := callTool(t, cs, "work_order_set_type", map[string]any{
-			"work_order_id": "wo-123",
-			"value":         "SERVICE_REQUEST",
+			"work_order_id":   "wo-123",
+			"work_order_type": "SERVICE_REQUEST",
 		})
 		assert.False(t, result.IsError)
 		assert.Equal(t, "wo-123", mock.lastMutationID)
@@ -1600,7 +1600,7 @@ func TestToolWorkOrderSetType(t *testing.T) {
 		cs := newTestServer(t, mock)
 
 		result := callTool(t, cs, "work_order_set_type", map[string]any{
-			"value": "TURN",
+			"work_order_type": "TURN",
 		})
 		assert.True(t, result.IsError)
 		assert.Contains(t, toolText(t, result), "work_order_id")
@@ -1611,8 +1611,8 @@ func TestToolWorkOrderSetType(t *testing.T) {
 		cs := newTestServer(t, mock)
 
 		result := callTool(t, cs, "work_order_set_type", map[string]any{
-			"work_order_id": "wo-123",
-			"value":         "",
+			"work_order_id":   "wo-123",
+			"work_order_type": "",
 		})
 		assert.True(t, result.IsError)
 		assert.Contains(t, toolText(t, result), "invalid_input")
@@ -1623,8 +1623,8 @@ func TestToolWorkOrderSetType(t *testing.T) {
 		cs := newTestServer(t, mock)
 
 		result := callTool(t, cs, "work_order_set_type", map[string]any{
-			"work_order_id": "wo-123",
-			"value":         "URGENT",
+			"work_order_id":   "wo-123",
+			"work_order_type": "URGENT",
 		})
 		assert.True(t, result.IsError)
 		assert.Contains(t, toolText(t, result), "SERVICE_REQUEST")
@@ -1635,8 +1635,8 @@ func TestToolWorkOrderSetType(t *testing.T) {
 		cs := newTestServer(t, mock)
 
 		result := callTool(t, cs, "work_order_set_type", map[string]any{
-			"work_order_id": "wo-123",
-			"value":         "turn",
+			"work_order_id":   "wo-123",
+			"work_order_type": "turn",
 		})
 		assert.False(t, result.IsError)
 	})
@@ -1649,7 +1649,7 @@ func TestToolWorkOrderSetEntryNotes(t *testing.T) {
 
 		result := callTool(t, cs, "work_order_set_entry_notes", map[string]any{
 			"work_order_id": "wo-123",
-			"value":         "Please knock before entering",
+			"entry_notes":   "Please knock before entering",
 		})
 		assert.False(t, result.IsError)
 		assert.Equal(t, "wo-123", mock.lastMutationID)
@@ -1660,7 +1660,7 @@ func TestToolWorkOrderSetEntryNotes(t *testing.T) {
 		cs := newTestServer(t, mock)
 
 		result := callTool(t, cs, "work_order_set_entry_notes", map[string]any{
-			"value": "Please knock",
+			"entry_notes": "Please knock",
 		})
 		assert.True(t, result.IsError)
 		assert.Contains(t, toolText(t, result), "work_order_id")
@@ -1672,7 +1672,7 @@ func TestToolWorkOrderSetEntryNotes(t *testing.T) {
 
 		result := callTool(t, cs, "work_order_set_entry_notes", map[string]any{
 			"work_order_id": "wo-123",
-			"value":         "",
+			"entry_notes":   "",
 		})
 		assert.True(t, result.IsError)
 		assert.Contains(t, toolText(t, result), "invalid_input")
@@ -1684,7 +1684,7 @@ func TestToolWorkOrderSetEntryNotes(t *testing.T) {
 
 		result := callTool(t, cs, "work_order_set_entry_notes", map[string]any{
 			"work_order_id": "wo-123",
-			"value":         string(make([]byte, models.MaxFreeTextLength+1)),
+			"entry_notes":   string(make([]byte, models.MaxFreeTextLength+1)),
 		})
 		assert.True(t, result.IsError)
 		assert.Contains(t, toolText(t, result), "invalid_input")
@@ -1697,8 +1697,8 @@ func TestToolWorkOrderSetPermissionToEnter(t *testing.T) {
 		cs := newTestServer(t, mock)
 
 		result := callTool(t, cs, "work_order_set_permission_to_enter", map[string]any{
-			"work_order_id": "wo-123",
-			"value":         true,
+			"work_order_id":       "wo-123",
+			"permission_to_enter": true,
 		})
 		assert.False(t, result.IsError)
 		assert.Equal(t, "wo-123", mock.lastMutationID)
@@ -1709,8 +1709,8 @@ func TestToolWorkOrderSetPermissionToEnter(t *testing.T) {
 		cs := newTestServer(t, mock)
 
 		result := callTool(t, cs, "work_order_set_permission_to_enter", map[string]any{
-			"work_order_id": "wo-123",
-			"value":         false,
+			"work_order_id":       "wo-123",
+			"permission_to_enter": false,
 		})
 		assert.False(t, result.IsError)
 		assert.Equal(t, "wo-123", mock.lastMutationID)
@@ -1721,7 +1721,7 @@ func TestToolWorkOrderSetPermissionToEnter(t *testing.T) {
 		cs := newTestServer(t, mock)
 
 		result := callTool(t, cs, "work_order_set_permission_to_enter", map[string]any{
-			"value": true,
+			"permission_to_enter": true,
 		})
 		assert.True(t, result.IsError)
 		assert.Contains(t, toolText(t, result), "work_order_id")
@@ -1734,8 +1734,8 @@ func TestToolWorkOrderSetResidentApprovedEntry(t *testing.T) {
 		cs := newTestServer(t, mock)
 
 		result := callTool(t, cs, "work_order_set_resident_approved_entry", map[string]any{
-			"work_order_id": "wo-123",
-			"value":         true,
+			"work_order_id":           "wo-123",
+			"resident_approved_entry": true,
 		})
 		assert.False(t, result.IsError)
 		assert.Equal(t, "wo-123", mock.lastMutationID)
@@ -1746,8 +1746,8 @@ func TestToolWorkOrderSetResidentApprovedEntry(t *testing.T) {
 		cs := newTestServer(t, mock)
 
 		result := callTool(t, cs, "work_order_set_resident_approved_entry", map[string]any{
-			"work_order_id": "wo-123",
-			"value":         false,
+			"work_order_id":           "wo-123",
+			"resident_approved_entry": false,
 		})
 		assert.False(t, result.IsError)
 		assert.Equal(t, "wo-123", mock.lastMutationID)
@@ -1758,7 +1758,7 @@ func TestToolWorkOrderSetResidentApprovedEntry(t *testing.T) {
 		cs := newTestServer(t, mock)
 
 		result := callTool(t, cs, "work_order_set_resident_approved_entry", map[string]any{
-			"value": false,
+			"resident_approved_entry": false,
 		})
 		assert.True(t, result.IsError)
 		assert.Contains(t, toolText(t, result), "work_order_id")
@@ -1772,7 +1772,7 @@ func TestToolWorkOrderSetUnitEntered(t *testing.T) {
 
 		result := callTool(t, cs, "work_order_set_unit_entered", map[string]any{
 			"work_order_id": "wo-123",
-			"value":         true,
+			"unit_entered":  true,
 		})
 		assert.False(t, result.IsError)
 		assert.Equal(t, "wo-123", mock.lastMutationID)
@@ -1784,7 +1784,7 @@ func TestToolWorkOrderSetUnitEntered(t *testing.T) {
 
 		result := callTool(t, cs, "work_order_set_unit_entered", map[string]any{
 			"work_order_id": "wo-123",
-			"value":         false,
+			"unit_entered":  false,
 		})
 		assert.False(t, result.IsError)
 		assert.Equal(t, "wo-123", mock.lastMutationID)
@@ -1795,7 +1795,7 @@ func TestToolWorkOrderSetUnitEntered(t *testing.T) {
 		cs := newTestServer(t, mock)
 
 		result := callTool(t, cs, "work_order_set_unit_entered", map[string]any{
-			"value": true,
+			"unit_entered": true,
 		})
 		assert.True(t, result.IsError)
 		assert.Contains(t, toolText(t, result), "work_order_id")
@@ -1809,7 +1809,7 @@ func TestToolWorkOrderAddComment(t *testing.T) {
 
 		result := callTool(t, cs, "work_order_add_comment", map[string]any{
 			"work_order_id": "wo-123",
-			"value":         "Technician will arrive at 10am",
+			"comment":       "Technician will arrive at 10am",
 		})
 		assert.False(t, result.IsError)
 		assert.Equal(t, "wo-123", mock.lastMutationID)
@@ -1820,7 +1820,7 @@ func TestToolWorkOrderAddComment(t *testing.T) {
 		cs := newTestServer(t, mock)
 
 		result := callTool(t, cs, "work_order_add_comment", map[string]any{
-			"value": "some comment",
+			"comment": "some comment",
 		})
 		assert.True(t, result.IsError)
 		assert.Contains(t, toolText(t, result), "work_order_id")
@@ -1832,7 +1832,7 @@ func TestToolWorkOrderAddComment(t *testing.T) {
 
 		result := callTool(t, cs, "work_order_add_comment", map[string]any{
 			"work_order_id": "wo-123",
-			"value":         "",
+			"comment":       "",
 		})
 		assert.True(t, result.IsError)
 		assert.Contains(t, toolText(t, result), "invalid_input")
@@ -1844,7 +1844,7 @@ func TestToolWorkOrderAddComment(t *testing.T) {
 
 		result := callTool(t, cs, "work_order_add_comment", map[string]any{
 			"work_order_id": "wo-123",
-			"value":         string(make([]byte, models.MaxFreeTextLength+1)),
+			"comment":       string(make([]byte, models.MaxFreeTextLength+1)),
 		})
 		assert.True(t, result.IsError)
 		assert.Contains(t, toolText(t, result), "invalid_input")
@@ -1858,7 +1858,7 @@ func TestToolWorkOrderAddTime(t *testing.T) {
 
 		result := callTool(t, cs, "work_order_add_time", map[string]any{
 			"work_order_id": "wo-123",
-			"value":         "PT1H30M",
+			"duration":      "PT1H30M",
 		})
 		assert.False(t, result.IsError)
 		assert.Equal(t, "wo-123", mock.lastMutationID)
@@ -1869,7 +1869,7 @@ func TestToolWorkOrderAddTime(t *testing.T) {
 		cs := newTestServer(t, mock)
 
 		result := callTool(t, cs, "work_order_add_time", map[string]any{
-			"value": "PT1H",
+			"duration": "PT1H",
 		})
 		assert.True(t, result.IsError)
 		assert.Contains(t, toolText(t, result), "work_order_id")
@@ -1881,7 +1881,7 @@ func TestToolWorkOrderAddTime(t *testing.T) {
 
 		result := callTool(t, cs, "work_order_add_time", map[string]any{
 			"work_order_id": "wo-123",
-			"value":         "",
+			"duration":      "",
 		})
 		assert.True(t, result.IsError)
 		assert.Contains(t, toolText(t, result), "invalid_input")
@@ -1893,7 +1893,7 @@ func TestToolWorkOrderAddTime(t *testing.T) {
 
 		result := callTool(t, cs, "work_order_add_time", map[string]any{
 			"work_order_id": "wo-123",
-			"value":         "1h30m",
+			"duration":      "1h30m",
 		})
 		assert.True(t, result.IsError)
 		assert.Contains(t, toolText(t, result), "invalid_input")
@@ -1905,7 +1905,7 @@ func TestToolWorkOrderAddTime(t *testing.T) {
 
 		result := callTool(t, cs, "work_order_add_time", map[string]any{
 			"work_order_id": "wo-123",
-			"value":         "PT",
+			"duration":      "PT",
 		})
 		assert.True(t, result.IsError)
 		assert.Contains(t, toolText(t, result), "invalid_input")
@@ -3753,14 +3753,14 @@ func TestToolProjectSetNotes(t *testing.T) {
 
 		result := callTool(t, cs, "project_set_notes", map[string]any{
 			"project_id": "proj-1",
-			"value":      "Updated notes",
+			"notes":      "Updated notes",
 		})
 		assert.False(t, result.IsError)
 		assert.Equal(t, "proj-1", mock.lastMutationID)
 		assert.Equal(t, "Updated notes", mock.lastStringValue)
 	})
 
-	t.Run("missing value returns error", func(t *testing.T) {
+	t.Run("missing notes returns error", func(t *testing.T) {
 		mock := &mockClient{}
 		cs := newTestServer(t, mock)
 
@@ -3768,7 +3768,7 @@ func TestToolProjectSetNotes(t *testing.T) {
 			"project_id": "proj-1",
 		})
 		assert.True(t, result.IsError)
-		assert.Contains(t, toolText(t, result), "value")
+		assert.Contains(t, toolText(t, result), "notes")
 	})
 }
 
@@ -3779,7 +3779,7 @@ func TestToolProjectSetPriority(t *testing.T) {
 
 		result := callTool(t, cs, "project_set_priority", map[string]any{
 			"project_id": "proj-1",
-			"value":      "URGENT",
+			"priority":   "URGENT",
 		})
 		assert.False(t, result.IsError)
 		assert.Equal(t, "proj-1", mock.lastMutationID)
@@ -3791,7 +3791,7 @@ func TestToolProjectSetPriority(t *testing.T) {
 
 		result := callTool(t, cs, "project_set_priority", map[string]any{
 			"project_id": "proj-1",
-			"value":      "HIGH",
+			"priority":   "HIGH",
 		})
 		assert.True(t, result.IsError)
 		assert.Contains(t, toolText(t, result), "priority must be NORMAL or URGENT")
@@ -3804,7 +3804,7 @@ func TestToolProjectSetOnHold(t *testing.T) {
 
 	result := callTool(t, cs, "project_set_on_hold", map[string]any{
 		"project_id": "proj-1",
-		"value":      true,
+		"on_hold":    true,
 	})
 	assert.False(t, result.IsError)
 	assert.Equal(t, "proj-1", mock.lastMutationID)
@@ -3817,7 +3817,7 @@ func TestToolProjectSetDueAt(t *testing.T) {
 
 		result := callTool(t, cs, "project_set_due_at", map[string]any{
 			"project_id": "proj-1",
-			"value":      "2026-06-01T00:00:00Z",
+			"due_at":     "2026-06-01T00:00:00Z",
 		})
 		assert.False(t, result.IsError)
 		assert.Equal(t, "proj-1", mock.lastMutationID)
@@ -3829,7 +3829,7 @@ func TestToolProjectSetDueAt(t *testing.T) {
 
 		result := callTool(t, cs, "project_set_due_at", map[string]any{
 			"project_id": "proj-1",
-			"value":      "not-a-date",
+			"due_at":     "not-a-date",
 		})
 		assert.True(t, result.IsError)
 		assert.Contains(t, toolText(t, result), "RFC3339")
@@ -3842,7 +3842,7 @@ func TestToolProjectSetStartAt(t *testing.T) {
 
 	result := callTool(t, cs, "project_set_start_at", map[string]any{
 		"project_id": "proj-1",
-		"value":      "2026-05-01T00:00:00Z",
+		"start_at":   "2026-05-01T00:00:00Z",
 	})
 	assert.False(t, result.IsError)
 	assert.Equal(t, "proj-1", mock.lastMutationID)
@@ -4048,8 +4048,8 @@ func TestToolUserSetShortName(t *testing.T) {
 	cs := newTestServer(t, mock)
 
 	result := callTool(t, cs, "user_set_short_name", map[string]any{
-		"user_id": "user-1",
-		"value":   "Jay",
+		"user_id":    "user-1",
+		"short_name": "Jay",
 	})
 	assert.False(t, result.IsError)
 	assert.Equal(t, "user-1", mock.lastMutationID)
@@ -4061,7 +4061,7 @@ func TestToolUserSetPhone(t *testing.T) {
 
 	result := callTool(t, cs, "user_set_phone", map[string]any{
 		"user_id": "user-1",
-		"value":   "+1-555-0100",
+		"phone":   "+1-555-0100",
 	})
 	assert.False(t, result.IsError)
 	assert.Equal(t, "user-1", mock.lastMutationID)

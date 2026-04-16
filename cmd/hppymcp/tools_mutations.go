@@ -15,7 +15,7 @@ type CreateWorkOrderInput struct {
 	Description       string `json:"description,omitempty" jsonschema:"Description of work needed"`
 	Priority          string `json:"priority,omitempty" jsonschema:"Priority: NORMAL or URGENT (default NORMAL)"`
 	Status            string `json:"status,omitempty" jsonschema:"Status: OPEN ON_HOLD or COMPLETED (default OPEN)"`
-	Type              string `json:"type,omitempty" jsonschema:"Type: SERVICE_REQUEST TURN CAPITAL_IMPROVEMENT INSPECTION_RELATED APPLIANCE_REPLACEMENT"`
+	Type              string `json:"type,omitempty" jsonschema:"Type: SERVICE_REQUEST TURN CAPITAL_IMPROVEMENT CURB_APPEAL INCIDENT INVENTORY LIFE_SAFETY PREVENTATIVE_MAINTENANCE REGULATORY SEASONAL_MAINTENANCE"`
 	ScheduledFor      string `json:"scheduled_for,omitempty" jsonschema:"Scheduled date in ISO 8601 format"`
 	EntryNotes        string `json:"entry_notes,omitempty" jsonschema:"Notes about entering the location"`
 	PermissionToEnter *bool  `json:"permission_to_enter,omitempty" jsonschema:"Whether permission to enter has been granted"`
@@ -36,14 +36,59 @@ type SetWorkOrderAssigneeInput struct {
 	AssigneeType string `json:"assignee_type,omitempty" jsonschema:"Assignee type: USER or VENDOR (default USER)"`
 }
 
-type WorkOrderIDStringInput struct {
+type SetWorkOrderDescriptionMCPInput struct {
 	WorkOrderID string `json:"work_order_id" jsonschema:"required,The work order ID"`
-	Value       string `json:"value" jsonschema:"required,The value to set"`
+	Description string `json:"description" jsonschema:"required,The description text"`
 }
 
-type WorkOrderIDBoolInput struct {
+type SetWorkOrderPriorityMCPInput struct {
 	WorkOrderID string `json:"work_order_id" jsonschema:"required,The work order ID"`
-	Value       bool   `json:"value" jsonschema:"required,The boolean value to set"`
+	Priority    string `json:"priority" jsonschema:"required,Priority: NORMAL or URGENT"`
+}
+
+type SetWorkOrderScheduledForMCPInput struct {
+	WorkOrderID  string `json:"work_order_id" jsonschema:"required,The work order ID"`
+	ScheduledFor string `json:"scheduled_for" jsonschema:"required,Scheduled date in ISO 8601 format"`
+}
+
+type SetWorkOrderLocationMCPInput struct {
+	WorkOrderID string `json:"work_order_id" jsonschema:"required,The work order ID"`
+	LocationID  string `json:"location_id" jsonschema:"required,The property or unit ID"`
+}
+
+type SetWorkOrderTypeMCPInput struct {
+	WorkOrderID   string `json:"work_order_id" jsonschema:"required,The work order ID"`
+	WorkOrderType string `json:"work_order_type" jsonschema:"required,Type: SERVICE_REQUEST TURN CAPITAL_IMPROVEMENT CURB_APPEAL INCIDENT INVENTORY LIFE_SAFETY PREVENTATIVE_MAINTENANCE REGULATORY SEASONAL_MAINTENANCE"`
+}
+
+type SetWorkOrderEntryNotesMCPInput struct {
+	WorkOrderID string `json:"work_order_id" jsonschema:"required,The work order ID"`
+	EntryNotes  string `json:"entry_notes" jsonschema:"required,Notes about entering the location"`
+}
+
+type AddWorkOrderCommentMCPInput struct {
+	WorkOrderID string `json:"work_order_id" jsonschema:"required,The work order ID"`
+	Comment     string `json:"comment" jsonschema:"required,The comment text"`
+}
+
+type AddWorkOrderTimeMCPInput struct {
+	WorkOrderID string `json:"work_order_id" jsonschema:"required,The work order ID"`
+	Duration    string `json:"duration" jsonschema:"required,Time spent in ISO 8601 duration format (e.g. PT1H30M)"`
+}
+
+type SetWorkOrderPermissionToEnterMCPInput struct {
+	WorkOrderID       string `json:"work_order_id" jsonschema:"required,The work order ID"`
+	PermissionToEnter bool   `json:"permission_to_enter" jsonschema:"required,Whether permission to enter has been granted"`
+}
+
+type SetWorkOrderResidentApprovedEntryMCPInput struct {
+	WorkOrderID           string `json:"work_order_id" jsonschema:"required,The work order ID"`
+	ResidentApprovedEntry bool   `json:"resident_approved_entry" jsonschema:"required,Whether the resident has approved entry"`
+}
+
+type SetWorkOrderUnitEnteredMCPInput struct {
+	WorkOrderID string `json:"work_order_id" jsonschema:"required,The work order ID"`
+	UnitEntered bool   `json:"unit_entered" jsonschema:"required,Whether the unit has been entered"`
 }
 
 type WorkOrderIDOnlyInput struct {
@@ -120,7 +165,7 @@ func registerWorkOrderMutationTools(server *mcp.Server, client apiClient, debug 
 			if input.Type != "" {
 				upper := strings.ToUpper(input.Type)
 				if !models.ValidWorkOrderTypes[upper] {
-					return toolInputError("type must be one of SERVICE_REQUEST, TURN, CAPITAL_IMPROVEMENT, INSPECTION_RELATED, APPLIANCE_REPLACEMENT"), nil, nil
+					return toolInputError("type must be one of SERVICE_REQUEST, TURN, CAPITAL_IMPROVEMENT, CURB_APPEAL, INCIDENT, INVENTORY, LIFE_SAFETY, PREVENTATIVE_MAINTENANCE, REGULATORY, SEASONAL_MAINTENANCE"), nil, nil
 				}
 				apiInput.Type = upper
 			}
@@ -234,21 +279,21 @@ func registerWorkOrderMutationTools(server *mcp.Server, client apiClient, debug 
 			Name:        "work_order_set_description",
 			Description: "Set the description of a work order",
 		},
-		wrapTool(debug, "work_order_set_description", func(ctx context.Context, _ *mcp.CallToolRequest, input WorkOrderIDStringInput) (*mcp.CallToolResult, any, error) {
+		wrapTool(debug, "work_order_set_description", func(ctx context.Context, _ *mcp.CallToolRequest, input SetWorkOrderDescriptionMCPInput) (*mcp.CallToolResult, any, error) {
 			if errResult := requireID("work_order_id", input.WorkOrderID); errResult != nil {
 				return errResult, nil, nil
 			}
-			if input.Value == "" {
-				return toolInputError("value (description) is required"), nil, nil
+			if input.Description == "" {
+				return toolInputError("description is required"), nil, nil
 			}
-			if err := models.ValidateFreeText("description", input.Value); err != nil {
+			if err := models.ValidateFreeText("description", input.Description); err != nil {
 				return toolInputError(err.Error()), nil, nil
 			}
 
 			ctx, cancel := context.WithTimeout(ctx, toolTimeout)
 			defer cancel()
 
-			wo, err := client.WorkOrderSetDescription(ctx, input.WorkOrderID, input.Value)
+			wo, err := client.WorkOrderSetDescription(ctx, input.WorkOrderID, input.Description)
 			if err != nil {
 				return toolError(err), nil, nil
 			}
@@ -262,14 +307,14 @@ func registerWorkOrderMutationTools(server *mcp.Server, client apiClient, debug 
 			Name:        "work_order_set_priority",
 			Description: "Set the priority of a work order (NORMAL or URGENT)",
 		},
-		wrapTool(debug, "work_order_set_priority", func(ctx context.Context, _ *mcp.CallToolRequest, input WorkOrderIDStringInput) (*mcp.CallToolResult, any, error) {
+		wrapTool(debug, "work_order_set_priority", func(ctx context.Context, _ *mcp.CallToolRequest, input SetWorkOrderPriorityMCPInput) (*mcp.CallToolResult, any, error) {
 			if errResult := requireID("work_order_id", input.WorkOrderID); errResult != nil {
 				return errResult, nil, nil
 			}
-			if input.Value == "" {
-				return toolInputError("value (priority) is required"), nil, nil
+			if input.Priority == "" {
+				return toolInputError("priority is required"), nil, nil
 			}
-			upper := strings.ToUpper(input.Value)
+			upper := strings.ToUpper(input.Priority)
 			if !models.ValidWorkOrderPriorities[upper] {
 				return toolInputError("priority must be NORMAL or URGENT"), nil, nil
 			}
@@ -291,21 +336,21 @@ func registerWorkOrderMutationTools(server *mcp.Server, client apiClient, debug 
 			Name:        "work_order_set_scheduled_for",
 			Description: "Set the scheduled date for a work order (ISO 8601 format)",
 		},
-		wrapTool(debug, "work_order_set_scheduled_for", func(ctx context.Context, _ *mcp.CallToolRequest, input WorkOrderIDStringInput) (*mcp.CallToolResult, any, error) {
+		wrapTool(debug, "work_order_set_scheduled_for", func(ctx context.Context, _ *mcp.CallToolRequest, input SetWorkOrderScheduledForMCPInput) (*mcp.CallToolResult, any, error) {
 			if errResult := requireID("work_order_id", input.WorkOrderID); errResult != nil {
 				return errResult, nil, nil
 			}
-			if input.Value == "" {
-				return toolInputError("value (scheduled_for date) is required"), nil, nil
+			if input.ScheduledFor == "" {
+				return toolInputError("scheduled_for is required"), nil, nil
 			}
-			if err := models.ValidateTimestamp("scheduled_for", input.Value); err != nil {
+			if err := models.ValidateTimestamp("scheduled_for", input.ScheduledFor); err != nil {
 				return toolInputError(err.Error()), nil, nil
 			}
 
 			ctx, cancel := context.WithTimeout(ctx, toolTimeout)
 			defer cancel()
 
-			wo, err := client.WorkOrderSetScheduledFor(ctx, input.WorkOrderID, input.Value)
+			wo, err := client.WorkOrderSetScheduledFor(ctx, input.WorkOrderID, input.ScheduledFor)
 			if err != nil {
 				return toolError(err), nil, nil
 			}
@@ -319,18 +364,18 @@ func registerWorkOrderMutationTools(server *mcp.Server, client apiClient, debug 
 			Name:        "work_order_set_location",
 			Description: "Set the location (property or unit) of a work order",
 		},
-		wrapTool(debug, "work_order_set_location", func(ctx context.Context, _ *mcp.CallToolRequest, input WorkOrderIDStringInput) (*mcp.CallToolResult, any, error) {
+		wrapTool(debug, "work_order_set_location", func(ctx context.Context, _ *mcp.CallToolRequest, input SetWorkOrderLocationMCPInput) (*mcp.CallToolResult, any, error) {
 			if errResult := requireID("work_order_id", input.WorkOrderID); errResult != nil {
 				return errResult, nil, nil
 			}
-			if errResult := requireID("value (location_id)", input.Value); errResult != nil {
+			if errResult := requireID("location_id", input.LocationID); errResult != nil {
 				return errResult, nil, nil
 			}
 
 			ctx, cancel := context.WithTimeout(ctx, toolTimeout)
 			defer cancel()
 
-			wo, err := client.WorkOrderSetLocation(ctx, input.WorkOrderID, input.Value)
+			wo, err := client.WorkOrderSetLocation(ctx, input.WorkOrderID, input.LocationID)
 			if err != nil {
 				return toolError(err), nil, nil
 			}
@@ -344,16 +389,16 @@ func registerWorkOrderMutationTools(server *mcp.Server, client apiClient, debug 
 			Name:        "work_order_set_type",
 			Description: "Set the type of a work order (SERVICE_REQUEST, TURN, etc.)",
 		},
-		wrapTool(debug, "work_order_set_type", func(ctx context.Context, _ *mcp.CallToolRequest, input WorkOrderIDStringInput) (*mcp.CallToolResult, any, error) {
+		wrapTool(debug, "work_order_set_type", func(ctx context.Context, _ *mcp.CallToolRequest, input SetWorkOrderTypeMCPInput) (*mcp.CallToolResult, any, error) {
 			if errResult := requireID("work_order_id", input.WorkOrderID); errResult != nil {
 				return errResult, nil, nil
 			}
-			if input.Value == "" {
-				return toolInputError("value (type) is required"), nil, nil
+			if input.WorkOrderType == "" {
+				return toolInputError("work_order_type is required"), nil, nil
 			}
-			upper := strings.ToUpper(input.Value)
+			upper := strings.ToUpper(input.WorkOrderType)
 			if !models.ValidWorkOrderTypes[upper] {
-				return toolInputError("type must be one of SERVICE_REQUEST, TURN, CAPITAL_IMPROVEMENT, INSPECTION_RELATED, APPLIANCE_REPLACEMENT"), nil, nil
+				return toolInputError("type must be one of SERVICE_REQUEST, TURN, CAPITAL_IMPROVEMENT, CURB_APPEAL, INCIDENT, INVENTORY, LIFE_SAFETY, PREVENTATIVE_MAINTENANCE, REGULATORY, SEASONAL_MAINTENANCE"), nil, nil
 			}
 
 			ctx, cancel := context.WithTimeout(ctx, toolTimeout)
@@ -373,21 +418,21 @@ func registerWorkOrderMutationTools(server *mcp.Server, client apiClient, debug 
 			Name:        "work_order_set_entry_notes",
 			Description: "Set the entry notes of a work order",
 		},
-		wrapTool(debug, "work_order_set_entry_notes", func(ctx context.Context, _ *mcp.CallToolRequest, input WorkOrderIDStringInput) (*mcp.CallToolResult, any, error) {
+		wrapTool(debug, "work_order_set_entry_notes", func(ctx context.Context, _ *mcp.CallToolRequest, input SetWorkOrderEntryNotesMCPInput) (*mcp.CallToolResult, any, error) {
 			if errResult := requireID("work_order_id", input.WorkOrderID); errResult != nil {
 				return errResult, nil, nil
 			}
-			if input.Value == "" {
-				return toolInputError("value (entry_notes) is required"), nil, nil
+			if input.EntryNotes == "" {
+				return toolInputError("entry_notes is required"), nil, nil
 			}
-			if err := models.ValidateFreeText("entry_notes", input.Value); err != nil {
+			if err := models.ValidateFreeText("entry_notes", input.EntryNotes); err != nil {
 				return toolInputError(err.Error()), nil, nil
 			}
 
 			ctx, cancel := context.WithTimeout(ctx, toolTimeout)
 			defer cancel()
 
-			wo, err := client.WorkOrderSetEntryNotes(ctx, input.WorkOrderID, input.Value)
+			wo, err := client.WorkOrderSetEntryNotes(ctx, input.WorkOrderID, input.EntryNotes)
 			if err != nil {
 				return toolError(err), nil, nil
 			}
@@ -401,7 +446,7 @@ func registerWorkOrderMutationTools(server *mcp.Server, client apiClient, debug 
 			Name:        "work_order_set_permission_to_enter",
 			Description: "Set the permission to enter flag on a work order",
 		},
-		wrapTool(debug, "work_order_set_permission_to_enter", func(ctx context.Context, _ *mcp.CallToolRequest, input WorkOrderIDBoolInput) (*mcp.CallToolResult, any, error) {
+		wrapTool(debug, "work_order_set_permission_to_enter", func(ctx context.Context, _ *mcp.CallToolRequest, input SetWorkOrderPermissionToEnterMCPInput) (*mcp.CallToolResult, any, error) {
 			if errResult := requireID("work_order_id", input.WorkOrderID); errResult != nil {
 				return errResult, nil, nil
 			}
@@ -409,7 +454,7 @@ func registerWorkOrderMutationTools(server *mcp.Server, client apiClient, debug 
 			ctx, cancel := context.WithTimeout(ctx, toolTimeout)
 			defer cancel()
 
-			wo, err := client.WorkOrderSetPermissionToEnter(ctx, input.WorkOrderID, input.Value)
+			wo, err := client.WorkOrderSetPermissionToEnter(ctx, input.WorkOrderID, input.PermissionToEnter)
 			if err != nil {
 				return toolError(err), nil, nil
 			}
@@ -423,7 +468,7 @@ func registerWorkOrderMutationTools(server *mcp.Server, client apiClient, debug 
 			Name:        "work_order_set_resident_approved_entry",
 			Description: "Set the resident approved entry flag on a work order",
 		},
-		wrapTool(debug, "work_order_set_resident_approved_entry", func(ctx context.Context, _ *mcp.CallToolRequest, input WorkOrderIDBoolInput) (*mcp.CallToolResult, any, error) {
+		wrapTool(debug, "work_order_set_resident_approved_entry", func(ctx context.Context, _ *mcp.CallToolRequest, input SetWorkOrderResidentApprovedEntryMCPInput) (*mcp.CallToolResult, any, error) {
 			if errResult := requireID("work_order_id", input.WorkOrderID); errResult != nil {
 				return errResult, nil, nil
 			}
@@ -431,7 +476,7 @@ func registerWorkOrderMutationTools(server *mcp.Server, client apiClient, debug 
 			ctx, cancel := context.WithTimeout(ctx, toolTimeout)
 			defer cancel()
 
-			wo, err := client.WorkOrderSetResidentApprovedEntry(ctx, input.WorkOrderID, input.Value)
+			wo, err := client.WorkOrderSetResidentApprovedEntry(ctx, input.WorkOrderID, input.ResidentApprovedEntry)
 			if err != nil {
 				return toolError(err), nil, nil
 			}
@@ -445,7 +490,7 @@ func registerWorkOrderMutationTools(server *mcp.Server, client apiClient, debug 
 			Name:        "work_order_set_unit_entered",
 			Description: "Set the unit entered flag on a work order",
 		},
-		wrapTool(debug, "work_order_set_unit_entered", func(ctx context.Context, _ *mcp.CallToolRequest, input WorkOrderIDBoolInput) (*mcp.CallToolResult, any, error) {
+		wrapTool(debug, "work_order_set_unit_entered", func(ctx context.Context, _ *mcp.CallToolRequest, input SetWorkOrderUnitEnteredMCPInput) (*mcp.CallToolResult, any, error) {
 			if errResult := requireID("work_order_id", input.WorkOrderID); errResult != nil {
 				return errResult, nil, nil
 			}
@@ -453,7 +498,7 @@ func registerWorkOrderMutationTools(server *mcp.Server, client apiClient, debug 
 			ctx, cancel := context.WithTimeout(ctx, toolTimeout)
 			defer cancel()
 
-			wo, err := client.WorkOrderSetUnitEntered(ctx, input.WorkOrderID, input.Value)
+			wo, err := client.WorkOrderSetUnitEntered(ctx, input.WorkOrderID, input.UnitEntered)
 			if err != nil {
 				return toolError(err), nil, nil
 			}
@@ -492,21 +537,21 @@ func registerWorkOrderMutationTools(server *mcp.Server, client apiClient, debug 
 			Name:        "work_order_add_comment",
 			Description: "Add a comment to a work order",
 		},
-		wrapTool(debug, "work_order_add_comment", func(ctx context.Context, _ *mcp.CallToolRequest, input WorkOrderIDStringInput) (*mcp.CallToolResult, any, error) {
+		wrapTool(debug, "work_order_add_comment", func(ctx context.Context, _ *mcp.CallToolRequest, input AddWorkOrderCommentMCPInput) (*mcp.CallToolResult, any, error) {
 			if errResult := requireID("work_order_id", input.WorkOrderID); errResult != nil {
 				return errResult, nil, nil
 			}
-			if input.Value == "" {
-				return toolInputError("value (comment) is required"), nil, nil
+			if input.Comment == "" {
+				return toolInputError("comment is required"), nil, nil
 			}
-			if err := models.ValidateFreeText("comment", input.Value); err != nil {
+			if err := models.ValidateFreeText("comment", input.Comment); err != nil {
 				return toolInputError(err.Error()), nil, nil
 			}
 
 			ctx, cancel := context.WithTimeout(ctx, toolTimeout)
 			defer cancel()
 
-			wo, err := client.WorkOrderAddComment(ctx, input.WorkOrderID, input.Value)
+			wo, err := client.WorkOrderAddComment(ctx, input.WorkOrderID, input.Comment)
 			if err != nil {
 				return toolError(err), nil, nil
 			}
@@ -520,21 +565,21 @@ func registerWorkOrderMutationTools(server *mcp.Server, client apiClient, debug 
 			Name:        "work_order_add_time",
 			Description: "Add time spent on a work order (ISO 8601 duration, e.g. PT1H30M)",
 		},
-		wrapTool(debug, "work_order_add_time", func(ctx context.Context, _ *mcp.CallToolRequest, input WorkOrderIDStringInput) (*mcp.CallToolResult, any, error) {
+		wrapTool(debug, "work_order_add_time", func(ctx context.Context, _ *mcp.CallToolRequest, input AddWorkOrderTimeMCPInput) (*mcp.CallToolResult, any, error) {
 			if errResult := requireID("work_order_id", input.WorkOrderID); errResult != nil {
 				return errResult, nil, nil
 			}
-			if input.Value == "" {
-				return toolInputError("value (duration in ISO 8601 format, e.g. PT1H30M) is required"), nil, nil
+			if input.Duration == "" {
+				return toolInputError("duration is required (ISO 8601 format, e.g. PT1H30M)"), nil, nil
 			}
-			if err := models.ValidateDuration(input.Value); err != nil {
+			if err := models.ValidateDuration(input.Duration); err != nil {
 				return toolInputError(err.Error()), nil, nil
 			}
 
 			ctx, cancel := context.WithTimeout(ctx, toolTimeout)
 			defer cancel()
 
-			wo, err := client.WorkOrderAddTime(ctx, input.WorkOrderID, input.Value)
+			wo, err := client.WorkOrderAddTime(ctx, input.WorkOrderID, input.Duration)
 			if err != nil {
 				return toolError(err), nil, nil
 			}
@@ -546,7 +591,7 @@ func registerWorkOrderMutationTools(server *mcp.Server, client apiClient, debug 
 	mcp.AddTool(server,
 		&mcp.Tool{
 			Name:        "work_order_add_attachment",
-			Description: "Add an attachment to a work order. Returns a signed URL for uploading the file via PUT request",
+			Description: "Add an attachment to a work order. Returns a signed upload URL — give the URL directly to the user so they can upload the file via HTTP PUT",
 		},
 		wrapTool(debug, "work_order_add_attachment", func(ctx context.Context, _ *mcp.CallToolRequest, input AddWorkOrderAttachmentInput) (*mcp.CallToolResult, any, error) {
 			if errResult := requireID("work_order_id", input.WorkOrderID); errResult != nil {
@@ -800,14 +845,29 @@ type ProjectSetAssigneeMCPInput struct {
 	AssigneeID *string `json:"assignee_id" jsonschema:"User ID to assign (null to unassign)"`
 }
 
-type ProjectIDStringInput struct {
+type SetProjectNotesMCPInput struct {
 	ProjectID string `json:"project_id" jsonschema:"required,The project ID"`
-	Value     string `json:"value" jsonschema:"required,The value to set"`
+	Notes     string `json:"notes" jsonschema:"required,The project notes text"`
 }
 
-type ProjectIDBoolInput struct {
+type SetProjectDueAtMCPInput struct {
 	ProjectID string `json:"project_id" jsonschema:"required,The project ID"`
-	Value     bool   `json:"value" jsonschema:"required,The boolean value to set"`
+	DueAt     string `json:"due_at" jsonschema:"required,Due date in ISO 8601 format"`
+}
+
+type SetProjectStartAtMCPInput struct {
+	ProjectID string `json:"project_id" jsonschema:"required,The project ID"`
+	StartAt   string `json:"start_at" jsonschema:"required,Start date in ISO 8601 format"`
+}
+
+type SetProjectPriorityMCPInput struct {
+	ProjectID string `json:"project_id" jsonschema:"required,The project ID"`
+	Priority  string `json:"priority" jsonschema:"required,Priority: NORMAL or URGENT"`
+}
+
+type SetProjectOnHoldMCPInput struct {
+	ProjectID string `json:"project_id" jsonschema:"required,The project ID"`
+	OnHold    bool   `json:"on_hold" jsonschema:"required,Whether the project is on hold"`
 }
 
 type ProjectSetAvailabilityTargetAtMCPInput struct {
@@ -837,9 +897,14 @@ type UserIDNameInput struct {
 	Name   string `json:"name" jsonschema:"required,New full name"`
 }
 
-type UserIDOptionalStringInput struct {
+type SetUserShortNameMCPInput struct {
+	UserID    string  `json:"user_id" jsonschema:"required,The user ID"`
+	ShortName *string `json:"short_name" jsonschema:"Informal/given name (null to derive from full name)"`
+}
+
+type SetUserPhoneMCPInput struct {
 	UserID string  `json:"user_id" jsonschema:"required,The user ID"`
-	Value  *string `json:"value" jsonschema:"The value to set (null to clear)"`
+	Phone  *string `json:"phone" jsonschema:"Phone number (null to remove)"`
 }
 
 type MembershipCreateMCPInput struct {
@@ -1550,7 +1615,7 @@ func registerInspectionMutationTools(server *mcp.Server, client apiClient, debug
 	mcp.AddTool(server,
 		&mcp.Tool{
 			Name:        "inspection_add_item_photo",
-			Description: "Add a photo to an inspection item. Returns a signed URL for uploading the file via PUT request",
+			Description: "Add a photo to an inspection item. Returns a signed upload URL — give the URL directly to the user so they can upload the file via HTTP PUT",
 		},
 		wrapTool(debug, "inspection_add_item_photo", func(ctx context.Context, _ *mcp.CallToolRequest, input InspectionAddItemPhotoMCPInput) (*mcp.CallToolResult, any, error) {
 			if errResult := requireID("inspection_id", input.InspectionID); errResult != nil {
@@ -1830,21 +1895,21 @@ func registerProjectMutationTools(server *mcp.Server, client apiClient, debug bo
 			Name:        "project_set_notes",
 			Description: "Set the notes on a project",
 		},
-		wrapTool(debug, "project_set_notes", func(ctx context.Context, _ *mcp.CallToolRequest, input ProjectIDStringInput) (*mcp.CallToolResult, any, error) {
+		wrapTool(debug, "project_set_notes", func(ctx context.Context, _ *mcp.CallToolRequest, input SetProjectNotesMCPInput) (*mcp.CallToolResult, any, error) {
 			if errResult := requireID("project_id", input.ProjectID); errResult != nil {
 				return errResult, nil, nil
 			}
-			if input.Value == "" {
-				return toolInputError("value (notes) is required"), nil, nil
+			if input.Notes == "" {
+				return toolInputError("notes is required"), nil, nil
 			}
-			if err := models.ValidateFreeText("notes", input.Value); err != nil {
+			if err := models.ValidateFreeText("notes", input.Notes); err != nil {
 				return toolInputError(err.Error()), nil, nil
 			}
 
 			ctx, cancel := context.WithTimeout(ctx, toolTimeout)
 			defer cancel()
 
-			proj, err := client.ProjectSetNotes(ctx, input.ProjectID, input.Value)
+			proj, err := client.ProjectSetNotes(ctx, input.ProjectID, input.Notes)
 			if err != nil {
 				return toolError(err), nil, nil
 			}
@@ -1858,21 +1923,21 @@ func registerProjectMutationTools(server *mcp.Server, client apiClient, debug bo
 			Name:        "project_set_due_at",
 			Description: "Set the due date for a project (ISO 8601 format)",
 		},
-		wrapTool(debug, "project_set_due_at", func(ctx context.Context, _ *mcp.CallToolRequest, input ProjectIDStringInput) (*mcp.CallToolResult, any, error) {
+		wrapTool(debug, "project_set_due_at", func(ctx context.Context, _ *mcp.CallToolRequest, input SetProjectDueAtMCPInput) (*mcp.CallToolResult, any, error) {
 			if errResult := requireID("project_id", input.ProjectID); errResult != nil {
 				return errResult, nil, nil
 			}
-			if input.Value == "" {
-				return toolInputError("value (due_at date) is required"), nil, nil
+			if input.DueAt == "" {
+				return toolInputError("due_at is required"), nil, nil
 			}
-			if err := models.ValidateTimestamp("due_at", input.Value); err != nil {
+			if err := models.ValidateTimestamp("due_at", input.DueAt); err != nil {
 				return toolInputError(err.Error()), nil, nil
 			}
 
 			ctx, cancel := context.WithTimeout(ctx, toolTimeout)
 			defer cancel()
 
-			proj, err := client.ProjectSetDueAt(ctx, input.ProjectID, input.Value)
+			proj, err := client.ProjectSetDueAt(ctx, input.ProjectID, input.DueAt)
 			if err != nil {
 				return toolError(err), nil, nil
 			}
@@ -1886,21 +1951,21 @@ func registerProjectMutationTools(server *mcp.Server, client apiClient, debug bo
 			Name:        "project_set_start_at",
 			Description: "Set the start date for a project (ISO 8601 format)",
 		},
-		wrapTool(debug, "project_set_start_at", func(ctx context.Context, _ *mcp.CallToolRequest, input ProjectIDStringInput) (*mcp.CallToolResult, any, error) {
+		wrapTool(debug, "project_set_start_at", func(ctx context.Context, _ *mcp.CallToolRequest, input SetProjectStartAtMCPInput) (*mcp.CallToolResult, any, error) {
 			if errResult := requireID("project_id", input.ProjectID); errResult != nil {
 				return errResult, nil, nil
 			}
-			if input.Value == "" {
-				return toolInputError("value (start_at date) is required"), nil, nil
+			if input.StartAt == "" {
+				return toolInputError("start_at is required"), nil, nil
 			}
-			if err := models.ValidateTimestamp("start_at", input.Value); err != nil {
+			if err := models.ValidateTimestamp("start_at", input.StartAt); err != nil {
 				return toolInputError(err.Error()), nil, nil
 			}
 
 			ctx, cancel := context.WithTimeout(ctx, toolTimeout)
 			defer cancel()
 
-			proj, err := client.ProjectSetStartAt(ctx, input.ProjectID, input.Value)
+			proj, err := client.ProjectSetStartAt(ctx, input.ProjectID, input.StartAt)
 			if err != nil {
 				return toolError(err), nil, nil
 			}
@@ -1914,14 +1979,14 @@ func registerProjectMutationTools(server *mcp.Server, client apiClient, debug bo
 			Name:        "project_set_priority",
 			Description: "Set the priority of a project (NORMAL or URGENT)",
 		},
-		wrapTool(debug, "project_set_priority", func(ctx context.Context, _ *mcp.CallToolRequest, input ProjectIDStringInput) (*mcp.CallToolResult, any, error) {
+		wrapTool(debug, "project_set_priority", func(ctx context.Context, _ *mcp.CallToolRequest, input SetProjectPriorityMCPInput) (*mcp.CallToolResult, any, error) {
 			if errResult := requireID("project_id", input.ProjectID); errResult != nil {
 				return errResult, nil, nil
 			}
-			if input.Value == "" {
-				return toolInputError("value (priority) is required"), nil, nil
+			if input.Priority == "" {
+				return toolInputError("priority is required"), nil, nil
 			}
-			upper := strings.ToUpper(input.Value)
+			upper := strings.ToUpper(input.Priority)
 			if !models.ValidProjectPriorities[upper] {
 				return toolInputError("priority must be NORMAL or URGENT"), nil, nil
 			}
@@ -1943,7 +2008,7 @@ func registerProjectMutationTools(server *mcp.Server, client apiClient, debug bo
 			Name:        "project_set_on_hold",
 			Description: "Set or clear the on-hold status of a project",
 		},
-		wrapTool(debug, "project_set_on_hold", func(ctx context.Context, _ *mcp.CallToolRequest, input ProjectIDBoolInput) (*mcp.CallToolResult, any, error) {
+		wrapTool(debug, "project_set_on_hold", func(ctx context.Context, _ *mcp.CallToolRequest, input SetProjectOnHoldMCPInput) (*mcp.CallToolResult, any, error) {
 			if errResult := requireID("project_id", input.ProjectID); errResult != nil {
 				return errResult, nil, nil
 			}
@@ -1951,7 +2016,7 @@ func registerProjectMutationTools(server *mcp.Server, client apiClient, debug bo
 			ctx, cancel := context.WithTimeout(ctx, toolTimeout)
 			defer cancel()
 
-			proj, err := client.ProjectSetOnHold(ctx, input.ProjectID, input.Value)
+			proj, err := client.ProjectSetOnHold(ctx, input.ProjectID, input.OnHold)
 			if err != nil {
 				return toolError(err), nil, nil
 			}
@@ -2018,11 +2083,14 @@ func registerAccountMutationTools(server *mcp.Server, client apiClient, debug bo
 
 	// --- User Tools (5) ---
 
-	// user_create
+	// user_create (destructive — sends invitation email)
 	mcp.AddTool(server,
 		&mcp.Tool{
 			Name:        "user_create",
-			Description: "Create a new user in an account and send an invitation email",
+			Description: "Create a new user account and send an invitation email. Use this for people who don't have a HappyCo account yet. For existing users, use membership_create instead",
+			Annotations: &mcp.ToolAnnotations{
+				DestructiveHint: &destructive,
+			},
 		},
 		wrapTool(debug, "user_create", func(ctx context.Context, _ *mcp.CallToolRequest, input UserCreateMCPInput) (*mcp.CallToolResult, any, error) {
 			if errResult := requireID("account_id", input.AccountID); errResult != nil {
@@ -2140,12 +2208,12 @@ func registerAccountMutationTools(server *mcp.Server, client apiClient, debug bo
 			Name:        "user_set_short_name",
 			Description: "Set or clear a user's short name (null to derive from full name)",
 		},
-		wrapTool(debug, "user_set_short_name", func(ctx context.Context, _ *mcp.CallToolRequest, input UserIDOptionalStringInput) (*mcp.CallToolResult, any, error) {
+		wrapTool(debug, "user_set_short_name", func(ctx context.Context, _ *mcp.CallToolRequest, input SetUserShortNameMCPInput) (*mcp.CallToolResult, any, error) {
 			if errResult := requireID("user_id", input.UserID); errResult != nil {
 				return errResult, nil, nil
 			}
-			if input.Value != nil && *input.Value != "" {
-				if err := models.ValidateFreeText("short_name", *input.Value); err != nil {
+			if input.ShortName != nil && *input.ShortName != "" {
+				if err := models.ValidateFreeText("short_name", *input.ShortName); err != nil {
 					return toolInputError(err.Error()), nil, nil
 				}
 			}
@@ -2153,7 +2221,7 @@ func registerAccountMutationTools(server *mcp.Server, client apiClient, debug bo
 			ctx, cancel := context.WithTimeout(ctx, toolTimeout)
 			defer cancel()
 
-			user, err := client.UserSetShortName(ctx, input.UserID, input.Value)
+			user, err := client.UserSetShortName(ctx, input.UserID, input.ShortName)
 			if err != nil {
 				return toolError(err), nil, nil
 			}
@@ -2167,7 +2235,7 @@ func registerAccountMutationTools(server *mcp.Server, client apiClient, debug bo
 			Name:        "user_set_phone",
 			Description: "Set or clear a user's phone number (null to remove)",
 		},
-		wrapTool(debug, "user_set_phone", func(ctx context.Context, _ *mcp.CallToolRequest, input UserIDOptionalStringInput) (*mcp.CallToolResult, any, error) {
+		wrapTool(debug, "user_set_phone", func(ctx context.Context, _ *mcp.CallToolRequest, input SetUserPhoneMCPInput) (*mcp.CallToolResult, any, error) {
 			if errResult := requireID("user_id", input.UserID); errResult != nil {
 				return errResult, nil, nil
 			}
@@ -2175,7 +2243,7 @@ func registerAccountMutationTools(server *mcp.Server, client apiClient, debug bo
 			ctx, cancel := context.WithTimeout(ctx, toolTimeout)
 			defer cancel()
 
-			user, err := client.UserSetPhone(ctx, input.UserID, input.Value)
+			user, err := client.UserSetPhone(ctx, input.UserID, input.Phone)
 			if err != nil {
 				return toolError(err), nil, nil
 			}
@@ -2189,7 +2257,7 @@ func registerAccountMutationTools(server *mcp.Server, client apiClient, debug bo
 	mcp.AddTool(server,
 		&mcp.Tool{
 			Name:        "membership_create",
-			Description: "Admin: Create a user's membership in an account",
+			Description: "Admin: Grant an existing user access to an account. For new users who don't have a HappyCo account, use user_create instead",
 		},
 		wrapTool(debug, "membership_create", func(ctx context.Context, _ *mcp.CallToolRequest, input MembershipCreateMCPInput) (*mcp.CallToolResult, any, error) {
 			if errResult := requireID("account_id", input.AccountID); errResult != nil {
@@ -2484,7 +2552,7 @@ func registerRoleMutationTools(server *mcp.Server, client apiClient, debug bool)
 	mcp.AddTool(server,
 		&mcp.Tool{
 			Name:        "role_create",
-			Description: "Admin: Create a new permission role in an account",
+			Description: "Admin: Create a new permission role in an account. Permission actions use format domain:action (e.g. inspection:inspection.create, task:task.delete)",
 		},
 		wrapTool(debug, "role_create", func(ctx context.Context, _ *mcp.CallToolRequest, input RoleCreateMCPInput) (*mcp.CallToolResult, any, error) {
 			if errResult := requireID("account_id", input.AccountID); errResult != nil {
@@ -2600,7 +2668,7 @@ func registerRoleMutationTools(server *mcp.Server, client apiClient, debug bool)
 	mcp.AddTool(server,
 		&mcp.Tool{
 			Name:        "role_set_permissions",
-			Description: "Admin: Update permissions for a role. Only specified actions are modified; others are unchanged",
+			Description: "Admin: Update permissions for a role. Permission actions use format domain:action (e.g. inspection:inspection.create). Only specified actions are modified; others are unchanged",
 			Annotations: &mcp.ToolAnnotations{
 				DestructiveHint: &destructive,
 			},
@@ -2644,7 +2712,7 @@ func registerWebhookMutationTools(server *mcp.Server, client apiClient, debug bo
 	mcp.AddTool(server,
 		&mcp.Tool{
 			Name:        "webhook_create",
-			Description: "Admin: Create a new webhook subscription for event notifications (Standard Webhooks protocol)",
+			Description: "Admin: Create a new webhook subscription for event notifications (Standard Webhooks protocol). Note: the signing secret is redacted in the response — use the CLI to retrieve it",
 		},
 		wrapTool(debug, "webhook_create", func(ctx context.Context, _ *mcp.CallToolRequest, input WebhookCreateMCPInput) (*mcp.CallToolResult, any, error) {
 			if errResult := requireID("subscriber_id", input.SubscriberID); errResult != nil {

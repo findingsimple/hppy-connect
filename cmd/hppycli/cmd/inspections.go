@@ -891,6 +891,10 @@ var inspectionsSendToGuestCmd = &cobra.Command{
 			input.Expires = &v
 		}
 
+		if err := confirmAction(cmd, fmt.Sprintf("send inspection %s to %s", id, email), os.Stdin, os.Stderr); err != nil {
+			return err
+		}
+
 		result, err := apiClient.InspectionSendToGuest(cmd.Context(), input)
 		if err != nil {
 			return fmt.Errorf("sending to guest: %w", err)
@@ -1052,5 +1056,6 @@ func init() {
 	inspectionsSendToGuestCmd.Flags().String("message", "", "message to include in the email")
 	inspectionsSendToGuestCmd.Flags().String("due-date", "", "due date in RFC3339")
 	inspectionsSendToGuestCmd.Flags().Bool("expires", false, "whether the guest link expires")
+	inspectionsSendToGuestCmd.Flags().Bool("yes", false, "skip confirmation prompt")
 	inspectionsCmd.AddCommand(inspectionsSendToGuestCmd)
 }

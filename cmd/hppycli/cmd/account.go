@@ -10,6 +10,7 @@ import (
 var accountCmd = &cobra.Command{
 	Use:   "account",
 	Short: "Show account details",
+	Long:  "Display the account name and ID for the configured account. Unlike other commands, account is a single action (there is only one account per config).",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := cmd.Context()
 

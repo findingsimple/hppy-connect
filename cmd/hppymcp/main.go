@@ -19,7 +19,9 @@ var (
 	buildDate = "unknown"
 )
 
-const serverInstructions = `HappyCo property management API — read and manage account properties, units, work orders, inspections, projects, users, roles, and webhooks. Includes 71 mutation tools for creating and modifying resources. Property ID is required for unit queries. Use resources for quick lookups; use tools for filtered/paginated queries.`
+const serverInstructions = `HappyCo property management API — read and manage account properties, units, work orders, inspections, projects, users, roles, and webhooks. Includes 71 mutation tools for creating and modifying resources. Property ID is required for unit queries. Use resources for quick lookups; use tools for filtered/paginated queries.
+
+Scope limitation: This server does not include list/query tools for users, roles, projects, memberships, webhooks, or templates. Ask the user to provide IDs for these entities when needed by mutation tools.`
 
 func main() {
 	configPath := flag.String("config", "", "path to config file")

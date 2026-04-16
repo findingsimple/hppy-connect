@@ -14,8 +14,12 @@ var rolesCmd = &cobra.Command{
 }
 
 var rolesCreateCmd = &cobra.Command{
-	Use:     "create",
-	Short:   "Create a new permission role in an account",
+	Use:   "create",
+	Short: "Create a new permission role in an account",
+	Long: `Create a new permission role in an account.
+
+Permission actions use the format "domain:action" (e.g. inspection:inspection.create).
+Multiple permissions can be comma-separated. Common domains: inspection, task, property, user.`,
 	Example: `  hppycli roles create --name="Inspector" --grant=inspection:inspection.create,inspection:inspection.view --account-id=acct123`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		accountID, err := resolveAccountID(cmd)

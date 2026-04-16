@@ -117,13 +117,13 @@ func registerPrompts(server *mcp.Server) {
 
 1. Use the get_account tool to confirm the account context.
 2. Use the list_work_orders tool with property_id "%s" and status "OPEN" to get all open work orders.
-3. Use the list_work_orders tool with property_id "%s" and status "COMPLETED" to get recently completed work orders.
-4. Use the list_inspections tool with property_id "%s" to get recent inspections.
+3. Use the list_work_orders tool with property_id "%s", status "COMPLETED", and created_after set to %s days ago (ISO 8601 date) to get recently completed work orders.
+4. Use the list_inspections tool with property_id "%s" and created_after set to %s days ago (ISO 8601 date) to get recent inspections.
 5. Generate a maintenance report including:
    - Open work orders: count, priority breakdown, oldest open item
    - Recently completed work orders: count, average time to completion
    - Inspections: count by status, average scores
-   - Any urgent items requiring immediate attention`, propertyID, daysBack, propertyID, propertyID, propertyID),
+   - Any urgent items requiring immediate attention`, propertyID, daysBack, propertyID, propertyID, daysBack, propertyID, daysBack),
 						},
 					},
 				},

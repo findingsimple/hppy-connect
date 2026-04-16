@@ -179,7 +179,7 @@ func init() {
 
 	// Set Account Wide Access
 	propertiesSetAccountWideAccessCmd.Flags().String("id", "", "property ID (required)")
-	propertiesSetAccountWideAccessCmd.Flags().Bool("account-wide-access", false, "whether all users can access this property (required)")
+	propertiesSetAccountWideAccessCmd.Flags().Bool("account-wide-access", false, "use --account-wide-access=true or =false (required)")
 	propertiesSetAccountWideAccessCmd.Flags().Bool("yes", false, "skip confirmation prompt")
 	propertiesCmd.AddCommand(propertiesSetAccountWideAccessCmd)
 }

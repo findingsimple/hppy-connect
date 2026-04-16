@@ -40,7 +40,17 @@ func SetVersionInfo(version, commit, buildDate string) {
 var rootCmd = &cobra.Command{
 	Use:   "hppycli",
 	Short: "HappyCo CLI tool",
-	Long:  "Command-line interface for the HappyCo external GraphQL API.",
+	Long: `Command-line interface for the HappyCo external GraphQL API.
+
+Getting started:
+  1. Run 'hppycli config init' to create a config file
+  2. Or set HAPPYCO_EMAIL, HAPPYCO_PASSWORD, HAPPYCO_ACCOUNT_ID environment variables
+  3. Run 'hppycli account' to verify your connection
+
+Available domains: account, properties, units (read), work orders, inspections,
+projects, users, memberships, roles, webhooks (read + write).
+
+Use 'hppycli [command] --help' for details on any command.`,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		// Skip config loading for commands that don't need the API client.
 		// Convention: all leaf commands that call the API must use RunE (not Run).

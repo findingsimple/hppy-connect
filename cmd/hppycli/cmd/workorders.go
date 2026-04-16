@@ -110,7 +110,7 @@ var workordersCreateCmd = &cobra.Command{
 		if v, _ := cmd.Flags().GetString("type"); v != "" {
 			upper := strings.ToUpper(v)
 			if !models.ValidWorkOrderTypes[upper] {
-				return fmt.Errorf("invalid --type %q: must be one of SERVICE_REQUEST, TURN, CAPITAL_IMPROVEMENT, INSPECTION_RELATED, APPLIANCE_REPLACEMENT", v)
+				return fmt.Errorf("invalid --type %q: must be one of SERVICE_REQUEST, TURN, CAPITAL_IMPROVEMENT, CURB_APPEAL, INCIDENT, INVENTORY, LIFE_SAFETY, PREVENTATIVE_MAINTENANCE, REGULATORY, SEASONAL_MAINTENANCE", v)
 			}
 			input.Type = upper
 		}
@@ -383,7 +383,7 @@ var workordersSetTypeCmd = &cobra.Command{
 		}
 		upper := strings.ToUpper(woType)
 		if !models.ValidWorkOrderTypes[upper] {
-			return fmt.Errorf("invalid --type %q: must be one of SERVICE_REQUEST, TURN, CAPITAL_IMPROVEMENT, INSPECTION_RELATED, APPLIANCE_REPLACEMENT", woType)
+			return fmt.Errorf("invalid --type %q: must be one of SERVICE_REQUEST, TURN, CAPITAL_IMPROVEMENT, CURB_APPEAL, INCIDENT, INVENTORY, LIFE_SAFETY, PREVENTATIVE_MAINTENANCE, REGULATORY, SEASONAL_MAINTENANCE", woType)
 		}
 
 		wo, err := apiClient.WorkOrderSetType(cmd.Context(), id, upper)
@@ -719,7 +719,7 @@ func init() {
 	workordersCreateCmd.Flags().String("description", "", "work order description")
 	workordersCreateCmd.Flags().String("priority", "", "priority: NORMAL or URGENT")
 	workordersCreateCmd.Flags().String("status", "", "status: OPEN, ON_HOLD, COMPLETED")
-	workordersCreateCmd.Flags().String("type", "", "type: SERVICE_REQUEST, TURN, CAPITAL_IMPROVEMENT, INSPECTION_RELATED, APPLIANCE_REPLACEMENT")
+	workordersCreateCmd.Flags().String("type", "", "type: SERVICE_REQUEST, TURN, CAPITAL_IMPROVEMENT, CURB_APPEAL, INCIDENT, INVENTORY, LIFE_SAFETY, PREVENTATIVE_MAINTENANCE, REGULATORY, SEASONAL_MAINTENANCE")
 	workordersCreateCmd.Flags().String("scheduled-for", "", "scheduled date (RFC3339)")
 	workordersCreateCmd.Flags().String("entry-notes", "", "entry notes")
 	workordersCreateCmd.Flags().Bool("permission-to-enter", false, "permission to enter")
@@ -772,17 +772,17 @@ func init() {
 
 	// Set Permission to Enter
 	workordersSetPermissionToEnterCmd.Flags().String("id", "", "work order ID (required)")
-	workordersSetPermissionToEnterCmd.Flags().Bool("permission-to-enter", false, "permission to enter (required)")
+	workordersSetPermissionToEnterCmd.Flags().Bool("permission-to-enter", false, "use --permission-to-enter=true or =false (required)")
 	workordersCmd.AddCommand(workordersSetPermissionToEnterCmd)
 
 	// Set Resident Approved Entry
 	workordersSetResidentApprovedEntryCmd.Flags().String("id", "", "work order ID (required)")
-	workordersSetResidentApprovedEntryCmd.Flags().Bool("resident-approved-entry", false, "resident approved entry (required)")
+	workordersSetResidentApprovedEntryCmd.Flags().Bool("resident-approved-entry", false, "use --resident-approved-entry=true or =false (required)")
 	workordersCmd.AddCommand(workordersSetResidentApprovedEntryCmd)
 
 	// Set Unit Entered
 	workordersSetUnitEnteredCmd.Flags().String("id", "", "work order ID (required)")
-	workordersSetUnitEnteredCmd.Flags().Bool("unit-entered", false, "unit entered (required)")
+	workordersSetUnitEnteredCmd.Flags().Bool("unit-entered", false, "use --unit-entered=true or =false (required)")
 	workordersCmd.AddCommand(workordersSetUnitEnteredCmd)
 
 	// Archive (destructive)
