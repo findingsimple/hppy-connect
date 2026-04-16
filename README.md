@@ -357,7 +357,7 @@ hppycli seed --count=5 --output json --yes
 
 ## MCP Server Setup
 
-### Claude Code / Claude Desktop
+### Claude Code
 
 1. Register the MCP server:
    ```bash
@@ -366,6 +366,24 @@ hppycli seed --count=5 --output json --yes
    claude mcp add --transport stdio --scope user hppymcp -- hppymcp --config ~/.hppycli.yaml
    ```
 2. Restart Claude Code. Ask "What HappyCo account am I connected to?" to verify.
+
+### Claude Desktop
+
+1. Open your config file at `~/Library/Application Support/Claude/claude_desktop_config.json`
+2. Add the `mcpServers` block:
+   ```json
+   {
+     "mcpServers": {
+       "hppymcp": {
+         "command": "/path/to/hppymcp",
+         "args": ["--config", "/path/to/.hppycli.yaml"]
+       }
+     }
+   }
+   ```
+3. Restart Claude Desktop. The hppymcp tools should appear in the MCP tool picker.
+
+> **Note:** Claude Desktop launches MCP servers outside your shell environment, so `~/.hppycli.yaml` must contain `email`, `password`, and `account_id` directly — environment variables won't be available.
 
 ### Cursor
 
