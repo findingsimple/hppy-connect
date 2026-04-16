@@ -65,6 +65,15 @@ The shared API client in `internal/` handles authentication, Relay-style cursor 
 
 ## Installation
 
+### Requirements
+
+- **Go 1.26+** — [install Go](https://go.dev/doc/install)
+- `$HOME/go/bin` must be on your `PATH` for installed binaries to work:
+  ```bash
+  # Add to ~/.zshrc or ~/.bashrc
+  export PATH="$HOME/go/bin:$PATH"
+  ```
+
 ### From source
 
 ```bash
