@@ -38,7 +38,7 @@ cmd/
       projects.go / users.go / memberships.go / roles.go / webhooks.go
       seed.go      # `seed` — populate account with test data (seedClient interface for testability)
       config.go / completion.go / version.go  # Utility commands
-      mcp.go       # `mcp setup` — generates MCP client config JSON
+      mcp.go       # `mcp setup` — generates MCP client registration commands
   hppymcp/         # MCP server binary (stdio transport)
     main.go        # Entry point — server setup
     tools.go       # MCP read tool handlers + composed apiClient interface
