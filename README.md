@@ -19,8 +19,12 @@ Built during the 2-day HappyCo AI Hackathon (April 2026).
 <br/>
 
 <table>
+<colgroup>
+<col span="1" width="50%">
+<col span="1" width="50%">
+</colgroup>
 <tr>
-<td width="50%" valign="top">
+<td valign="top">
 
 ### `hppycli` — Command Line
 
@@ -31,7 +35,7 @@ hppycli workorders list --status open --output json
 ```
 
 </td>
-<td width="50%" valign="top">
+<td valign="top">
 
 ### `hppymcp` — AI Assistant
 
