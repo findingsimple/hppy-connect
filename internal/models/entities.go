@@ -7,39 +7,89 @@ type User struct {
 	Email     string `json:"email"`
 	ShortName string `json:"shortName"`
 	Phone     string `json:"phone"`
+	CreatedAt string `json:"createdAt"`
+	UpdatedAt string `json:"updatedAt"`
 }
 
 // Role represents a permission role within an account.
 type Role struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
+	ID          string       `json:"id"`
+	Name        string       `json:"name"`
+	Description string       `json:"description"`
+	CreatedAt   string       `json:"createdAt"`
+	UpdatedAt   string       `json:"updatedAt"`
+	ArchivedAt  string       `json:"archivedAt"`
+	Permissions []Permission `json:"permissions"`
+}
+
+// Permission represents a single granted permission action.
+type Permission struct {
+	Action      string `json:"action"`
 	Description string `json:"description"`
 }
 
 // AccountMembership represents a user's membership in an account.
+// The GraphQL API returns nested user/account objects; this struct matches that shape.
 type AccountMembership struct {
-	UserID    string `json:"userId"`
-	AccountID string `json:"accountId"`
-	IsActive  bool   `json:"isActive"`
-	Roles     []Role `json:"roles"`
+	IsActive      bool             `json:"isActive"`
+	Account       *Account         `json:"account"`
+	User          *User            `json:"user"`
+	CreatedAt     string           `json:"createdAt"`
+	UpdatedAt     string           `json:"updatedAt"`
+	InactivatedAt string           `json:"inactivatedAt"`
+	Roles         *MembershipRoles `json:"roles"`
+}
+
+// MembershipRoles wraps the paginated roles connection on AccountMembership.
+type MembershipRoles struct {
+	Nodes []Role `json:"nodes"`
 }
 
 // Webhook represents a webhook subscription.
 type Webhook struct {
-	ID       string   `json:"id"`
-	URL      string   `json:"url"`
-	Status   string   `json:"status"`
-	Subjects []string `json:"subjects"`
+	ID             string             `json:"id"`
+	URL            string             `json:"url"`
+	Status         string             `json:"status"`
+	Subjects       []string           `json:"subjects"`
+	CreatedAt      string             `json:"createdAt"`
+	UpdatedAt      string             `json:"updatedAt"`
+	Subscriber     *WebhookSubscriber `json:"subscriber"`
+	SigningSecret  string             `json:"signingSecret"`
+	RateLimits     []WebhookRateLimit `json:"rateLimits"`
+	RequestTimeout *WebhookTimeout    `json:"requestTimeout"`
+}
+
+// WebhookSubscriber identifies who owns the webhook.
+type WebhookSubscriber struct {
+	Type string `json:"type"`
+	ID   string `json:"id"`
+}
+
+// WebhookRateLimit represents a rate limit configured on a webhook.
+type WebhookRateLimit struct {
+	Period   string `json:"period"`
+	Requests int    `json:"requests"`
+}
+
+// WebhookTimeout represents the request timeout configured on a webhook.
+type WebhookTimeout struct {
+	Seconds int `json:"seconds"`
 }
 
 // Project represents a HappyCo project.
 type Project struct {
-	ID       string `json:"id"`
-	Status   string `json:"status"`
-	Priority string `json:"priority"`
-	Notes    string `json:"notes"`
-	StartAt  string `json:"startAt"`
-	DueAt    string `json:"dueAt"`
+	ID                   string    `json:"id"`
+	Status               string    `json:"status"`
+	Priority             string    `json:"priority"`
+	Notes                string    `json:"notes"`
+	StartAt              string    `json:"start"`
+	DueAt                string    `json:"dueAt"`
+	AvailabilityTargetAt string    `json:"availabilityTargetAt"`
+	HeldAt               string    `json:"heldAt"`
+	CreatedAt            string    `json:"createdAt"`
+	UpdatedAt            string    `json:"updatedAt"`
+	Assignee             *User     `json:"assignee"`
+	Location             *Location `json:"location"`
 }
 
 // WorkOrderAttachment represents a file attachment on a work order.
@@ -74,8 +124,9 @@ type InspectionGuestLink struct {
 }
 
 // PropertyAccess represents the result of a property access mutation.
+// The GraphQL API returns PropertyV2 with "id" (not "propertyId").
 type PropertyAccess struct {
-	PropertyID        string `json:"propertyId"`
+	PropertyID        string `json:"id"`
 	AccountWideAccess bool   `json:"accountWideAccess"`
 }
 

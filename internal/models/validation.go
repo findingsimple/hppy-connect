@@ -7,6 +7,7 @@ import (
 	"net/mail"
 	"net/url"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 )
@@ -113,8 +114,53 @@ func ValidateEmail(value string) error {
 	return nil
 }
 
+// ValidateWebhookSubjects validates and normalises a comma-separated subjects string.
+// Returns the normalised uppercase slice, or an error if any subject is invalid.
+// Returns nil for empty input.
+func ValidateWebhookSubjects(csv string) ([]string, error) {
+	parts := SplitCSV(csv)
+	if len(parts) == 0 {
+		return nil, nil
+	}
+	result := make([]string, len(parts))
+	for i, s := range parts {
+		upper := strings.ToUpper(s)
+		if !ValidWebhookSubjects[upper] {
+			allowed := make([]string, 0, len(ValidWebhookSubjects))
+			for k := range ValidWebhookSubjects {
+				allowed = append(allowed, k)
+			}
+			sort.Strings(allowed)
+			return nil, fmt.Errorf("invalid webhook subject %q — must be one of: %s", s, strings.Join(allowed, ", "))
+		}
+		result[i] = upper
+	}
+	return result, nil
+}
+
+// SplitCSV splits a comma-separated string into trimmed, non-empty values.
+// Returns nil for empty input or input containing only whitespace/commas.
+func SplitCSV(s string) []string {
+	if s == "" {
+		return nil
+	}
+	parts := strings.Split(s, ",")
+	result := make([]string, 0, len(parts))
+	for _, p := range parts {
+		v := strings.TrimSpace(p)
+		if v != "" {
+			result = append(result, v)
+		}
+	}
+	if len(result) == 0 {
+		return nil
+	}
+	return result
+}
+
 // ValidateWebhookURL validates a webhook URL for safety.
-// Rejects non-HTTPS schemes, private/internal IPs, and cloud metadata endpoints.
+// Rejects non-HTTPS schemes, private/internal IPs, cloud metadata endpoints,
+// embedded credentials, and IPv6 zone IDs.
 func ValidateWebhookURL(rawURL string) error {
 	u, err := url.Parse(rawURL)
 	if err != nil {
@@ -127,7 +173,18 @@ func ValidateWebhookURL(rawURL string) error {
 		return fmt.Errorf("webhook URL must have a host")
 	}
 
+	// Reject embedded credentials — they would be stored/logged in plaintext.
+	if u.User != nil {
+		return fmt.Errorf("webhook URL must not contain embedded credentials")
+	}
+
 	hostname := u.Hostname()
+
+	// Strip IPv6 zone ID before IP checks. Zone IDs (e.g. "fe80::1%%eth0") cause
+	// net.ParseIP to return nil, which would bypass all private IP checks.
+	if idx := strings.Index(hostname, "%"); idx != -1 {
+		hostname = hostname[:idx]
+	}
 
 	// Reject well-known dangerous hostnames: cloud metadata endpoints and localhost.
 	// Note: this does not defend against DNS rebinding (where a public hostname resolves
@@ -140,7 +197,8 @@ func ValidateWebhookURL(rawURL string) error {
 		}
 	}
 
-	// If the hostname is a raw IP, check for private/internal ranges
+	// If the hostname is a raw IP, check for private/internal ranges.
+	// This covers IPv4, IPv6, and IPv4-mapped IPv6 (e.g. ::ffff:127.0.0.1).
 	ip := net.ParseIP(hostname)
 	if ip != nil {
 		if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsUnspecified() {

@@ -21,6 +21,10 @@ var (
 	ValidWorkOrderTypes         = map[string]bool{"SERVICE_REQUEST": true, "TURN": true, "CAPITAL_IMPROVEMENT": true, "INSPECTION_RELATED": true, "APPLIANCE_REPLACEMENT": true}
 	ValidWorkOrderSubStatuses   = map[string]bool{"CANCELLED": true, "UNKNOWN": true}
 	ValidWorkOrderAssigneeTypes = map[string]bool{"USER": true, "VENDOR": true}
+	ValidProjectPriorities      = map[string]bool{"NORMAL": true, "URGENT": true}
+	ValidWebhookStatuses        = map[string]bool{"ENABLED": true, "DISABLED": true}
+	ValidWebhookSubscriberTypes = map[string]bool{"ACCOUNT": true, "PLUGIN": true}
+	ValidWebhookSubjects        = map[string]bool{"INSPECTIONS": true, "PLUGIN_SUBSCRIPTIONS": true, "WORK_ORDERS": true, "VENDORS": true}
 )
 
 // ValidateStatus checks that a status value is allowed, normalises it to uppercase,

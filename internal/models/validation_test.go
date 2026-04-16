@@ -198,6 +198,22 @@ func TestValidateWebhookURL(t *testing.T) {
 
 		// Public IPs should pass
 		{"public IP", "https://203.0.113.1/webhook", false, ""},
+
+		// Embedded credentials rejected
+		{"URL with credentials", "https://user:pass@example.com/webhook", true, "embedded credentials"},
+		{"URL with user only", "https://user@example.com/webhook", true, "embedded credentials"},
+
+		// IPv6 zone ID bypass prevention
+		{"IPv6 link-local with zone ID", "https://[fe80::1%25eth0]/webhook", true, "internal/private"},
+		{"IPv6 loopback with zone ID", "https://[::1%25lo]/webhook", true, "internal/private"},
+
+		// IPv4-mapped IPv6 addresses
+		{"IPv4-mapped loopback", "https://[::ffff:127.0.0.1]/webhook", true, "internal/private"},
+		{"IPv4-mapped private", "https://[::ffff:10.0.0.1]/webhook", true, "internal/private"},
+
+		// IPv6 private/link-local ranges
+		{"IPv6 unique-local (fc00)", "https://[fc00::1]/webhook", true, "internal/private"},
+		{"IPv6 link-local (fe80)", "https://[fe80::1]/webhook", true, "internal/private"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -212,6 +228,63 @@ func TestValidateWebhookURL(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestValidateWebhookSubjects(t *testing.T) {
+	t.Run("valid subjects", func(t *testing.T) {
+		subjects, err := ValidateWebhookSubjects("INSPECTIONS,WORK_ORDERS")
+		assert.NoError(t, err)
+		assert.Equal(t, []string{"INSPECTIONS", "WORK_ORDERS"}, subjects)
+	})
+
+	t.Run("lowercase normalised to uppercase", func(t *testing.T) {
+		subjects, err := ValidateWebhookSubjects("inspections,work_orders")
+		assert.NoError(t, err)
+		assert.Equal(t, []string{"INSPECTIONS", "WORK_ORDERS"}, subjects)
+	})
+
+	t.Run("mixed case normalised", func(t *testing.T) {
+		subjects, err := ValidateWebhookSubjects("Inspections,Work_Orders")
+		assert.NoError(t, err)
+		assert.Equal(t, []string{"INSPECTIONS", "WORK_ORDERS"}, subjects)
+	})
+
+	t.Run("empty string returns nil", func(t *testing.T) {
+		subjects, err := ValidateWebhookSubjects("")
+		assert.NoError(t, err)
+		assert.Nil(t, subjects)
+	})
+
+	t.Run("whitespace-only returns nil", func(t *testing.T) {
+		subjects, err := ValidateWebhookSubjects("  ,  , ")
+		assert.NoError(t, err)
+		assert.Nil(t, subjects)
+	})
+
+	t.Run("invalid subject rejected", func(t *testing.T) {
+		_, err := ValidateWebhookSubjects("INSPECTIONS,INVALID")
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid webhook subject")
+		assert.Contains(t, err.Error(), "INVALID")
+	})
+
+	t.Run("all valid subjects accepted", func(t *testing.T) {
+		subjects, err := ValidateWebhookSubjects("INSPECTIONS,WORK_ORDERS,VENDORS,PLUGIN_SUBSCRIPTIONS")
+		assert.NoError(t, err)
+		assert.Len(t, subjects, 4)
+	})
+
+	t.Run("single subject", func(t *testing.T) {
+		subjects, err := ValidateWebhookSubjects("INSPECTIONS")
+		assert.NoError(t, err)
+		assert.Equal(t, []string{"INSPECTIONS"}, subjects)
+	})
+
+	t.Run("spaces around commas trimmed", func(t *testing.T) {
+		subjects, err := ValidateWebhookSubjects(" INSPECTIONS , WORK_ORDERS ")
+		assert.NoError(t, err)
+		assert.Equal(t, []string{"INSPECTIONS", "WORK_ORDERS"}, subjects)
+	})
 }
 
 func TestValidateRatingScore(t *testing.T) {

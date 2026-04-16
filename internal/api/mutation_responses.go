@@ -181,3 +181,130 @@ type inspectionMoveItemPhotoResponse struct {
 type inspectionSendToGuestResponse struct {
 	InspectionSendToGuest models.InspectionGuestLink `json:"inspectionSendToGuest"`
 }
+
+// --- Project Mutation Responses ---
+
+type projectCreateResponse struct {
+	ProjectCreate models.Project `json:"projectCreate"`
+}
+
+type projectSetAssigneeResponse struct {
+	ProjectSetAssignee models.Project `json:"projectSetAssignee"`
+}
+
+type projectSetNotesResponse struct {
+	ProjectSetNotes models.Project `json:"projectSetNotes"`
+}
+
+type projectSetDueAtResponse struct {
+	ProjectSetDueAt models.Project `json:"projectSetDueAt"`
+}
+
+type projectSetStartAtResponse struct {
+	ProjectSetStartAt models.Project `json:"projectSetStartAt"`
+}
+
+type projectSetPriorityResponse struct {
+	ProjectSetPriority models.Project `json:"projectSetPriority"`
+}
+
+type projectSetOnHoldResponse struct {
+	ProjectSetOnHold models.Project `json:"projectSetOnHold"`
+}
+
+type projectSetAvailabilityTargetAtResponse struct {
+	ProjectSetAvailabilityTargetAt models.Project `json:"projectSetAvailabilityTargetAt"`
+}
+
+// --- User Mutation Responses ---
+
+type userCreateResponse struct {
+	UserCreate models.User `json:"userCreate"`
+}
+
+type userSetEmailResponse struct {
+	UserSetEmail models.User `json:"userSetEmail"`
+}
+
+type userSetNameResponse struct {
+	UserSetName models.User `json:"userSetName"`
+}
+
+type userSetShortNameResponse struct {
+	UserSetShortName models.User `json:"userSetShortName"`
+}
+
+type userSetPhoneResponse struct {
+	UserSetPhone models.User `json:"userSetPhone"`
+}
+
+// --- Membership Mutation Responses ---
+// Note: PascalCase JSON keys match the PascalCase GraphQL mutation names.
+
+type accountMembershipCreateResponse struct {
+	AccountMembershipCreate models.AccountMembership `json:"AccountMembershipCreate"`
+}
+
+type accountMembershipActivateResponse struct {
+	AccountMembershipActivate models.AccountMembership `json:"AccountMembershipActivate"`
+}
+
+type accountMembershipDeactivateResponse struct {
+	AccountMembershipDeactivate models.AccountMembership `json:"AccountMembershipDeactivate"`
+}
+
+type accountMembershipSetRolesResponse struct {
+	AccountMembershipSetRoles models.AccountMembership `json:"AccountMembershipSetRoles"`
+}
+
+// --- Property Access Mutation Responses ---
+
+type propertyGrantUserAccessResponse struct {
+	PropertyGrantUserAccess models.PropertyAccess `json:"PropertyGrantUserAccess"`
+}
+
+type propertyRevokeUserAccessResponse struct {
+	PropertyRevokeUserAccess models.PropertyAccess `json:"PropertyRevokeUserAccess"`
+}
+
+type propertySetAccountWideAccessResponse struct {
+	PropertySetAccountWideAccess models.PropertyAccess `json:"PropertySetAccountWideAccess"`
+}
+
+// --- User Property Access Mutation Responses ---
+
+type userGrantPropertyAccessResponse struct {
+	UserGrantPropertyAccess models.User `json:"UserGrantPropertyAccess"`
+}
+
+type userRevokePropertyAccessResponse struct {
+	UserRevokePropertyAccess models.User `json:"UserRevokePropertyAccess"`
+}
+
+// --- Role Mutation Responses ---
+
+type roleCreateResponse struct {
+	RoleCreate models.Role `json:"roleCreate"`
+}
+
+type roleSetNameResponse struct {
+	RoleSetName models.Role `json:"roleSetName"`
+}
+
+type roleSetDescriptionResponse struct {
+	RoleSetDescription models.Role `json:"roleSetDescription"`
+}
+
+type roleSetPermissionsResponse struct {
+	RoleSetPermissions models.Role `json:"roleSetPermissions"`
+}
+
+// --- Webhook Mutation Responses ---
+
+type webhookCreateResponse struct {
+	WebhookCreate models.Webhook `json:"webhookCreate"`
+}
+
+type webhookUpdateResponse struct {
+	WebhookUpdate models.Webhook `json:"webhookUpdate"`
+}

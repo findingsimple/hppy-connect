@@ -122,12 +122,46 @@ type inspectionMutator interface {
 	InspectionMoveItemPhoto(ctx context.Context, input models.InspectionMoveItemPhotoInput) (*models.Inspection, error)
 	InspectionSendToGuest(ctx context.Context, input models.InspectionSendToGuestInput) (*models.InspectionGuestLink, error)
 }
-type projectMutator interface{}
-type userMutator interface{}
-type membershipMutator interface{}
-type propertyAccessMutator interface{}
-type roleMutator interface{}
-type webhookMutator interface{}
+type projectMutator interface {
+	ProjectCreate(ctx context.Context, input models.ProjectCreateInput) (*models.Project, error)
+	ProjectSetAssignee(ctx context.Context, input models.ProjectSetAssigneeInput) (*models.Project, error)
+	ProjectSetNotes(ctx context.Context, projectID, notes string) (*models.Project, error)
+	ProjectSetDueAt(ctx context.Context, projectID, dueAt string) (*models.Project, error)
+	ProjectSetStartAt(ctx context.Context, projectID, startAt string) (*models.Project, error)
+	ProjectSetPriority(ctx context.Context, projectID, priority string) (*models.Project, error)
+	ProjectSetOnHold(ctx context.Context, projectID string, onHold bool) (*models.Project, error)
+	ProjectSetAvailabilityTargetAt(ctx context.Context, projectID string, availabilityTargetAt *string) (*models.Project, error)
+}
+type userMutator interface {
+	UserCreate(ctx context.Context, input models.UserCreateInput) (*models.User, error)
+	UserSetEmail(ctx context.Context, userID, email string) (*models.User, error)
+	UserSetName(ctx context.Context, userID, name string) (*models.User, error)
+	UserSetShortName(ctx context.Context, userID string, shortName *string) (*models.User, error)
+	UserSetPhone(ctx context.Context, userID string, phone *string) (*models.User, error)
+	UserGrantPropertyAccess(ctx context.Context, input models.UserGrantPropertyAccessInput) (*models.User, error)
+	UserRevokePropertyAccess(ctx context.Context, input models.UserRevokePropertyAccessInput) (*models.User, error)
+}
+type membershipMutator interface {
+	AccountMembershipCreate(ctx context.Context, input models.AccountMembershipCreateInput) (*models.AccountMembership, error)
+	AccountMembershipActivate(ctx context.Context, input models.AccountMembershipActivateInput) (*models.AccountMembership, error)
+	AccountMembershipDeactivate(ctx context.Context, input models.AccountMembershipDeactivateInput) (*models.AccountMembership, error)
+	AccountMembershipSetRoles(ctx context.Context, input models.AccountMembershipSetRolesInput) (*models.AccountMembership, error)
+}
+type propertyAccessMutator interface {
+	PropertyGrantUserAccess(ctx context.Context, input models.PropertyGrantUserAccessInput) (*models.PropertyAccess, error)
+	PropertyRevokeUserAccess(ctx context.Context, input models.PropertyRevokeUserAccessInput) (*models.PropertyAccess, error)
+	PropertySetAccountWideAccess(ctx context.Context, input models.PropertySetAccountWideAccessInput) (*models.PropertyAccess, error)
+}
+type roleMutator interface {
+	RoleCreate(ctx context.Context, input models.RoleCreateInput) (*models.Role, error)
+	RoleSetName(ctx context.Context, input models.RoleSetNameInput) (*models.Role, error)
+	RoleSetDescription(ctx context.Context, input models.RoleSetDescriptionInput) (*models.Role, error)
+	RoleSetPermissions(ctx context.Context, input models.RoleSetPermissionsInput) (*models.Role, error)
+}
+type webhookMutator interface {
+	WebhookCreate(ctx context.Context, input models.WebhookCreateInput) (*models.Webhook, error)
+	WebhookUpdate(ctx context.Context, input models.WebhookUpdateInput) (*models.Webhook, error)
+}
 
 // apiClient composes all domain interfaces. The concrete *api.Client satisfies this.
 // Mocks in tests only need to implement the sub-interface their test uses.
@@ -285,6 +319,10 @@ func registerTools(server *mcp.Server, client apiClient, debug bool) {
 	// Register mutation tools by domain
 	registerWorkOrderMutationTools(server, client, debug)
 	registerInspectionMutationTools(server, client, debug)
+	registerProjectMutationTools(server, client, debug)
+	registerAccountMutationTools(server, client, debug)
+	registerRoleMutationTools(server, client, debug)
+	registerWebhookMutationTools(server, client, debug)
 }
 
 // acquireSem acquires a semaphore slot, respecting context cancellation.

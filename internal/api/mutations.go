@@ -204,3 +204,173 @@ const inspectionSendToGuestMutation = `mutation InspectionSendToGuest($input: In
     link
   }
 }`
+
+// projectFields is the shared return fragment for project mutations.
+const projectFields = `
+    id status priority notes start dueAt availabilityTargetAt heldAt createdAt updatedAt
+    assignee { id name email }
+    location { id name property { id name } }
+`
+
+// --- Project Mutations (8) ---
+
+const projectCreateMutation = `mutation ProjectCreate($input: ProjectCreateInput!) {
+  projectCreate(input: $input) {` + projectFields + `}
+}`
+
+const projectSetAssigneeMutation = `mutation ProjectSetAssignee($input: ProjectSetAssigneeInput!) {
+  projectSetAssignee(input: $input) {` + projectFields + `}
+}`
+
+const projectSetNotesMutation = `mutation ProjectSetNotes($input: ProjectSetNotesInput!) {
+  projectSetNotes(input: $input) {` + projectFields + `}
+}`
+
+const projectSetDueAtMutation = `mutation ProjectSetDueAt($input: ProjectSetDueAtInput!) {
+  projectSetDueAt(input: $input) {` + projectFields + `}
+}`
+
+const projectSetStartAtMutation = `mutation ProjectSetStartAt($input: ProjectSetStartAtInput!) {
+  projectSetStartAt(input: $input) {` + projectFields + `}
+}`
+
+const projectSetPriorityMutation = `mutation ProjectSetPriority($input: ProjectSetPriorityInput!) {
+  projectSetPriority(input: $input) {` + projectFields + `}
+}`
+
+const projectSetOnHoldMutation = `mutation ProjectSetOnHold($input: ProjectSetOnHoldInput!) {
+  projectSetOnHold(input: $input) {` + projectFields + `}
+}`
+
+const projectSetAvailabilityTargetAtMutation = `mutation ProjectSetAvailabilityTargetAt($input: ProjectSetAvailabilityTargetAtInput!) {
+  projectSetAvailabilityTargetAt(input: $input) {` + projectFields + `}
+}`
+
+// userFields is the shared return fragment for user mutations.
+const userFields = `
+    id email name shortName phone createdAt updatedAt
+`
+
+// membershipFields is the shared return fragment for membership mutations.
+const membershipFields = `
+    isActive createdAt updatedAt inactivatedAt
+    account { id name }
+    user { id name email }
+    roles(first: 100) { nodes { id name } }
+`
+
+// propertyAccessFields is the shared return fragment for property access mutations.
+const propertyAccessFields = `
+    id accountWideAccess
+`
+
+// --- User Mutations (5) ---
+
+const userCreateMutation = `mutation UserCreate($input: UserCreateInput!) {
+  userCreate(input: $input) {` + userFields + `}
+}`
+
+const userSetEmailMutation = `mutation UserSetEmail($input: UserSetEmailInput!) {
+  userSetEmail(input: $input) {` + userFields + `}
+}`
+
+const userSetNameMutation = `mutation UserSetName($input: UserSetNameInput!) {
+  userSetName(input: $input) {` + userFields + `}
+}`
+
+const userSetShortNameMutation = `mutation UserSetShortName($input: UserSetShortNameInput!) {
+  userSetShortName(input: $input) {` + userFields + `}
+}`
+
+const userSetPhoneMutation = `mutation UserSetPhone($input: UserSetPhoneInput!) {
+  userSetPhone(input: $input) {` + userFields + `}
+}`
+
+// --- Membership Mutations (4) ---
+// Note: PascalCase mutation names match the GraphQL schema.
+
+const accountMembershipCreateMutation = `mutation AccountMembershipCreate($input: AccountMembershipCreateInput!) {
+  AccountMembershipCreate(input: $input) {` + membershipFields + `}
+}`
+
+const accountMembershipActivateMutation = `mutation AccountMembershipActivate($input: AccountMembershipActivateInput!) {
+  AccountMembershipActivate(input: $input) {` + membershipFields + `}
+}`
+
+const accountMembershipDeactivateMutation = `mutation AccountMembershipDeactivate($input: AccountMembershipDeactivateInput!) {
+  AccountMembershipDeactivate(input: $input) {` + membershipFields + `}
+}`
+
+const accountMembershipSetRolesMutation = `mutation AccountMembershipSetRoles($input: AccountMembershipSetRolesInput!) {
+  AccountMembershipSetRoles(input: $input) {` + membershipFields + `}
+}`
+
+// --- Property Access Mutations (3) ---
+
+const propertyGrantUserAccessMutation = `mutation PropertyGrantUserAccess($input: PropertyGrantUserAccessInput!) {
+  PropertyGrantUserAccess(input: $input) {` + propertyAccessFields + `}
+}`
+
+const propertyRevokeUserAccessMutation = `mutation PropertyRevokeUserAccess($input: PropertyRevokeUserAccessInput!) {
+  PropertyRevokeUserAccess(input: $input) {` + propertyAccessFields + `}
+}`
+
+const propertySetAccountWideAccessMutation = `mutation PropertySetAccountWideAccess($input: PropertySetAccountWideAccessInput!) {
+  PropertySetAccountWideAccess(input: $input) {` + propertyAccessFields + `}
+}`
+
+// --- User Property Access Mutations (2) ---
+
+const userGrantPropertyAccessMutation = `mutation UserGrantPropertyAccess($input: UserGrantPropertyAccessInput!) {
+  UserGrantPropertyAccess(input: $input) {` + userFields + `}
+}`
+
+const userRevokePropertyAccessMutation = `mutation UserRevokePropertyAccess($input: UserRevokePropertyAccessInput!) {
+  UserRevokePropertyAccess(input: $input) {` + userFields + `}
+}`
+
+// roleFields is the shared return fragment for role mutations.
+const roleFields = `
+    id name description createdAt updatedAt archivedAt
+    permissions { action description }
+`
+
+// --- Role Mutations (4) ---
+
+const roleCreateMutation = `mutation RoleCreate($input: RoleCreateInput!) {
+  roleCreate(input: $input) {` + roleFields + `}
+}`
+
+const roleSetNameMutation = `mutation RoleSetName($input: RoleSetNameInput!) {
+  roleSetName(input: $input) {` + roleFields + `}
+}`
+
+const roleSetDescriptionMutation = `mutation RoleSetDescription($input: RoleSetDescriptionInput!) {
+  roleSetDescription(input: $input) {` + roleFields + `}
+}`
+
+const roleSetPermissionsMutation = `mutation RoleSetPermissions($input: RoleSetPermissionsInput!) {
+  roleSetPermissions(input: $input) {` + roleFields + `}
+}`
+
+// webhookFields is the shared return fragment for webhook mutations (without signing secret).
+const webhookFields = `
+    id url status subjects createdAt updatedAt
+    subscriber { type id }
+    rateLimits { period requests }
+    requestTimeout { seconds }
+`
+
+// webhookCreateFields includes the signing secret, which is only returned on creation.
+const webhookCreateFields = webhookFields + `    signingSecret
+`
+
+// --- Webhook Mutations (2) ---
+
+const webhookCreateMutation = `mutation WebhookCreate($input: WebhookCreateInput!) {
+  webhookCreate(input: $input) {` + webhookCreateFields + `}
+}`
+
+const webhookUpdateMutation = `mutation WebhookUpdate($input: WebhookUpdateInput!) {
+  webhookUpdate(input: $input) {` + webhookFields + `}
+}`

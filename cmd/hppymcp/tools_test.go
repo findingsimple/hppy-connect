@@ -49,6 +49,41 @@ type mockClient struct {
 	lastStringValue string
 	lastBoolValue   bool
 
+	// Project mutation response fields
+	mutatedProject *models.Project
+
+	// Project capture fields
+	lastProjCreateInput models.ProjectCreateInput
+	lastProjAssignInput models.ProjectSetAssigneeInput
+
+	// Account mutation response fields
+	mutatedUser       *models.User
+	mutatedMembership *models.AccountMembership
+	mutatedAccess     *models.PropertyAccess
+
+	// Account capture fields
+	lastUserCreateInput     models.UserCreateInput
+	lastMembershipInput     models.AccountMembershipCreateInput
+	lastMembershipRoleInput models.AccountMembershipSetRolesInput
+	lastPropertyAccessInput models.PropertyGrantUserAccessInput
+	lastUserAccessInput     models.UserGrantPropertyAccessInput
+
+	// Role mutation response fields
+	mutatedRole *models.Role
+
+	// Role capture fields
+	lastRoleCreateInput  models.RoleCreateInput
+	lastRoleSetNameInput models.RoleSetNameInput
+	lastRoleSetDescInput models.RoleSetDescriptionInput
+	lastRolePermInput    models.RoleSetPermissionsInput
+
+	// Webhook mutation response fields
+	mutatedWebhook *models.Webhook
+
+	// Webhook capture fields
+	lastWebhookCreateInput models.WebhookCreateInput
+	lastWebhookUpdateInput models.WebhookUpdateInput
+
 	// Inspection capture fields
 	lastInspCreateInput        models.InspectionCreateInput
 	lastInspAssignInput        models.InspectionSetAssigneeInput
@@ -512,6 +547,308 @@ func (m *mockClient) InspectionSendToGuest(_ context.Context, input models.Inspe
 		InspectionID: input.InspectionID,
 		Link:         "https://app.happyco.com/inspect/guest/abc123",
 	}, nil
+}
+
+// --- Project mutation mock methods ---
+
+func (m *mockClient) projResult() *models.Project {
+	if m.mutatedProject != nil {
+		return m.mutatedProject
+	}
+	return &models.Project{ID: "proj-1", Status: "PLANNED", Priority: "NORMAL"}
+}
+
+func (m *mockClient) ProjectCreate(_ context.Context, input models.ProjectCreateInput) (*models.Project, error) {
+	m.lastProjCreateInput = input
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.projResult(), nil
+}
+
+func (m *mockClient) ProjectSetAssignee(_ context.Context, input models.ProjectSetAssigneeInput) (*models.Project, error) {
+	m.lastMutationID = input.ProjectID
+	m.lastProjAssignInput = input
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.projResult(), nil
+}
+
+func (m *mockClient) ProjectSetNotes(_ context.Context, id, notes string) (*models.Project, error) {
+	m.lastMutationID = id
+	m.lastStringValue = notes
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.projResult(), nil
+}
+
+func (m *mockClient) ProjectSetDueAt(_ context.Context, id, _ string) (*models.Project, error) {
+	m.lastMutationID = id
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.projResult(), nil
+}
+
+func (m *mockClient) ProjectSetStartAt(_ context.Context, id, _ string) (*models.Project, error) {
+	m.lastMutationID = id
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.projResult(), nil
+}
+
+func (m *mockClient) ProjectSetPriority(_ context.Context, id, _ string) (*models.Project, error) {
+	m.lastMutationID = id
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.projResult(), nil
+}
+
+func (m *mockClient) ProjectSetOnHold(_ context.Context, id string, _ bool) (*models.Project, error) {
+	m.lastMutationID = id
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.projResult(), nil
+}
+
+func (m *mockClient) ProjectSetAvailabilityTargetAt(_ context.Context, id string, _ *string) (*models.Project, error) {
+	m.lastMutationID = id
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.projResult(), nil
+}
+
+// --- User mutation mock methods ---
+
+func (m *mockClient) userResult() *models.User {
+	if m.mutatedUser != nil {
+		return m.mutatedUser
+	}
+	return &models.User{ID: "user-1", Name: "Test User", Email: "test@example.com"}
+}
+
+func (m *mockClient) UserCreate(_ context.Context, input models.UserCreateInput) (*models.User, error) {
+	m.lastUserCreateInput = input
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.userResult(), nil
+}
+
+func (m *mockClient) UserSetEmail(_ context.Context, id, email string) (*models.User, error) {
+	m.lastMutationID = id
+	m.lastStringValue = email
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.userResult(), nil
+}
+
+func (m *mockClient) UserSetName(_ context.Context, id, name string) (*models.User, error) {
+	m.lastMutationID = id
+	m.lastStringValue = name
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.userResult(), nil
+}
+
+func (m *mockClient) UserSetShortName(_ context.Context, id string, _ *string) (*models.User, error) {
+	m.lastMutationID = id
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.userResult(), nil
+}
+
+func (m *mockClient) UserSetPhone(_ context.Context, id string, _ *string) (*models.User, error) {
+	m.lastMutationID = id
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.userResult(), nil
+}
+
+func (m *mockClient) UserGrantPropertyAccess(_ context.Context, input models.UserGrantPropertyAccessInput) (*models.User, error) {
+	m.lastUserAccessInput = input
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.userResult(), nil
+}
+
+func (m *mockClient) UserRevokePropertyAccess(_ context.Context, input models.UserRevokePropertyAccessInput) (*models.User, error) {
+	m.lastMutationID = input.UserID
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.userResult(), nil
+}
+
+// --- Membership mutation mock methods ---
+
+func (m *mockClient) membershipResult() *models.AccountMembership {
+	if m.mutatedMembership != nil {
+		return m.mutatedMembership
+	}
+	return &models.AccountMembership{
+		IsActive: true,
+		Account:  &models.Account{ID: "acct-1"},
+		User:     &models.User{ID: "user-1", Name: "Test User", Email: "test@example.com"},
+	}
+}
+
+func (m *mockClient) AccountMembershipCreate(_ context.Context, input models.AccountMembershipCreateInput) (*models.AccountMembership, error) {
+	m.lastMembershipInput = input
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.membershipResult(), nil
+}
+
+func (m *mockClient) AccountMembershipActivate(_ context.Context, input models.AccountMembershipActivateInput) (*models.AccountMembership, error) {
+	m.lastMutationID = input.UserID
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.membershipResult(), nil
+}
+
+func (m *mockClient) AccountMembershipDeactivate(_ context.Context, input models.AccountMembershipDeactivateInput) (*models.AccountMembership, error) {
+	m.lastMutationID = input.UserID
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.membershipResult(), nil
+}
+
+func (m *mockClient) AccountMembershipSetRoles(_ context.Context, input models.AccountMembershipSetRolesInput) (*models.AccountMembership, error) {
+	m.lastMembershipRoleInput = input
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.membershipResult(), nil
+}
+
+// --- Property access mutation mock methods ---
+
+func (m *mockClient) accessResult() *models.PropertyAccess {
+	if m.mutatedAccess != nil {
+		return m.mutatedAccess
+	}
+	return &models.PropertyAccess{PropertyID: "prop-1", AccountWideAccess: false}
+}
+
+func (m *mockClient) PropertyGrantUserAccess(_ context.Context, input models.PropertyGrantUserAccessInput) (*models.PropertyAccess, error) {
+	m.lastPropertyAccessInput = input
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.accessResult(), nil
+}
+
+func (m *mockClient) PropertyRevokeUserAccess(_ context.Context, input models.PropertyRevokeUserAccessInput) (*models.PropertyAccess, error) {
+	m.lastMutationID = input.PropertyID
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.accessResult(), nil
+}
+
+func (m *mockClient) PropertySetAccountWideAccess(_ context.Context, input models.PropertySetAccountWideAccessInput) (*models.PropertyAccess, error) {
+	m.lastMutationID = input.PropertyID
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.accessResult(), nil
+}
+
+// --- Role mutation mock methods ---
+
+func (m *mockClient) roleResult() *models.Role {
+	if m.mutatedRole != nil {
+		return m.mutatedRole
+	}
+	return &models.Role{
+		ID:   "role-1",
+		Name: "Test Role",
+		Permissions: []models.Permission{
+			{Action: "test:action", Description: "Test action"},
+		},
+	}
+}
+
+func (m *mockClient) RoleCreate(_ context.Context, input models.RoleCreateInput) (*models.Role, error) {
+	m.lastRoleCreateInput = input
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.roleResult(), nil
+}
+
+func (m *mockClient) RoleSetName(_ context.Context, input models.RoleSetNameInput) (*models.Role, error) {
+	m.lastRoleSetNameInput = input
+	m.lastMutationID = input.RoleID
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.roleResult(), nil
+}
+
+func (m *mockClient) RoleSetDescription(_ context.Context, input models.RoleSetDescriptionInput) (*models.Role, error) {
+	m.lastRoleSetDescInput = input
+	m.lastMutationID = input.RoleID
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.roleResult(), nil
+}
+
+func (m *mockClient) RoleSetPermissions(_ context.Context, input models.RoleSetPermissionsInput) (*models.Role, error) {
+	m.lastRolePermInput = input
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.roleResult(), nil
+}
+
+func (m *mockClient) webhookResult() *models.Webhook {
+	if m.mutatedWebhook != nil {
+		return m.mutatedWebhook
+	}
+	return &models.Webhook{
+		ID:       "wh-1",
+		URL:      "https://example.com/webhook",
+		Status:   "DISABLED",
+		Subjects: []string{"INSPECTIONS"},
+		Subscriber: &models.WebhookSubscriber{
+			Type: "ACCOUNT",
+			ID:   "acct-1",
+		},
+		SigningSecret: "whsec_test123",
+	}
+}
+
+func (m *mockClient) WebhookCreate(_ context.Context, input models.WebhookCreateInput) (*models.Webhook, error) {
+	m.lastWebhookCreateInput = input
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.webhookResult(), nil
+}
+
+func (m *mockClient) WebhookUpdate(_ context.Context, input models.WebhookUpdateInput) (*models.Webhook, error) {
+	m.lastWebhookUpdateInput = input
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.webhookResult(), nil
 }
 
 // Verify mockClient satisfies the interface at compile time.
@@ -3272,4 +3609,1307 @@ func TestWrapToolDebugModePassesErrorsThrough(t *testing.T) {
 	result := callTool(t, cs, "get_account", nil)
 	assert.True(t, result.IsError)
 	assert.Contains(t, toolText(t, result), "api_error")
+}
+
+// ---------------------------------------------------------------------------
+// Project Mutation Tool Tests
+// ---------------------------------------------------------------------------
+
+func TestToolProjectCreate(t *testing.T) {
+	t.Run("happy path", func(t *testing.T) {
+		mock := &mockClient{
+			mutatedProject: &models.Project{ID: "proj-new", Status: "PLANNED", Priority: "URGENT"},
+		}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "project_create", map[string]any{
+			"template_id": "tmpl-1",
+			"location_id": "loc-123",
+			"start_at":    "2026-05-01T00:00:00Z",
+			"priority":    "URGENT",
+			"notes":       "Test project",
+		})
+		assert.False(t, result.IsError)
+
+		var proj models.Project
+		require.NoError(t, json.Unmarshal([]byte(toolText(t, result)), &proj))
+		assert.Equal(t, "proj-new", proj.ID)
+		assert.Equal(t, "URGENT", proj.Priority)
+
+		// Verify input was passed correctly
+		assert.Equal(t, "tmpl-1", mock.lastProjCreateInput.ProjectTemplateID)
+		assert.Equal(t, "loc-123", mock.lastProjCreateInput.LocationID)
+		assert.Equal(t, "Test project", mock.lastProjCreateInput.Notes)
+	})
+
+	t.Run("missing template_id returns error", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "project_create", map[string]any{
+			"location_id": "loc-123",
+			"start_at":    "2026-05-01T00:00:00Z",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "template_id")
+	})
+
+	t.Run("missing location_id returns error", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "project_create", map[string]any{
+			"template_id": "tmpl-1",
+			"start_at":    "2026-05-01T00:00:00Z",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "location_id")
+	})
+
+	t.Run("missing start_at returns error", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "project_create", map[string]any{
+			"template_id": "tmpl-1",
+			"location_id": "loc-123",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "start_at")
+	})
+
+	t.Run("invalid priority rejected", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "project_create", map[string]any{
+			"template_id": "tmpl-1",
+			"location_id": "loc-123",
+			"start_at":    "2026-05-01T00:00:00Z",
+			"priority":    "CRITICAL",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "priority must be NORMAL or URGENT")
+	})
+
+	t.Run("lowercase priority normalised", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "project_create", map[string]any{
+			"template_id": "tmpl-1",
+			"location_id": "loc-123",
+			"start_at":    "2026-05-01T00:00:00Z",
+			"priority":    "urgent",
+		})
+		assert.False(t, result.IsError)
+		assert.Equal(t, "URGENT", mock.lastProjCreateInput.Priority)
+	})
+
+	t.Run("invalid ID rejected", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "project_create", map[string]any{
+			"template_id": "../../etc/passwd",
+			"location_id": "loc-123",
+			"start_at":    "2026-05-01T00:00:00Z",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "invalid_input")
+	})
+}
+
+func TestToolProjectSetAssignee(t *testing.T) {
+	t.Run("happy path set assignee", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		assigneeID := "user-456"
+		result := callTool(t, cs, "project_set_assignee", map[string]any{
+			"project_id":  "proj-1",
+			"assignee_id": assigneeID,
+		})
+		assert.False(t, result.IsError)
+		assert.Equal(t, "proj-1", mock.lastProjAssignInput.ProjectID)
+		require.NotNil(t, mock.lastProjAssignInput.AssigneeID)
+		assert.Equal(t, "user-456", *mock.lastProjAssignInput.AssigneeID)
+	})
+
+	t.Run("missing project_id returns error", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "project_set_assignee", map[string]any{})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "project_id")
+	})
+}
+
+func TestToolProjectSetNotes(t *testing.T) {
+	t.Run("happy path", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "project_set_notes", map[string]any{
+			"project_id": "proj-1",
+			"value":      "Updated notes",
+		})
+		assert.False(t, result.IsError)
+		assert.Equal(t, "proj-1", mock.lastMutationID)
+		assert.Equal(t, "Updated notes", mock.lastStringValue)
+	})
+
+	t.Run("missing value returns error", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "project_set_notes", map[string]any{
+			"project_id": "proj-1",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "value")
+	})
+}
+
+func TestToolProjectSetPriority(t *testing.T) {
+	t.Run("happy path", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "project_set_priority", map[string]any{
+			"project_id": "proj-1",
+			"value":      "URGENT",
+		})
+		assert.False(t, result.IsError)
+		assert.Equal(t, "proj-1", mock.lastMutationID)
+	})
+
+	t.Run("invalid priority rejected", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "project_set_priority", map[string]any{
+			"project_id": "proj-1",
+			"value":      "HIGH",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "priority must be NORMAL or URGENT")
+	})
+}
+
+func TestToolProjectSetOnHold(t *testing.T) {
+	mock := &mockClient{}
+	cs := newTestServer(t, mock)
+
+	result := callTool(t, cs, "project_set_on_hold", map[string]any{
+		"project_id": "proj-1",
+		"value":      true,
+	})
+	assert.False(t, result.IsError)
+	assert.Equal(t, "proj-1", mock.lastMutationID)
+}
+
+func TestToolProjectSetDueAt(t *testing.T) {
+	t.Run("happy path", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "project_set_due_at", map[string]any{
+			"project_id": "proj-1",
+			"value":      "2026-06-01T00:00:00Z",
+		})
+		assert.False(t, result.IsError)
+		assert.Equal(t, "proj-1", mock.lastMutationID)
+	})
+
+	t.Run("invalid timestamp rejected", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "project_set_due_at", map[string]any{
+			"project_id": "proj-1",
+			"value":      "not-a-date",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "RFC3339")
+	})
+}
+
+func TestToolProjectSetStartAt(t *testing.T) {
+	mock := &mockClient{}
+	cs := newTestServer(t, mock)
+
+	result := callTool(t, cs, "project_set_start_at", map[string]any{
+		"project_id": "proj-1",
+		"value":      "2026-05-01T00:00:00Z",
+	})
+	assert.False(t, result.IsError)
+	assert.Equal(t, "proj-1", mock.lastMutationID)
+}
+
+func TestToolProjectSetAvailabilityTargetAt(t *testing.T) {
+	t.Run("happy path", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "project_set_availability_target_at", map[string]any{
+			"project_id":             "proj-1",
+			"availability_target_at": "2026-05-15T00:00:00Z",
+		})
+		assert.False(t, result.IsError)
+		assert.Equal(t, "proj-1", mock.lastMutationID)
+	})
+
+	t.Run("missing project_id returns error", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "project_set_availability_target_at", map[string]any{
+			"availability_target_at": "2026-05-15T00:00:00Z",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "project_id")
+	})
+}
+
+func TestToolProjectMutationAPIError(t *testing.T) {
+	mock := &mockClient{err: fmt.Errorf("api_error: server error")}
+	cs := newTestServer(t, mock)
+
+	result := callTool(t, cs, "project_create", map[string]any{
+		"template_id": "tmpl-1",
+		"location_id": "loc-123",
+		"start_at":    "2026-05-01T00:00:00Z",
+	})
+	assert.True(t, result.IsError)
+	assert.Contains(t, toolText(t, result), "api_error")
+}
+
+// ---------------------------------------------------------------------------
+// Account Mutation Tool Tests
+// ---------------------------------------------------------------------------
+
+func TestToolUserCreate(t *testing.T) {
+	t.Run("happy path", func(t *testing.T) {
+		mock := &mockClient{
+			mutatedUser: &models.User{ID: "user-new", Name: "Jane Doe", Email: "jane@example.com"},
+		}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "user_create", map[string]any{
+			"account_id": "acct-1",
+			"email":      "jane@example.com",
+			"name":       "Jane Doe",
+			"role_id":    "role1,role2",
+		})
+		assert.False(t, result.IsError)
+
+		var user models.User
+		require.NoError(t, json.Unmarshal([]byte(toolText(t, result)), &user))
+		assert.Equal(t, "user-new", user.ID)
+		assert.Equal(t, "Jane Doe", user.Name)
+
+		// Verify input passed correctly
+		assert.Equal(t, "acct-1", mock.lastUserCreateInput.AccountID)
+		assert.Equal(t, "jane@example.com", mock.lastUserCreateInput.Email)
+		assert.Equal(t, []string{"role1", "role2"}, mock.lastUserCreateInput.RoleID)
+	})
+
+	t.Run("missing account_id returns error", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "user_create", map[string]any{
+			"email": "jane@example.com",
+			"name":  "Jane Doe",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "account_id")
+	})
+
+	t.Run("missing email returns error", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "user_create", map[string]any{
+			"account_id": "acct-1",
+			"name":       "Jane Doe",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "email")
+	})
+
+	t.Run("invalid email rejected", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "user_create", map[string]any{
+			"account_id": "acct-1",
+			"email":      "not-an-email",
+			"name":       "Jane Doe",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "invalid_input")
+	})
+
+	t.Run("missing name returns error", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "user_create", map[string]any{
+			"account_id": "acct-1",
+			"email":      "jane@example.com",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "name")
+	})
+
+	t.Run("invalid ID rejected", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "user_create", map[string]any{
+			"account_id": "../../etc/passwd",
+			"email":      "jane@example.com",
+			"name":       "Jane Doe",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "invalid_input")
+	})
+}
+
+func TestToolUserSetEmail(t *testing.T) {
+	t.Run("happy path forwards email", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "user_set_email", map[string]any{
+			"user_id": "user-1",
+			"email":   "new@example.com",
+		})
+		assert.False(t, result.IsError)
+		assert.Equal(t, "user-1", mock.lastMutationID)
+		assert.Equal(t, "new@example.com", mock.lastStringValue)
+	})
+
+	t.Run("missing user_id returns error", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "user_set_email", map[string]any{
+			"email": "new@example.com",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "user_id")
+	})
+
+	t.Run("invalid email rejected", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "user_set_email", map[string]any{
+			"user_id": "user-1",
+			"email":   "bad",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "invalid_input")
+	})
+}
+
+func TestToolUserSetName(t *testing.T) {
+	t.Run("happy path forwards name", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "user_set_name", map[string]any{
+			"user_id": "user-1",
+			"name":    "New Name",
+		})
+		assert.False(t, result.IsError)
+		assert.Equal(t, "user-1", mock.lastMutationID)
+		assert.Equal(t, "New Name", mock.lastStringValue)
+	})
+
+	t.Run("missing name returns error", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "user_set_name", map[string]any{
+			"user_id": "user-1",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "name")
+	})
+}
+
+func TestToolUserSetShortName(t *testing.T) {
+	mock := &mockClient{}
+	cs := newTestServer(t, mock)
+
+	result := callTool(t, cs, "user_set_short_name", map[string]any{
+		"user_id": "user-1",
+		"value":   "Jay",
+	})
+	assert.False(t, result.IsError)
+	assert.Equal(t, "user-1", mock.lastMutationID)
+}
+
+func TestToolUserSetPhone(t *testing.T) {
+	mock := &mockClient{}
+	cs := newTestServer(t, mock)
+
+	result := callTool(t, cs, "user_set_phone", map[string]any{
+		"user_id": "user-1",
+		"value":   "+1-555-0100",
+	})
+	assert.False(t, result.IsError)
+	assert.Equal(t, "user-1", mock.lastMutationID)
+}
+
+func TestToolMembershipCreate(t *testing.T) {
+	t.Run("happy path", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "membership_create", map[string]any{
+			"account_id": "acct-1",
+			"user_id":    "user-1",
+			"role_id":    "role-a",
+		})
+		assert.False(t, result.IsError)
+		assert.Equal(t, "acct-1", mock.lastMembershipInput.AccountID)
+		assert.Equal(t, "user-1", mock.lastMembershipInput.UserID)
+		assert.Equal(t, []string{"role-a"}, mock.lastMembershipInput.RoleID)
+	})
+
+	t.Run("missing account_id returns error", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "membership_create", map[string]any{
+			"user_id": "user-1",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "account_id")
+	})
+
+	t.Run("missing user_id returns error", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "membership_create", map[string]any{
+			"account_id": "acct-1",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "user_id")
+	})
+}
+
+func TestToolMembershipActivate(t *testing.T) {
+	mock := &mockClient{}
+	cs := newTestServer(t, mock)
+
+	result := callTool(t, cs, "membership_activate", map[string]any{
+		"account_id": "acct-1",
+		"user_id":    "user-1",
+	})
+	assert.False(t, result.IsError)
+	assert.Equal(t, "user-1", mock.lastMutationID)
+}
+
+func TestToolMembershipDeactivate(t *testing.T) {
+	mock := &mockClient{}
+	cs := newTestServer(t, mock)
+
+	result := callTool(t, cs, "membership_deactivate", map[string]any{
+		"account_id": "acct-1",
+		"user_id":    "user-1",
+	})
+	assert.False(t, result.IsError)
+	assert.Equal(t, "user-1", mock.lastMutationID)
+}
+
+func TestToolMembershipSetRoles(t *testing.T) {
+	t.Run("happy path", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "membership_set_roles", map[string]any{
+			"account_id": "acct-1",
+			"user_id":    "user-1",
+			"role_id":    "role-a,role-b",
+		})
+		assert.False(t, result.IsError)
+		assert.Equal(t, "acct-1", mock.lastMembershipRoleInput.AccountID)
+		assert.Equal(t, []string{"role-a", "role-b"}, mock.lastMembershipRoleInput.RoleID)
+	})
+
+	t.Run("missing account_id returns error", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "membership_set_roles", map[string]any{
+			"user_id": "user-1",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "account_id")
+	})
+
+	t.Run("missing user_id returns error", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "membership_set_roles", map[string]any{
+			"account_id": "acct-1",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "user_id")
+	})
+}
+
+func TestToolPropertyGrantAccess(t *testing.T) {
+	t.Run("happy path with multiple users", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "property_grant_access", map[string]any{
+			"property_id": "prop-1",
+			"user_id":     "user-1,user-2",
+		})
+		assert.False(t, result.IsError)
+		assert.Equal(t, "prop-1", mock.lastPropertyAccessInput.PropertyID)
+		assert.Equal(t, []string{"user-1", "user-2"}, mock.lastPropertyAccessInput.UserID)
+	})
+
+	t.Run("missing property_id returns error", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "property_grant_access", map[string]any{
+			"user_id": "user-1",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "property_id")
+	})
+
+	t.Run("missing user_id returns error", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "property_grant_access", map[string]any{
+			"property_id": "prop-1",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "user_id")
+	})
+
+	t.Run("invalid user_id rejected", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "property_grant_access", map[string]any{
+			"property_id": "prop-1",
+			"user_id":     "../../../etc/passwd",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "invalid_input")
+	})
+}
+
+func TestToolPropertyRevokeAccess(t *testing.T) {
+	mock := &mockClient{}
+	cs := newTestServer(t, mock)
+
+	result := callTool(t, cs, "property_revoke_access", map[string]any{
+		"property_id": "prop-1",
+		"user_id":     "user-1",
+	})
+	assert.False(t, result.IsError)
+	assert.Equal(t, "prop-1", mock.lastMutationID)
+}
+
+func TestToolPropertySetAccountWideAccess(t *testing.T) {
+	mock := &mockClient{}
+	cs := newTestServer(t, mock)
+
+	result := callTool(t, cs, "property_set_account_wide_access", map[string]any{
+		"property_id":         "prop-1",
+		"account_wide_access": true,
+	})
+	assert.False(t, result.IsError)
+	assert.Equal(t, "prop-1", mock.lastMutationID)
+}
+
+func TestToolUserGrantPropertyAccess(t *testing.T) {
+	mock := &mockClient{}
+	cs := newTestServer(t, mock)
+
+	result := callTool(t, cs, "user_grant_property_access", map[string]any{
+		"user_id":     "user-1",
+		"property_id": "prop-a,prop-b",
+	})
+	assert.False(t, result.IsError)
+	assert.Equal(t, "user-1", mock.lastUserAccessInput.UserID)
+	assert.Equal(t, []string{"prop-a", "prop-b"}, mock.lastUserAccessInput.PropertyID)
+}
+
+func TestToolUserRevokePropertyAccess(t *testing.T) {
+	mock := &mockClient{}
+	cs := newTestServer(t, mock)
+
+	result := callTool(t, cs, "user_revoke_property_access", map[string]any{
+		"user_id":     "user-1",
+		"property_id": "prop-a",
+	})
+	assert.False(t, result.IsError)
+	assert.Equal(t, "user-1", mock.lastMutationID)
+}
+
+func TestToolAccountMutationAPIError(t *testing.T) {
+	mock := &mockClient{err: fmt.Errorf("api_error: server error")}
+	cs := newTestServer(t, mock)
+
+	result := callTool(t, cs, "user_create", map[string]any{
+		"account_id": "acct-1",
+		"email":      "test@example.com",
+		"name":       "Test User",
+	})
+	assert.True(t, result.IsError)
+	assert.Contains(t, toolText(t, result), "api_error")
+}
+
+// ---------------------------------------------------------------------------
+// Role mutation tool tests
+// ---------------------------------------------------------------------------
+
+func TestToolRoleCreate(t *testing.T) {
+	t.Run("success with grant and revoke", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "role_create", map[string]any{
+			"account_id":         "acct-1",
+			"name":               "Inspector",
+			"description":        "Can perform inspections",
+			"permissions_grant":  "inspection:inspection.create,inspection:inspection.view",
+			"permissions_revoke": "inspection:inspection.delete",
+		})
+		require.False(t, result.IsError, "unexpected error: %s", toolText(t, result))
+
+		assert.Equal(t, "acct-1", mock.lastRoleCreateInput.AccountID)
+		assert.Equal(t, "Inspector", mock.lastRoleCreateInput.Name)
+		assert.Equal(t, "Can perform inspections", mock.lastRoleCreateInput.Description)
+		assert.Equal(t, []string{"inspection:inspection.create", "inspection:inspection.view"}, mock.lastRoleCreateInput.Permissions.Grant)
+		assert.Equal(t, []string{"inspection:inspection.delete"}, mock.lastRoleCreateInput.Permissions.Revoke)
+
+		var role models.Role
+		require.NoError(t, json.Unmarshal([]byte(toolText(t, result)), &role))
+		assert.Equal(t, "role-1", role.ID)
+	})
+
+	t.Run("missing account_id", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "role_create", map[string]any{
+			"name":              "Inspector",
+			"permissions_grant": "test:action",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "account_id")
+	})
+
+	t.Run("missing name", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "role_create", map[string]any{
+			"account_id":        "acct-1",
+			"permissions_grant": "test:action",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "name")
+	})
+
+	t.Run("missing permissions", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "role_create", map[string]any{
+			"account_id": "acct-1",
+			"name":       "Inspector",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "permissions_grant")
+	})
+
+	t.Run("invalid account_id", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "role_create", map[string]any{
+			"account_id":        "bad id!",
+			"name":              "Inspector",
+			"permissions_grant": "test:action",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "invalid_input")
+	})
+}
+
+func TestToolRoleSetName(t *testing.T) {
+	t.Run("success forwards all fields", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "role_set_name", map[string]any{
+			"account_id": "acct-1",
+			"role_id":    "role-1",
+			"name":       "Senior Inspector",
+		})
+		require.False(t, result.IsError, "unexpected error: %s", toolText(t, result))
+
+		assert.Equal(t, "acct-1", mock.lastRoleSetNameInput.AccountID)
+		assert.Equal(t, "role-1", mock.lastRoleSetNameInput.RoleID)
+		assert.Equal(t, "Senior Inspector", mock.lastRoleSetNameInput.Name)
+
+		var role models.Role
+		require.NoError(t, json.Unmarshal([]byte(toolText(t, result)), &role))
+		assert.Equal(t, "role-1", role.ID)
+	})
+
+	t.Run("missing account_id", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "role_set_name", map[string]any{
+			"role_id": "role-1",
+			"name":    "New Name",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "account_id")
+	})
+
+	t.Run("missing role_id", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "role_set_name", map[string]any{
+			"account_id": "acct-1",
+			"name":       "New Name",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "role_id")
+	})
+
+	t.Run("missing name", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "role_set_name", map[string]any{
+			"account_id": "acct-1",
+			"role_id":    "role-1",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "name")
+	})
+}
+
+func TestToolRoleSetDescription(t *testing.T) {
+	t.Run("success forwards description", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "role_set_description", map[string]any{
+			"account_id":  "acct-1",
+			"role_id":     "role-1",
+			"description": "Updated description",
+		})
+		require.False(t, result.IsError, "unexpected error: %s", toolText(t, result))
+
+		assert.Equal(t, "acct-1", mock.lastRoleSetDescInput.AccountID)
+		assert.Equal(t, "role-1", mock.lastRoleSetDescInput.RoleID)
+		require.NotNil(t, mock.lastRoleSetDescInput.Description)
+		assert.Equal(t, "Updated description", *mock.lastRoleSetDescInput.Description)
+	})
+
+	t.Run("null description clears it", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		// Passing null explicitly should forward nil pointer
+		result := callTool(t, cs, "role_set_description", map[string]any{
+			"account_id":  "acct-1",
+			"role_id":     "role-1",
+			"description": nil,
+		})
+		require.False(t, result.IsError, "unexpected error: %s", toolText(t, result))
+
+		assert.Equal(t, "role-1", mock.lastRoleSetDescInput.RoleID)
+		assert.Nil(t, mock.lastRoleSetDescInput.Description)
+	})
+
+	t.Run("missing account_id", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "role_set_description", map[string]any{
+			"role_id":     "role-1",
+			"description": "test",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "account_id")
+	})
+
+	t.Run("missing role_id", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "role_set_description", map[string]any{
+			"account_id":  "acct-1",
+			"description": "test",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "role_id")
+	})
+}
+
+func TestToolRoleSetPermissions(t *testing.T) {
+	t.Run("success with grant and revoke", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "role_set_permissions", map[string]any{
+			"account_id":         "acct-1",
+			"role_id":            "role-1",
+			"permissions_grant":  "task:task.create",
+			"permissions_revoke": "task:task.delete",
+		})
+		require.False(t, result.IsError, "unexpected error: %s", toolText(t, result))
+
+		assert.Equal(t, "acct-1", mock.lastRolePermInput.AccountID)
+		assert.Equal(t, "role-1", mock.lastRolePermInput.RoleID)
+		assert.Equal(t, []string{"task:task.create"}, mock.lastRolePermInput.Permissions.Grant)
+		assert.Equal(t, []string{"task:task.delete"}, mock.lastRolePermInput.Permissions.Revoke)
+	})
+
+	t.Run("grant only", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "role_set_permissions", map[string]any{
+			"account_id":        "acct-1",
+			"role_id":           "role-1",
+			"permissions_grant": "task:task.create,task:task.view",
+		})
+		require.False(t, result.IsError, "unexpected error: %s", toolText(t, result))
+
+		assert.Equal(t, []string{"task:task.create", "task:task.view"}, mock.lastRolePermInput.Permissions.Grant)
+		assert.Nil(t, mock.lastRolePermInput.Permissions.Revoke)
+	})
+
+	t.Run("revoke only", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "role_set_permissions", map[string]any{
+			"account_id":         "acct-1",
+			"role_id":            "role-1",
+			"permissions_revoke": "task:task.delete",
+		})
+		require.False(t, result.IsError, "unexpected error: %s", toolText(t, result))
+
+		assert.Nil(t, mock.lastRolePermInput.Permissions.Grant)
+		assert.Equal(t, []string{"task:task.delete"}, mock.lastRolePermInput.Permissions.Revoke)
+	})
+
+	t.Run("missing both grant and revoke", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "role_set_permissions", map[string]any{
+			"account_id": "acct-1",
+			"role_id":    "role-1",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "permissions_grant")
+	})
+
+	t.Run("missing account_id", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "role_set_permissions", map[string]any{
+			"role_id":           "role-1",
+			"permissions_grant": "task:task.create",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "account_id")
+	})
+
+	t.Run("missing role_id", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "role_set_permissions", map[string]any{
+			"account_id":        "acct-1",
+			"permissions_grant": "task:task.create",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "role_id")
+	})
+}
+
+func TestToolRoleMutationAPIError(t *testing.T) {
+	t.Run("role_create", func(t *testing.T) {
+		mock := &mockClient{err: fmt.Errorf("api_error: server error")}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "role_create", map[string]any{
+			"account_id":        "acct-1",
+			"name":              "Test Role",
+			"permissions_grant": "test:action",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "api_error")
+	})
+
+	t.Run("role_set_permissions", func(t *testing.T) {
+		mock := &mockClient{err: fmt.Errorf("api_error: server error")}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "role_set_permissions", map[string]any{
+			"account_id":        "acct-1",
+			"role_id":           "role-1",
+			"permissions_grant": "test:action",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "api_error")
+	})
+}
+
+// ---------------------------------------------------------------------------
+// Webhook mutation tool tests
+// ---------------------------------------------------------------------------
+
+func TestToolWebhookCreate(t *testing.T) {
+	t.Run("success with all fields", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "webhook_create", map[string]any{
+			"subscriber_id":   "acct-1",
+			"subscriber_type": "ACCOUNT",
+			"url":             "https://example.com/webhook",
+			"subjects":        "INSPECTIONS,WORK_ORDERS",
+			"status":          "ENABLED",
+		})
+		require.False(t, result.IsError, "unexpected error: %s", toolText(t, result))
+
+		assert.Equal(t, "acct-1", mock.lastWebhookCreateInput.SubscriberID)
+		assert.Equal(t, "ACCOUNT", mock.lastWebhookCreateInput.SubscriberType)
+		assert.Equal(t, "https://example.com/webhook", mock.lastWebhookCreateInput.URL)
+		assert.Equal(t, []string{"INSPECTIONS", "WORK_ORDERS"}, mock.lastWebhookCreateInput.Subjects)
+		assert.Equal(t, "ENABLED", mock.lastWebhookCreateInput.Status)
+
+		var webhook models.Webhook
+		require.NoError(t, json.Unmarshal([]byte(toolText(t, result)), &webhook))
+		assert.Equal(t, "wh-1", webhook.ID)
+	})
+
+	t.Run("minimal required fields", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "webhook_create", map[string]any{
+			"subscriber_id":   "acct-1",
+			"subscriber_type": "ACCOUNT",
+			"url":             "https://example.com/hook",
+		})
+		require.False(t, result.IsError, "unexpected error: %s", toolText(t, result))
+		assert.Equal(t, "acct-1", mock.lastWebhookCreateInput.SubscriberID)
+		assert.Empty(t, mock.lastWebhookCreateInput.Subjects)
+		assert.Empty(t, mock.lastWebhookCreateInput.Status)
+	})
+
+	t.Run("missing subscriber_id", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "webhook_create", map[string]any{
+			"subscriber_type": "ACCOUNT",
+			"url":             "https://example.com/hook",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "subscriber_id")
+	})
+
+	t.Run("missing subscriber_type", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "webhook_create", map[string]any{
+			"subscriber_id": "acct-1",
+			"url":           "https://example.com/hook",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "subscriber_type")
+	})
+
+	t.Run("missing url", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "webhook_create", map[string]any{
+			"subscriber_id":   "acct-1",
+			"subscriber_type": "ACCOUNT",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "url")
+	})
+
+	t.Run("non-HTTPS url rejected", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "webhook_create", map[string]any{
+			"subscriber_id":   "acct-1",
+			"subscriber_type": "ACCOUNT",
+			"url":             "http://example.com/hook",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "HTTPS")
+	})
+
+	t.Run("invalid subscriber_type rejected", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "webhook_create", map[string]any{
+			"subscriber_id":   "acct-1",
+			"subscriber_type": "INVALID",
+			"url":             "https://example.com/hook",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "subscriber_type")
+	})
+
+	t.Run("invalid subject rejected", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "webhook_create", map[string]any{
+			"subscriber_id":   "acct-1",
+			"subscriber_type": "ACCOUNT",
+			"url":             "https://example.com/hook",
+			"subjects":        "INVALID_SUBJECT",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "invalid webhook subject")
+	})
+
+	t.Run("invalid status rejected", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "webhook_create", map[string]any{
+			"subscriber_id":   "acct-1",
+			"subscriber_type": "ACCOUNT",
+			"url":             "https://example.com/hook",
+			"status":          "INVALID",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "status")
+	})
+
+	t.Run("lowercase inputs normalised to uppercase", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "webhook_create", map[string]any{
+			"subscriber_id":   "acct-1",
+			"subscriber_type": "account",
+			"url":             "https://example.com/hook",
+			"subjects":        "inspections,work_orders",
+			"status":          "enabled",
+		})
+		require.False(t, result.IsError, "unexpected error: %s", toolText(t, result))
+
+		assert.Equal(t, "ACCOUNT", mock.lastWebhookCreateInput.SubscriberType)
+		assert.Equal(t, []string{"INSPECTIONS", "WORK_ORDERS"}, mock.lastWebhookCreateInput.Subjects)
+		assert.Equal(t, "ENABLED", mock.lastWebhookCreateInput.Status)
+	})
+
+	t.Run("whitespace-only url treated as empty", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "webhook_create", map[string]any{
+			"subscriber_id":   "acct-1",
+			"subscriber_type": "ACCOUNT",
+			"url":             "   ",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "url")
+	})
+
+	t.Run("url with credentials rejected", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "webhook_create", map[string]any{
+			"subscriber_id":   "acct-1",
+			"subscriber_type": "ACCOUNT",
+			"url":             "https://user:pass@example.com/hook",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "credentials")
+	})
+}
+
+func TestToolWebhookUpdate(t *testing.T) {
+	t.Run("success updates url and status", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "webhook_update", map[string]any{
+			"id":     "wh-1",
+			"url":    "https://new-endpoint.com/hook",
+			"status": "ENABLED",
+		})
+		require.False(t, result.IsError, "unexpected error: %s", toolText(t, result))
+
+		assert.Equal(t, "wh-1", mock.lastWebhookUpdateInput.ID)
+		assert.Equal(t, "https://new-endpoint.com/hook", mock.lastWebhookUpdateInput.URL)
+		assert.Equal(t, "ENABLED", mock.lastWebhookUpdateInput.Status)
+
+		var webhook models.Webhook
+		require.NoError(t, json.Unmarshal([]byte(toolText(t, result)), &webhook))
+		assert.Equal(t, "wh-1", webhook.ID)
+	})
+
+	t.Run("update subjects only", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "webhook_update", map[string]any{
+			"id":       "wh-1",
+			"subjects": "WORK_ORDERS,VENDORS",
+		})
+		require.False(t, result.IsError, "unexpected error: %s", toolText(t, result))
+		assert.Equal(t, []string{"WORK_ORDERS", "VENDORS"}, mock.lastWebhookUpdateInput.Subjects)
+	})
+
+	t.Run("missing id", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "webhook_update", map[string]any{
+			"url": "https://example.com/hook",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "id")
+	})
+
+	t.Run("no update fields", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "webhook_update", map[string]any{
+			"id": "wh-1",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "at least one")
+	})
+
+	t.Run("non-HTTPS url rejected", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "webhook_update", map[string]any{
+			"id":  "wh-1",
+			"url": "http://example.com/hook",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "HTTPS")
+	})
+
+	t.Run("invalid subject rejected", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "webhook_update", map[string]any{
+			"id":       "wh-1",
+			"subjects": "BAD_SUBJECT",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "invalid webhook subject")
+	})
+
+	t.Run("update url only", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "webhook_update", map[string]any{
+			"id":  "wh-1",
+			"url": "https://new-endpoint.com/hook",
+		})
+		require.False(t, result.IsError, "unexpected error: %s", toolText(t, result))
+		assert.Equal(t, "https://new-endpoint.com/hook", mock.lastWebhookUpdateInput.URL)
+		assert.Empty(t, mock.lastWebhookUpdateInput.Status)
+		assert.Nil(t, mock.lastWebhookUpdateInput.Subjects)
+	})
+
+	t.Run("update status only", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "webhook_update", map[string]any{
+			"id":     "wh-1",
+			"status": "disabled",
+		})
+		require.False(t, result.IsError, "unexpected error: %s", toolText(t, result))
+		assert.Equal(t, "DISABLED", mock.lastWebhookUpdateInput.Status)
+		assert.Empty(t, mock.lastWebhookUpdateInput.URL)
+	})
+
+	t.Run("whitespace-only url not counted as update", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "webhook_update", map[string]any{
+			"id":  "wh-1",
+			"url": "   ",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "at least one")
+	})
+}
+
+func TestToolWebhookMutationAPIError(t *testing.T) {
+	t.Run("webhook_create", func(t *testing.T) {
+		mock := &mockClient{err: fmt.Errorf("api_error: server error")}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "webhook_create", map[string]any{
+			"subscriber_id":   "acct-1",
+			"subscriber_type": "ACCOUNT",
+			"url":             "https://example.com/hook",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "api_error")
+	})
+
+	t.Run("webhook_update", func(t *testing.T) {
+		mock := &mockClient{err: fmt.Errorf("api_error: server error")}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "webhook_update", map[string]any{
+			"id":     "wh-1",
+			"status": "ENABLED",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "api_error")
+	})
 }

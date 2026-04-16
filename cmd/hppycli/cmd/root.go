@@ -134,4 +134,9 @@ func init() {
 	rootCmd.AddCommand(unitsCmd)
 	rootCmd.AddCommand(workordersCmd)
 	rootCmd.AddCommand(inspectionsCmd)
+	rootCmd.AddCommand(projectsCmd)
+	rootCmd.AddCommand(usersCmd)
+	rootCmd.AddCommand(membershipsCmd)
+	rootCmd.AddCommand(rolesCmd)
+	rootCmd.AddCommand(webhooksCmd)
 }

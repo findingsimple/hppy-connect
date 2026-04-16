@@ -1020,6 +1020,331 @@ func (c *Client) InspectionSendToGuest(ctx context.Context, input models.Inspect
 	return &resp.InspectionSendToGuest, nil
 }
 
+// --- Project Mutations (8) ---
+
+// ProjectCreate creates a new project from a template. Non-idempotent: auth-retry only.
+func (c *Client) ProjectCreate(ctx context.Context, input models.ProjectCreateInput) (*models.Project, error) {
+	vars := map[string]interface{}{"input": input}
+	var resp projectCreateResponse
+	if err := c.doMutation(ctx, projectCreateMutation, vars, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.ProjectCreate, nil
+}
+
+// ProjectSetAssignee sets or clears the project assignee. Idempotent.
+func (c *Client) ProjectSetAssignee(ctx context.Context, input models.ProjectSetAssigneeInput) (*models.Project, error) {
+	vars := map[string]interface{}{"input": input}
+	var resp projectSetAssigneeResponse
+	if err := c.doMutationIdempotent(ctx, projectSetAssigneeMutation, vars, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.ProjectSetAssignee, nil
+}
+
+// ProjectSetNotes sets the project notes. Idempotent.
+func (c *Client) ProjectSetNotes(ctx context.Context, projectID, notes string) (*models.Project, error) {
+	vars := map[string]interface{}{"input": map[string]interface{}{
+		"projectId": projectID,
+		"notes":     notes,
+	}}
+	var resp projectSetNotesResponse
+	if err := c.doMutationIdempotent(ctx, projectSetNotesMutation, vars, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.ProjectSetNotes, nil
+}
+
+// ProjectSetDueAt sets the project due date. Idempotent.
+func (c *Client) ProjectSetDueAt(ctx context.Context, projectID, dueAt string) (*models.Project, error) {
+	vars := map[string]interface{}{"input": map[string]interface{}{
+		"projectId": projectID,
+		"dueAt":     dueAt,
+	}}
+	var resp projectSetDueAtResponse
+	if err := c.doMutationIdempotent(ctx, projectSetDueAtMutation, vars, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.ProjectSetDueAt, nil
+}
+
+// ProjectSetStartAt sets the project start date. Idempotent.
+func (c *Client) ProjectSetStartAt(ctx context.Context, projectID, startAt string) (*models.Project, error) {
+	vars := map[string]interface{}{"input": map[string]interface{}{
+		"projectId": projectID,
+		"startAt":   startAt,
+	}}
+	var resp projectSetStartAtResponse
+	if err := c.doMutationIdempotent(ctx, projectSetStartAtMutation, vars, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.ProjectSetStartAt, nil
+}
+
+// ProjectSetPriority sets the project priority. Idempotent.
+func (c *Client) ProjectSetPriority(ctx context.Context, projectID, priority string) (*models.Project, error) {
+	vars := map[string]interface{}{"input": map[string]interface{}{
+		"projectId": projectID,
+		"priority":  priority,
+	}}
+	var resp projectSetPriorityResponse
+	if err := c.doMutationIdempotent(ctx, projectSetPriorityMutation, vars, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.ProjectSetPriority, nil
+}
+
+// ProjectSetOnHold sets the project on-hold status. Idempotent.
+func (c *Client) ProjectSetOnHold(ctx context.Context, projectID string, onHold bool) (*models.Project, error) {
+	vars := map[string]interface{}{"input": map[string]interface{}{
+		"projectId": projectID,
+		"onHold":    onHold,
+	}}
+	var resp projectSetOnHoldResponse
+	if err := c.doMutationIdempotent(ctx, projectSetOnHoldMutation, vars, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.ProjectSetOnHold, nil
+}
+
+// ProjectSetAvailabilityTargetAt sets the project availability target date. Idempotent.
+// Pass empty string to clear the date.
+func (c *Client) ProjectSetAvailabilityTargetAt(ctx context.Context, projectID string, availabilityTargetAt *string) (*models.Project, error) {
+	vars := map[string]interface{}{"input": map[string]interface{}{
+		"projectId":            projectID,
+		"availabilityTargetAt": availabilityTargetAt,
+	}}
+	var resp projectSetAvailabilityTargetAtResponse
+	if err := c.doMutationIdempotent(ctx, projectSetAvailabilityTargetAtMutation, vars, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.ProjectSetAvailabilityTargetAt, nil
+}
+
+// --- User Mutations (5) ---
+
+// UserCreate creates a new user in an account. Non-idempotent: auth-retry only.
+func (c *Client) UserCreate(ctx context.Context, input models.UserCreateInput) (*models.User, error) {
+	vars := map[string]interface{}{"input": input}
+	var resp userCreateResponse
+	if err := c.doMutation(ctx, userCreateMutation, vars, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.UserCreate, nil
+}
+
+// UserSetEmail sets a user's email. Idempotent.
+func (c *Client) UserSetEmail(ctx context.Context, userID, email string) (*models.User, error) {
+	vars := map[string]interface{}{"input": map[string]interface{}{
+		"userId": userID,
+		"email":  email,
+	}}
+	var resp userSetEmailResponse
+	if err := c.doMutationIdempotent(ctx, userSetEmailMutation, vars, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.UserSetEmail, nil
+}
+
+// UserSetName sets a user's full name. Idempotent.
+func (c *Client) UserSetName(ctx context.Context, userID, name string) (*models.User, error) {
+	vars := map[string]interface{}{"input": map[string]interface{}{
+		"userId": userID,
+		"name":   name,
+	}}
+	var resp userSetNameResponse
+	if err := c.doMutationIdempotent(ctx, userSetNameMutation, vars, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.UserSetName, nil
+}
+
+// UserSetShortName sets a user's short name. Pass empty string to clear (derives from name). Idempotent.
+func (c *Client) UserSetShortName(ctx context.Context, userID string, shortName *string) (*models.User, error) {
+	vars := map[string]interface{}{"input": map[string]interface{}{
+		"userId":    userID,
+		"shortName": shortName,
+	}}
+	var resp userSetShortNameResponse
+	if err := c.doMutationIdempotent(ctx, userSetShortNameMutation, vars, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.UserSetShortName, nil
+}
+
+// UserSetPhone sets a user's phone number. Pass nil to remove. Idempotent.
+func (c *Client) UserSetPhone(ctx context.Context, userID string, phone *string) (*models.User, error) {
+	vars := map[string]interface{}{"input": map[string]interface{}{
+		"userId": userID,
+		"phone":  phone,
+	}}
+	var resp userSetPhoneResponse
+	if err := c.doMutationIdempotent(ctx, userSetPhoneMutation, vars, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.UserSetPhone, nil
+}
+
+// --- Membership Mutations (4) ---
+
+// AccountMembershipCreate creates a new membership. Non-idempotent: auth-retry only.
+func (c *Client) AccountMembershipCreate(ctx context.Context, input models.AccountMembershipCreateInput) (*models.AccountMembership, error) {
+	vars := map[string]interface{}{"input": input}
+	var resp accountMembershipCreateResponse
+	if err := c.doMutation(ctx, accountMembershipCreateMutation, vars, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.AccountMembershipCreate, nil
+}
+
+// AccountMembershipActivate activates a membership. Idempotent.
+func (c *Client) AccountMembershipActivate(ctx context.Context, input models.AccountMembershipActivateInput) (*models.AccountMembership, error) {
+	vars := map[string]interface{}{"input": input}
+	var resp accountMembershipActivateResponse
+	if err := c.doMutationIdempotent(ctx, accountMembershipActivateMutation, vars, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.AccountMembershipActivate, nil
+}
+
+// AccountMembershipDeactivate deactivates a membership. Idempotent.
+func (c *Client) AccountMembershipDeactivate(ctx context.Context, input models.AccountMembershipDeactivateInput) (*models.AccountMembership, error) {
+	vars := map[string]interface{}{"input": input}
+	var resp accountMembershipDeactivateResponse
+	if err := c.doMutationIdempotent(ctx, accountMembershipDeactivateMutation, vars, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.AccountMembershipDeactivate, nil
+}
+
+// AccountMembershipSetRoles sets the roles on a membership. Idempotent.
+func (c *Client) AccountMembershipSetRoles(ctx context.Context, input models.AccountMembershipSetRolesInput) (*models.AccountMembership, error) {
+	vars := map[string]interface{}{"input": input}
+	var resp accountMembershipSetRolesResponse
+	if err := c.doMutationIdempotent(ctx, accountMembershipSetRolesMutation, vars, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.AccountMembershipSetRoles, nil
+}
+
+// --- Property Access Mutations (3) ---
+
+// PropertyGrantUserAccess grants users access to a property. Idempotent.
+func (c *Client) PropertyGrantUserAccess(ctx context.Context, input models.PropertyGrantUserAccessInput) (*models.PropertyAccess, error) {
+	vars := map[string]interface{}{"input": input}
+	var resp propertyGrantUserAccessResponse
+	if err := c.doMutationIdempotent(ctx, propertyGrantUserAccessMutation, vars, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.PropertyGrantUserAccess, nil
+}
+
+// PropertyRevokeUserAccess revokes user access from a property. Idempotent.
+func (c *Client) PropertyRevokeUserAccess(ctx context.Context, input models.PropertyRevokeUserAccessInput) (*models.PropertyAccess, error) {
+	vars := map[string]interface{}{"input": input}
+	var resp propertyRevokeUserAccessResponse
+	if err := c.doMutationIdempotent(ctx, propertyRevokeUserAccessMutation, vars, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.PropertyRevokeUserAccess, nil
+}
+
+// PropertySetAccountWideAccess sets account-wide access on a property. Idempotent.
+func (c *Client) PropertySetAccountWideAccess(ctx context.Context, input models.PropertySetAccountWideAccessInput) (*models.PropertyAccess, error) {
+	vars := map[string]interface{}{"input": input}
+	var resp propertySetAccountWideAccessResponse
+	if err := c.doMutationIdempotent(ctx, propertySetAccountWideAccessMutation, vars, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.PropertySetAccountWideAccess, nil
+}
+
+// --- User Property Access Mutations (2) ---
+
+// UserGrantPropertyAccess grants a user access to properties. Idempotent.
+func (c *Client) UserGrantPropertyAccess(ctx context.Context, input models.UserGrantPropertyAccessInput) (*models.User, error) {
+	vars := map[string]interface{}{"input": input}
+	var resp userGrantPropertyAccessResponse
+	if err := c.doMutationIdempotent(ctx, userGrantPropertyAccessMutation, vars, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.UserGrantPropertyAccess, nil
+}
+
+// UserRevokePropertyAccess revokes property access from a user. Idempotent.
+func (c *Client) UserRevokePropertyAccess(ctx context.Context, input models.UserRevokePropertyAccessInput) (*models.User, error) {
+	vars := map[string]interface{}{"input": input}
+	var resp userRevokePropertyAccessResponse
+	if err := c.doMutationIdempotent(ctx, userRevokePropertyAccessMutation, vars, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.UserRevokePropertyAccess, nil
+}
+
+// --- Role Mutations (4) ---
+
+// RoleCreate creates a new role in an account. Non-idempotent.
+func (c *Client) RoleCreate(ctx context.Context, input models.RoleCreateInput) (*models.Role, error) {
+	vars := map[string]interface{}{"input": input}
+	var resp roleCreateResponse
+	if err := c.doMutation(ctx, roleCreateMutation, vars, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.RoleCreate, nil
+}
+
+// RoleSetName updates a role's name. Idempotent.
+func (c *Client) RoleSetName(ctx context.Context, input models.RoleSetNameInput) (*models.Role, error) {
+	vars := map[string]interface{}{"input": input}
+	var resp roleSetNameResponse
+	if err := c.doMutationIdempotent(ctx, roleSetNameMutation, vars, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.RoleSetName, nil
+}
+
+// RoleSetDescription updates a role's description. Idempotent.
+func (c *Client) RoleSetDescription(ctx context.Context, input models.RoleSetDescriptionInput) (*models.Role, error) {
+	vars := map[string]interface{}{"input": input}
+	var resp roleSetDescriptionResponse
+	if err := c.doMutationIdempotent(ctx, roleSetDescriptionMutation, vars, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.RoleSetDescription, nil
+}
+
+// RoleSetPermissions updates a role's permissions. Idempotent.
+func (c *Client) RoleSetPermissions(ctx context.Context, input models.RoleSetPermissionsInput) (*models.Role, error) {
+	vars := map[string]interface{}{"input": input}
+	var resp roleSetPermissionsResponse
+	if err := c.doMutationIdempotent(ctx, roleSetPermissionsMutation, vars, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.RoleSetPermissions, nil
+}
+
+// --- Webhook Mutations (2) ---
+
+// WebhookCreate creates a new webhook. Non-idempotent.
+func (c *Client) WebhookCreate(ctx context.Context, input models.WebhookCreateInput) (*models.Webhook, error) {
+	vars := map[string]interface{}{"input": input}
+	var resp webhookCreateResponse
+	if err := c.doMutation(ctx, webhookCreateMutation, vars, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.WebhookCreate, nil
+}
+
+// WebhookUpdate updates an existing webhook. Idempotent.
+func (c *Client) WebhookUpdate(ctx context.Context, input models.WebhookUpdateInput) (*models.Webhook, error) {
+	vars := map[string]interface{}{"input": input}
+	var resp webhookUpdateResponse
+	if err := c.doMutationIdempotent(ctx, webhookUpdateMutation, vars, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.WebhookUpdate, nil
+}
+
 // paginate is a generic pagination loop shared by all List* methods.
 func paginate[T any](
 	ctx context.Context,

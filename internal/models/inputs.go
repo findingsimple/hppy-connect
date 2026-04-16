@@ -202,9 +202,181 @@ type InspectionSendToGuestInput struct {
 	Expires      *bool  `json:"expires,omitempty"`
 }
 
+// --- Project Inputs ---
+
+// ProjectCreateInput is the input for creating a new project from a template.
+type ProjectCreateInput struct {
+	ProjectTemplateID    string `json:"projectTemplateId"`
+	LocationID           string `json:"locationId"`
+	StartAt              string `json:"startAt"`
+	AssigneeID           string `json:"assigneeId,omitempty"`
+	Priority             string `json:"priority,omitempty"`
+	DueAt                string `json:"dueAt,omitempty"`
+	AvailabilityTargetAt string `json:"availabilityTargetAt,omitempty"`
+	Notes                string `json:"notes,omitempty"`
+}
+
+// ProjectSetAssigneeInput sets the project assignee. AssigneeID may be empty to unassign.
+type ProjectSetAssigneeInput struct {
+	ProjectID  string  `json:"projectId"`
+	AssigneeID *string `json:"assigneeId"`
+}
+
+// --- User Inputs ---
+
+// UserCreateInput is the input for creating a new user in an account.
+type UserCreateInput struct {
+	AccountID string   `json:"accountId"`
+	Email     string   `json:"email"`
+	Name      string   `json:"name"`
+	RoleID    []string `json:"roleId,omitempty"`
+	ShortName string   `json:"shortName,omitempty"`
+	Phone     string   `json:"phone,omitempty"`
+	Message   string   `json:"message,omitempty"`
+}
+
+// --- Membership Inputs ---
+
+// AccountMembershipCreateInput is the input for creating a new membership.
+type AccountMembershipCreateInput struct {
+	AccountID string   `json:"accountId"`
+	UserID    string   `json:"userId"`
+	RoleID    []string `json:"roleId,omitempty"`
+}
+
+// AccountMembershipActivateInput is the input for activating a membership.
+type AccountMembershipActivateInput struct {
+	AccountID string `json:"accountId"`
+	UserID    string `json:"userId"`
+}
+
+// AccountMembershipDeactivateInput is the input for deactivating a membership.
+type AccountMembershipDeactivateInput struct {
+	AccountID string `json:"accountId"`
+	UserID    string `json:"userId"`
+}
+
+// AccountMembershipSetRolesInput is the input for setting membership roles.
+type AccountMembershipSetRolesInput struct {
+	AccountID string   `json:"accountId"`
+	UserID    string   `json:"userId"`
+	RoleID    []string `json:"roleId,omitempty"`
+}
+
+// --- Property Access Inputs ---
+
+// PropertyGrantUserAccessInput grants users access to a property.
+type PropertyGrantUserAccessInput struct {
+	PropertyID string   `json:"propertyId"`
+	UserID     []string `json:"userId"`
+}
+
+// PropertyRevokeUserAccessInput revokes user access from a property.
+type PropertyRevokeUserAccessInput struct {
+	PropertyID string   `json:"propertyId"`
+	UserID     []string `json:"userId"`
+}
+
+// PropertySetAccountWideAccessInput sets account-wide access on a property.
+type PropertySetAccountWideAccessInput struct {
+	PropertyID        string `json:"propertyId"`
+	AccountWideAccess bool   `json:"accountWideAccess"`
+}
+
+// UserGrantPropertyAccessInput grants a user access to properties.
+type UserGrantPropertyAccessInput struct {
+	UserID     string   `json:"userId"`
+	PropertyID []string `json:"propertyId"`
+}
+
+// UserRevokePropertyAccessInput revokes property access from a user.
+type UserRevokePropertyAccessInput struct {
+	UserID     string   `json:"userId"`
+	PropertyID []string `json:"propertyId"`
+}
+
+// --- Role Inputs ---
+
+// RoleCreateInput is the input for creating a new role in an account.
+type RoleCreateInput struct {
+	AccountID   string           `json:"accountId"`
+	Name        string           `json:"name"`
+	Description string           `json:"description,omitempty"`
+	Permissions PermissionsInput `json:"permissions"`
+}
+
+// PermissionsInput holds the grant and revoke permission actions.
+type PermissionsInput struct {
+	Grant  []string `json:"grant,omitempty"`
+	Revoke []string `json:"revoke,omitempty"`
+}
+
+// RoleSetNameInput is the input for updating a role's name.
+type RoleSetNameInput struct {
+	AccountID string `json:"accountId"`
+	RoleID    string `json:"roleId"`
+	Name      string `json:"name"`
+}
+
+// RoleSetDescriptionInput is the input for updating a role's description.
+type RoleSetDescriptionInput struct {
+	AccountID   string  `json:"accountId"`
+	RoleID      string  `json:"roleId"`
+	Description *string `json:"description"`
+}
+
+// RoleSetPermissionsInput is the input for updating a role's permissions.
+type RoleSetPermissionsInput struct {
+	AccountID   string           `json:"accountId"`
+	RoleID      string           `json:"roleId"`
+	Permissions PermissionsInput `json:"permissions"`
+}
+
 // InspectionAddItemPhotoResult is the multi-field response from addItemPhoto.
 type InspectionAddItemPhotoResult struct {
 	Inspection      Inspection      `json:"inspection"`
 	InspectionPhoto InspectionPhoto `json:"inspectionPhoto"`
 	SignedURL       string          `json:"signedURL"`
+}
+
+// --- Webhook Inputs ---
+
+// WebhookCreateInput is the input for creating a new webhook.
+type WebhookCreateInput struct {
+	SubscriberID   string                      `json:"subscriberId"`
+	SubscriberType string                      `json:"subscriberType"`
+	URL            string                      `json:"url"`
+	Subjects       []string                    `json:"subjects,omitempty"`
+	Status         string                      `json:"status,omitempty"`
+	Headers        []WebhookHeaderInput        `json:"headers,omitempty"`
+	RateLimits     []WebhookRateLimitInput     `json:"rateLimits,omitempty"`
+	RequestTimeout *WebhookRequestTimeoutInput `json:"requestTimeout,omitempty"`
+}
+
+// WebhookUpdateInput is the input for updating an existing webhook.
+type WebhookUpdateInput struct {
+	ID             string                      `json:"id"`
+	URL            string                      `json:"url,omitempty"`
+	Status         string                      `json:"status,omitempty"`
+	Subjects       []string                    `json:"subjects,omitempty"`
+	Headers        []WebhookHeaderInput        `json:"headers,omitempty"`
+	RateLimits     []WebhookRateLimitInput     `json:"rateLimits,omitempty"`
+	RequestTimeout *WebhookRequestTimeoutInput `json:"requestTimeout,omitempty"`
+}
+
+// WebhookHeaderInput represents a key-value header to include in webhook requests.
+type WebhookHeaderInput struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
+}
+
+// WebhookRateLimitInput configures a rate limit for the webhook.
+type WebhookRateLimitInput struct {
+	Period   string `json:"period"`
+	Requests int    `json:"requests"`
+}
+
+// WebhookRequestTimeoutInput configures the request timeout for the webhook.
+type WebhookRequestTimeoutInput struct {
+	Seconds int `json:"seconds"`
 }

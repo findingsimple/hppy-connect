@@ -767,6 +767,144 @@ type InspectionSendToGuestMCPInput struct {
 	Expires      *bool  `json:"expires,omitempty" jsonschema:"Whether the guest link expires at the due date"`
 }
 
+// --- Project MCP Tool Input Structs ---
+
+type ProjectCreateMCPInput struct {
+	TemplateID           string `json:"template_id" jsonschema:"required,The project template ID"`
+	LocationID           string `json:"location_id" jsonschema:"required,The property or unit ID for the project"`
+	StartAt              string `json:"start_at" jsonschema:"required,Start date in ISO 8601 format"`
+	AssigneeID           string `json:"assignee_id,omitempty" jsonschema:"User ID to assign to the project"`
+	Priority             string `json:"priority,omitempty" jsonschema:"Priority: NORMAL or URGENT"`
+	DueAt                string `json:"due_at,omitempty" jsonschema:"Due date in ISO 8601 format"`
+	AvailabilityTargetAt string `json:"availability_target_at,omitempty" jsonschema:"Availability target date in ISO 8601 format"`
+	Notes                string `json:"notes,omitempty" jsonschema:"Initial project notes"`
+}
+
+type ProjectSetAssigneeMCPInput struct {
+	ProjectID  string  `json:"project_id" jsonschema:"required,The project ID"`
+	AssigneeID *string `json:"assignee_id" jsonschema:"User ID to assign (null to unassign)"`
+}
+
+type ProjectIDStringInput struct {
+	ProjectID string `json:"project_id" jsonschema:"required,The project ID"`
+	Value     string `json:"value" jsonschema:"required,The value to set"`
+}
+
+type ProjectIDBoolInput struct {
+	ProjectID string `json:"project_id" jsonschema:"required,The project ID"`
+	Value     bool   `json:"value" jsonschema:"required,The boolean value to set"`
+}
+
+type ProjectSetAvailabilityTargetAtMCPInput struct {
+	ProjectID            string  `json:"project_id" jsonschema:"required,The project ID"`
+	AvailabilityTargetAt *string `json:"availability_target_at" jsonschema:"Availability target date in ISO 8601 format (null to clear)"`
+}
+
+// --- Account MCP Tool Input Structs ---
+
+type UserCreateMCPInput struct {
+	AccountID string `json:"account_id" jsonschema:"required,The account ID to create the user in"`
+	Email     string `json:"email" jsonschema:"required,Email address for the new user"`
+	Name      string `json:"name" jsonschema:"required,Full name of the user"`
+	RoleID    string `json:"role_id,omitempty" jsonschema:"Comma-separated role IDs (defaults to account default role)"`
+	ShortName string `json:"short_name,omitempty" jsonschema:"Informal/given name (derived from name if omitted)"`
+	Phone     string `json:"phone,omitempty" jsonschema:"Phone number"`
+	Message   string `json:"message,omitempty" jsonschema:"Personalised greeting in the invitation email"`
+}
+
+type UserIDEmailInput struct {
+	UserID string `json:"user_id" jsonschema:"required,The user ID"`
+	Email  string `json:"email" jsonschema:"required,New email address"`
+}
+
+type UserIDNameInput struct {
+	UserID string `json:"user_id" jsonschema:"required,The user ID"`
+	Name   string `json:"name" jsonschema:"required,New full name"`
+}
+
+type UserIDOptionalStringInput struct {
+	UserID string  `json:"user_id" jsonschema:"required,The user ID"`
+	Value  *string `json:"value" jsonschema:"The value to set (null to clear)"`
+}
+
+type MembershipCreateMCPInput struct {
+	AccountID string `json:"account_id" jsonschema:"required,The account ID"`
+	UserID    string `json:"user_id" jsonschema:"required,The user ID"`
+	RoleID    string `json:"role_id,omitempty" jsonschema:"Comma-separated role IDs (defaults to account default roles)"`
+}
+
+type MembershipAccountUserInput struct {
+	AccountID string `json:"account_id" jsonschema:"required,The account ID"`
+	UserID    string `json:"user_id" jsonschema:"required,The user ID"`
+}
+
+type MembershipSetRolesMCPInput struct {
+	AccountID string `json:"account_id" jsonschema:"required,The account ID"`
+	UserID    string `json:"user_id" jsonschema:"required,The user ID"`
+	RoleID    string `json:"role_id,omitempty" jsonschema:"Comma-separated role IDs (defaults to account default roles)"`
+}
+
+type PropertyUserAccessMCPInput struct {
+	PropertyID string `json:"property_id" jsonschema:"required,The property ID"`
+	UserID     string `json:"user_id" jsonschema:"required,Comma-separated user IDs"`
+}
+
+type PropertySetAccountWideAccessMCPInput struct {
+	PropertyID        string `json:"property_id" jsonschema:"required,The property ID"`
+	AccountWideAccess bool   `json:"account_wide_access" jsonschema:"required,Whether all users in the account can access this property"`
+}
+
+type UserPropertyAccessMCPInput struct {
+	UserID     string `json:"user_id" jsonschema:"required,The user ID"`
+	PropertyID string `json:"property_id" jsonschema:"required,Comma-separated property IDs"`
+}
+
+// --- Webhook MCP Tool Input Structs ---
+
+type WebhookCreateMCPInput struct {
+	SubscriberID   string `json:"subscriber_id" jsonschema:"required,The subscriber ID (account or plugin ID)"`
+	SubscriberType string `json:"subscriber_type" jsonschema:"required,Subscriber type: ACCOUNT or PLUGIN"`
+	URL            string `json:"url" jsonschema:"required,Webhook endpoint URL (must be HTTPS)"`
+	Subjects       string `json:"subjects,omitempty" jsonschema:"Comma-separated subjects: INSPECTIONS, WORK_ORDERS, VENDORS, PLUGIN_SUBSCRIPTIONS"`
+	Status         string `json:"status,omitempty" jsonschema:"Initial status: ENABLED or DISABLED (default DISABLED)"`
+}
+
+type WebhookUpdateMCPInput struct {
+	ID       string `json:"id" jsonschema:"required,The webhook ID to update"`
+	URL      string `json:"url,omitempty" jsonschema:"New webhook endpoint URL (must be HTTPS)"`
+	Status   string `json:"status,omitempty" jsonschema:"New status: ENABLED or DISABLED"`
+	Subjects string `json:"subjects,omitempty" jsonschema:"Comma-separated subjects: INSPECTIONS, WORK_ORDERS, VENDORS, PLUGIN_SUBSCRIPTIONS"`
+}
+
+// --- Role MCP Tool Input Structs ---
+
+type RoleCreateMCPInput struct {
+	AccountID         string `json:"account_id" jsonschema:"required,The account ID that will own the role"`
+	Name              string `json:"name" jsonschema:"required,Display name for the role (must be unique within account)"`
+	Description       string `json:"description,omitempty" jsonschema:"Description of the role"`
+	PermissionsGrant  string `json:"permissions_grant" jsonschema:"required,Comma-separated permission actions to grant (e.g. task:task.create)"`
+	PermissionsRevoke string `json:"permissions_revoke,omitempty" jsonschema:"Comma-separated permission actions to revoke"`
+}
+
+type RoleSetNameMCPInput struct {
+	AccountID string `json:"account_id" jsonschema:"required,The account ID that owns the role"`
+	RoleID    string `json:"role_id" jsonschema:"required,The role ID to update"`
+	Name      string `json:"name" jsonschema:"required,New name for the role (must be unique within account)"`
+}
+
+type RoleSetDescriptionMCPInput struct {
+	AccountID   string  `json:"account_id" jsonschema:"required,The account ID that owns the role"`
+	RoleID      string  `json:"role_id" jsonschema:"required,The role ID to update"`
+	Description *string `json:"description" jsonschema:"New description (null to remove)"`
+}
+
+type RoleSetPermissionsMCPInput struct {
+	AccountID         string `json:"account_id" jsonschema:"required,The account ID that owns the role"`
+	RoleID            string `json:"role_id" jsonschema:"required,The role ID to update"`
+	PermissionsGrant  string `json:"permissions_grant,omitempty" jsonschema:"Comma-separated permission actions to grant"`
+	PermissionsRevoke string `json:"permissions_revoke,omitempty" jsonschema:"Comma-separated permission actions to revoke"`
+}
+
 // registerInspectionMutationTools registers all 24 inspection mutation tools.
 func registerInspectionMutationTools(server *mcp.Server, client apiClient, debug bool) {
 	destructive := true
@@ -1564,6 +1702,1039 @@ func registerInspectionMutationTools(server *mcp.Server, client apiClient, debug
 				return toolError(err), nil, nil
 			}
 			return toolJSON(result)
+		}),
+	)
+}
+
+// registerProjectMutationTools registers all 8 project mutation tools.
+func registerProjectMutationTools(server *mcp.Server, client apiClient, debug bool) {
+	// project_create
+	mcp.AddTool(server,
+		&mcp.Tool{
+			Name:        "project_create",
+			Description: "Create a new project from a template for a property or unit",
+		},
+		wrapTool(debug, "project_create", func(ctx context.Context, _ *mcp.CallToolRequest, input ProjectCreateMCPInput) (*mcp.CallToolResult, any, error) {
+			if errResult := requireID("template_id", input.TemplateID); errResult != nil {
+				return errResult, nil, nil
+			}
+			if errResult := requireID("location_id", input.LocationID); errResult != nil {
+				return errResult, nil, nil
+			}
+			if input.StartAt == "" {
+				return toolInputError("start_at is required"), nil, nil
+			}
+			if err := models.ValidateTimestamp("start_at", input.StartAt); err != nil {
+				return toolInputError(err.Error()), nil, nil
+			}
+
+			apiInput := models.ProjectCreateInput{
+				ProjectTemplateID: input.TemplateID,
+				LocationID:        input.LocationID,
+				StartAt:           input.StartAt,
+				Notes:             input.Notes,
+			}
+			if input.AssigneeID != "" {
+				if err := models.ValidateID("assignee_id", input.AssigneeID); err != nil {
+					return toolInputError(err.Error()), nil, nil
+				}
+				apiInput.AssigneeID = input.AssigneeID
+			}
+			if input.Priority != "" {
+				upper := strings.ToUpper(input.Priority)
+				if !models.ValidProjectPriorities[upper] {
+					return toolInputError("priority must be NORMAL or URGENT"), nil, nil
+				}
+				apiInput.Priority = upper
+			}
+			if input.DueAt != "" {
+				if err := models.ValidateTimestamp("due_at", input.DueAt); err != nil {
+					return toolInputError(err.Error()), nil, nil
+				}
+				apiInput.DueAt = input.DueAt
+			}
+			if input.AvailabilityTargetAt != "" {
+				if err := models.ValidateTimestamp("availability_target_at", input.AvailabilityTargetAt); err != nil {
+					return toolInputError(err.Error()), nil, nil
+				}
+				apiInput.AvailabilityTargetAt = input.AvailabilityTargetAt
+			}
+			if err := models.ValidateFreeText("notes", input.Notes); err != nil {
+				return toolInputError(err.Error()), nil, nil
+			}
+
+			ctx, cancel := context.WithTimeout(ctx, toolTimeout)
+			defer cancel()
+
+			proj, err := client.ProjectCreate(ctx, apiInput)
+			if err != nil {
+				return toolError(err), nil, nil
+			}
+			return toolJSON(proj)
+		}),
+	)
+
+	// project_set_assignee
+	mcp.AddTool(server,
+		&mcp.Tool{
+			Name:        "project_set_assignee",
+			Description: "Set or clear the user assigned to a project (pass null assignee_id to unassign)",
+		},
+		wrapTool(debug, "project_set_assignee", func(ctx context.Context, _ *mcp.CallToolRequest, input ProjectSetAssigneeMCPInput) (*mcp.CallToolResult, any, error) {
+			if errResult := requireID("project_id", input.ProjectID); errResult != nil {
+				return errResult, nil, nil
+			}
+			if input.AssigneeID != nil && *input.AssigneeID != "" {
+				if err := models.ValidateID("assignee_id", *input.AssigneeID); err != nil {
+					return toolInputError(err.Error()), nil, nil
+				}
+			}
+
+			apiInput := models.ProjectSetAssigneeInput{
+				ProjectID:  input.ProjectID,
+				AssigneeID: input.AssigneeID,
+			}
+
+			ctx, cancel := context.WithTimeout(ctx, toolTimeout)
+			defer cancel()
+
+			proj, err := client.ProjectSetAssignee(ctx, apiInput)
+			if err != nil {
+				return toolError(err), nil, nil
+			}
+			return toolJSON(proj)
+		}),
+	)
+
+	// project_set_notes
+	mcp.AddTool(server,
+		&mcp.Tool{
+			Name:        "project_set_notes",
+			Description: "Set the notes on a project",
+		},
+		wrapTool(debug, "project_set_notes", func(ctx context.Context, _ *mcp.CallToolRequest, input ProjectIDStringInput) (*mcp.CallToolResult, any, error) {
+			if errResult := requireID("project_id", input.ProjectID); errResult != nil {
+				return errResult, nil, nil
+			}
+			if input.Value == "" {
+				return toolInputError("value (notes) is required"), nil, nil
+			}
+			if err := models.ValidateFreeText("notes", input.Value); err != nil {
+				return toolInputError(err.Error()), nil, nil
+			}
+
+			ctx, cancel := context.WithTimeout(ctx, toolTimeout)
+			defer cancel()
+
+			proj, err := client.ProjectSetNotes(ctx, input.ProjectID, input.Value)
+			if err != nil {
+				return toolError(err), nil, nil
+			}
+			return toolJSON(proj)
+		}),
+	)
+
+	// project_set_due_at
+	mcp.AddTool(server,
+		&mcp.Tool{
+			Name:        "project_set_due_at",
+			Description: "Set the due date for a project (ISO 8601 format)",
+		},
+		wrapTool(debug, "project_set_due_at", func(ctx context.Context, _ *mcp.CallToolRequest, input ProjectIDStringInput) (*mcp.CallToolResult, any, error) {
+			if errResult := requireID("project_id", input.ProjectID); errResult != nil {
+				return errResult, nil, nil
+			}
+			if input.Value == "" {
+				return toolInputError("value (due_at date) is required"), nil, nil
+			}
+			if err := models.ValidateTimestamp("due_at", input.Value); err != nil {
+				return toolInputError(err.Error()), nil, nil
+			}
+
+			ctx, cancel := context.WithTimeout(ctx, toolTimeout)
+			defer cancel()
+
+			proj, err := client.ProjectSetDueAt(ctx, input.ProjectID, input.Value)
+			if err != nil {
+				return toolError(err), nil, nil
+			}
+			return toolJSON(proj)
+		}),
+	)
+
+	// project_set_start_at
+	mcp.AddTool(server,
+		&mcp.Tool{
+			Name:        "project_set_start_at",
+			Description: "Set the start date for a project (ISO 8601 format)",
+		},
+		wrapTool(debug, "project_set_start_at", func(ctx context.Context, _ *mcp.CallToolRequest, input ProjectIDStringInput) (*mcp.CallToolResult, any, error) {
+			if errResult := requireID("project_id", input.ProjectID); errResult != nil {
+				return errResult, nil, nil
+			}
+			if input.Value == "" {
+				return toolInputError("value (start_at date) is required"), nil, nil
+			}
+			if err := models.ValidateTimestamp("start_at", input.Value); err != nil {
+				return toolInputError(err.Error()), nil, nil
+			}
+
+			ctx, cancel := context.WithTimeout(ctx, toolTimeout)
+			defer cancel()
+
+			proj, err := client.ProjectSetStartAt(ctx, input.ProjectID, input.Value)
+			if err != nil {
+				return toolError(err), nil, nil
+			}
+			return toolJSON(proj)
+		}),
+	)
+
+	// project_set_priority
+	mcp.AddTool(server,
+		&mcp.Tool{
+			Name:        "project_set_priority",
+			Description: "Set the priority of a project (NORMAL or URGENT)",
+		},
+		wrapTool(debug, "project_set_priority", func(ctx context.Context, _ *mcp.CallToolRequest, input ProjectIDStringInput) (*mcp.CallToolResult, any, error) {
+			if errResult := requireID("project_id", input.ProjectID); errResult != nil {
+				return errResult, nil, nil
+			}
+			if input.Value == "" {
+				return toolInputError("value (priority) is required"), nil, nil
+			}
+			upper := strings.ToUpper(input.Value)
+			if !models.ValidProjectPriorities[upper] {
+				return toolInputError("priority must be NORMAL or URGENT"), nil, nil
+			}
+
+			ctx, cancel := context.WithTimeout(ctx, toolTimeout)
+			defer cancel()
+
+			proj, err := client.ProjectSetPriority(ctx, input.ProjectID, upper)
+			if err != nil {
+				return toolError(err), nil, nil
+			}
+			return toolJSON(proj)
+		}),
+	)
+
+	// project_set_on_hold
+	mcp.AddTool(server,
+		&mcp.Tool{
+			Name:        "project_set_on_hold",
+			Description: "Set or clear the on-hold status of a project",
+		},
+		wrapTool(debug, "project_set_on_hold", func(ctx context.Context, _ *mcp.CallToolRequest, input ProjectIDBoolInput) (*mcp.CallToolResult, any, error) {
+			if errResult := requireID("project_id", input.ProjectID); errResult != nil {
+				return errResult, nil, nil
+			}
+
+			ctx, cancel := context.WithTimeout(ctx, toolTimeout)
+			defer cancel()
+
+			proj, err := client.ProjectSetOnHold(ctx, input.ProjectID, input.Value)
+			if err != nil {
+				return toolError(err), nil, nil
+			}
+			return toolJSON(proj)
+		}),
+	)
+
+	// project_set_availability_target_at
+	mcp.AddTool(server,
+		&mcp.Tool{
+			Name:        "project_set_availability_target_at",
+			Description: "Set or clear the availability target date for a project (ISO 8601 format, null to clear)",
+		},
+		wrapTool(debug, "project_set_availability_target_at", func(ctx context.Context, _ *mcp.CallToolRequest, input ProjectSetAvailabilityTargetAtMCPInput) (*mcp.CallToolResult, any, error) {
+			if errResult := requireID("project_id", input.ProjectID); errResult != nil {
+				return errResult, nil, nil
+			}
+			var datePtr *string
+			if input.AvailabilityTargetAt != nil && *input.AvailabilityTargetAt != "" {
+				if err := models.ValidateTimestamp("availability_target_at", *input.AvailabilityTargetAt); err != nil {
+					return toolInputError(err.Error()), nil, nil
+				}
+				datePtr = input.AvailabilityTargetAt
+			}
+
+			ctx, cancel := context.WithTimeout(ctx, toolTimeout)
+			defer cancel()
+
+			proj, err := client.ProjectSetAvailabilityTargetAt(ctx, input.ProjectID, datePtr)
+			if err != nil {
+				return toolError(err), nil, nil
+			}
+			return toolJSON(proj)
+		}),
+	)
+}
+
+// parseIDList splits a comma-separated ID string and validates each ID.
+func parseIDList(fieldName, csv string) ([]string, *mcp.CallToolResult) {
+	if csv == "" {
+		return nil, toolInputError(fieldName + " is required")
+	}
+	parts := strings.Split(csv, ",")
+	ids := make([]string, 0, len(parts))
+	for _, p := range parts {
+		id := strings.TrimSpace(p)
+		if id == "" {
+			continue
+		}
+		if err := models.ValidateID(fieldName, id); err != nil {
+			return nil, toolInputError(err.Error())
+		}
+		ids = append(ids, id)
+	}
+	if len(ids) == 0 {
+		return nil, toolInputError(fieldName + " is required")
+	}
+	return ids, nil
+}
+
+// registerAccountMutationTools registers all 14 account mutation tools (users, memberships, access).
+func registerAccountMutationTools(server *mcp.Server, client apiClient, debug bool) {
+	destructive := true
+
+	// --- User Tools (5) ---
+
+	// user_create
+	mcp.AddTool(server,
+		&mcp.Tool{
+			Name:        "user_create",
+			Description: "Create a new user in an account and send an invitation email",
+		},
+		wrapTool(debug, "user_create", func(ctx context.Context, _ *mcp.CallToolRequest, input UserCreateMCPInput) (*mcp.CallToolResult, any, error) {
+			if errResult := requireID("account_id", input.AccountID); errResult != nil {
+				return errResult, nil, nil
+			}
+			if input.Email == "" {
+				return toolInputError("email is required"), nil, nil
+			}
+			if err := models.ValidateEmail(input.Email); err != nil {
+				return toolInputError(err.Error()), nil, nil
+			}
+			if input.Name == "" {
+				return toolInputError("name is required"), nil, nil
+			}
+			if err := models.ValidateFreeText("name", input.Name); err != nil {
+				return toolInputError(err.Error()), nil, nil
+			}
+
+			apiInput := models.UserCreateInput{
+				AccountID: input.AccountID,
+				Email:     input.Email,
+				Name:      input.Name,
+				ShortName: input.ShortName,
+				Phone:     input.Phone,
+				Message:   input.Message,
+			}
+			if input.RoleID != "" {
+				roleIDs, errResult := parseIDList("role_id", input.RoleID)
+				if errResult != nil {
+					return errResult, nil, nil
+				}
+				apiInput.RoleID = roleIDs
+			}
+			if input.ShortName != "" {
+				if err := models.ValidateFreeText("short_name", input.ShortName); err != nil {
+					return toolInputError(err.Error()), nil, nil
+				}
+			}
+			if input.Message != "" {
+				if err := models.ValidateFreeText("message", input.Message); err != nil {
+					return toolInputError(err.Error()), nil, nil
+				}
+			}
+
+			ctx, cancel := context.WithTimeout(ctx, toolTimeout)
+			defer cancel()
+
+			user, err := client.UserCreate(ctx, apiInput)
+			if err != nil {
+				return toolError(err), nil, nil
+			}
+			return toolJSON(user)
+		}),
+	)
+
+	// user_set_email
+	mcp.AddTool(server,
+		&mcp.Tool{
+			Name:        "user_set_email",
+			Description: "Update a user's email address",
+		},
+		wrapTool(debug, "user_set_email", func(ctx context.Context, _ *mcp.CallToolRequest, input UserIDEmailInput) (*mcp.CallToolResult, any, error) {
+			if errResult := requireID("user_id", input.UserID); errResult != nil {
+				return errResult, nil, nil
+			}
+			if input.Email == "" {
+				return toolInputError("email is required"), nil, nil
+			}
+			if err := models.ValidateEmail(input.Email); err != nil {
+				return toolInputError(err.Error()), nil, nil
+			}
+
+			ctx, cancel := context.WithTimeout(ctx, toolTimeout)
+			defer cancel()
+
+			user, err := client.UserSetEmail(ctx, input.UserID, input.Email)
+			if err != nil {
+				return toolError(err), nil, nil
+			}
+			return toolJSON(user)
+		}),
+	)
+
+	// user_set_name
+	mcp.AddTool(server,
+		&mcp.Tool{
+			Name:        "user_set_name",
+			Description: "Update a user's full name",
+		},
+		wrapTool(debug, "user_set_name", func(ctx context.Context, _ *mcp.CallToolRequest, input UserIDNameInput) (*mcp.CallToolResult, any, error) {
+			if errResult := requireID("user_id", input.UserID); errResult != nil {
+				return errResult, nil, nil
+			}
+			if input.Name == "" {
+				return toolInputError("name is required"), nil, nil
+			}
+			if err := models.ValidateFreeText("name", input.Name); err != nil {
+				return toolInputError(err.Error()), nil, nil
+			}
+
+			ctx, cancel := context.WithTimeout(ctx, toolTimeout)
+			defer cancel()
+
+			user, err := client.UserSetName(ctx, input.UserID, input.Name)
+			if err != nil {
+				return toolError(err), nil, nil
+			}
+			return toolJSON(user)
+		}),
+	)
+
+	// user_set_short_name
+	mcp.AddTool(server,
+		&mcp.Tool{
+			Name:        "user_set_short_name",
+			Description: "Set or clear a user's short name (null to derive from full name)",
+		},
+		wrapTool(debug, "user_set_short_name", func(ctx context.Context, _ *mcp.CallToolRequest, input UserIDOptionalStringInput) (*mcp.CallToolResult, any, error) {
+			if errResult := requireID("user_id", input.UserID); errResult != nil {
+				return errResult, nil, nil
+			}
+			if input.Value != nil && *input.Value != "" {
+				if err := models.ValidateFreeText("short_name", *input.Value); err != nil {
+					return toolInputError(err.Error()), nil, nil
+				}
+			}
+
+			ctx, cancel := context.WithTimeout(ctx, toolTimeout)
+			defer cancel()
+
+			user, err := client.UserSetShortName(ctx, input.UserID, input.Value)
+			if err != nil {
+				return toolError(err), nil, nil
+			}
+			return toolJSON(user)
+		}),
+	)
+
+	// user_set_phone
+	mcp.AddTool(server,
+		&mcp.Tool{
+			Name:        "user_set_phone",
+			Description: "Set or clear a user's phone number (null to remove)",
+		},
+		wrapTool(debug, "user_set_phone", func(ctx context.Context, _ *mcp.CallToolRequest, input UserIDOptionalStringInput) (*mcp.CallToolResult, any, error) {
+			if errResult := requireID("user_id", input.UserID); errResult != nil {
+				return errResult, nil, nil
+			}
+
+			ctx, cancel := context.WithTimeout(ctx, toolTimeout)
+			defer cancel()
+
+			user, err := client.UserSetPhone(ctx, input.UserID, input.Value)
+			if err != nil {
+				return toolError(err), nil, nil
+			}
+			return toolJSON(user)
+		}),
+	)
+
+	// --- Membership Tools (4) ---
+
+	// membership_create
+	mcp.AddTool(server,
+		&mcp.Tool{
+			Name:        "membership_create",
+			Description: "Admin: Create a user's membership in an account",
+		},
+		wrapTool(debug, "membership_create", func(ctx context.Context, _ *mcp.CallToolRequest, input MembershipCreateMCPInput) (*mcp.CallToolResult, any, error) {
+			if errResult := requireID("account_id", input.AccountID); errResult != nil {
+				return errResult, nil, nil
+			}
+			if errResult := requireID("user_id", input.UserID); errResult != nil {
+				return errResult, nil, nil
+			}
+
+			apiInput := models.AccountMembershipCreateInput{
+				AccountID: input.AccountID,
+				UserID:    input.UserID,
+			}
+			if input.RoleID != "" {
+				roleIDs, errResult := parseIDList("role_id", input.RoleID)
+				if errResult != nil {
+					return errResult, nil, nil
+				}
+				apiInput.RoleID = roleIDs
+			}
+
+			ctx, cancel := context.WithTimeout(ctx, toolTimeout)
+			defer cancel()
+
+			membership, err := client.AccountMembershipCreate(ctx, apiInput)
+			if err != nil {
+				return toolError(err), nil, nil
+			}
+			return toolJSON(membership)
+		}),
+	)
+
+	// membership_activate
+	mcp.AddTool(server,
+		&mcp.Tool{
+			Name:        "membership_activate",
+			Description: "Admin: Activate a user's membership in an account",
+		},
+		wrapTool(debug, "membership_activate", func(ctx context.Context, _ *mcp.CallToolRequest, input MembershipAccountUserInput) (*mcp.CallToolResult, any, error) {
+			if errResult := requireID("account_id", input.AccountID); errResult != nil {
+				return errResult, nil, nil
+			}
+			if errResult := requireID("user_id", input.UserID); errResult != nil {
+				return errResult, nil, nil
+			}
+
+			ctx, cancel := context.WithTimeout(ctx, toolTimeout)
+			defer cancel()
+
+			membership, err := client.AccountMembershipActivate(ctx, models.AccountMembershipActivateInput{
+				AccountID: input.AccountID,
+				UserID:    input.UserID,
+			})
+			if err != nil {
+				return toolError(err), nil, nil
+			}
+			return toolJSON(membership)
+		}),
+	)
+
+	// membership_deactivate (destructive)
+	mcp.AddTool(server,
+		&mcp.Tool{
+			Name:        "membership_deactivate",
+			Description: "Admin: Deactivate a user's membership in an account",
+			Annotations: &mcp.ToolAnnotations{
+				DestructiveHint: &destructive,
+			},
+		},
+		wrapTool(debug, "membership_deactivate", func(ctx context.Context, _ *mcp.CallToolRequest, input MembershipAccountUserInput) (*mcp.CallToolResult, any, error) {
+			if errResult := requireID("account_id", input.AccountID); errResult != nil {
+				return errResult, nil, nil
+			}
+			if errResult := requireID("user_id", input.UserID); errResult != nil {
+				return errResult, nil, nil
+			}
+
+			ctx, cancel := context.WithTimeout(ctx, toolTimeout)
+			defer cancel()
+
+			membership, err := client.AccountMembershipDeactivate(ctx, models.AccountMembershipDeactivateInput{
+				AccountID: input.AccountID,
+				UserID:    input.UserID,
+			})
+			if err != nil {
+				return toolError(err), nil, nil
+			}
+			return toolJSON(membership)
+		}),
+	)
+
+	// membership_set_roles (destructive — privilege-changing)
+	mcp.AddTool(server,
+		&mcp.Tool{
+			Name:        "membership_set_roles",
+			Description: "Admin: Set the roles for a user's membership in an account",
+			Annotations: &mcp.ToolAnnotations{
+				DestructiveHint: &destructive,
+			},
+		},
+		wrapTool(debug, "membership_set_roles", func(ctx context.Context, _ *mcp.CallToolRequest, input MembershipSetRolesMCPInput) (*mcp.CallToolResult, any, error) {
+			if errResult := requireID("account_id", input.AccountID); errResult != nil {
+				return errResult, nil, nil
+			}
+			if errResult := requireID("user_id", input.UserID); errResult != nil {
+				return errResult, nil, nil
+			}
+
+			apiInput := models.AccountMembershipSetRolesInput{
+				AccountID: input.AccountID,
+				UserID:    input.UserID,
+			}
+			if input.RoleID != "" {
+				roleIDs, errResult := parseIDList("role_id", input.RoleID)
+				if errResult != nil {
+					return errResult, nil, nil
+				}
+				apiInput.RoleID = roleIDs
+			}
+
+			ctx, cancel := context.WithTimeout(ctx, toolTimeout)
+			defer cancel()
+
+			membership, err := client.AccountMembershipSetRoles(ctx, apiInput)
+			if err != nil {
+				return toolError(err), nil, nil
+			}
+			return toolJSON(membership)
+		}),
+	)
+
+	// --- Property Access Tools (3) ---
+
+	// property_grant_access
+	mcp.AddTool(server,
+		&mcp.Tool{
+			Name:        "property_grant_access",
+			Description: "Admin: Grant one or more users access to a property",
+		},
+		wrapTool(debug, "property_grant_access", func(ctx context.Context, _ *mcp.CallToolRequest, input PropertyUserAccessMCPInput) (*mcp.CallToolResult, any, error) {
+			if errResult := requireID("property_id", input.PropertyID); errResult != nil {
+				return errResult, nil, nil
+			}
+			userIDs, errResult := parseIDList("user_id", input.UserID)
+			if errResult != nil {
+				return errResult, nil, nil
+			}
+
+			ctx, cancel := context.WithTimeout(ctx, toolTimeout)
+			defer cancel()
+
+			result, err := client.PropertyGrantUserAccess(ctx, models.PropertyGrantUserAccessInput{
+				PropertyID: input.PropertyID,
+				UserID:     userIDs,
+			})
+			if err != nil {
+				return toolError(err), nil, nil
+			}
+			return toolJSON(result)
+		}),
+	)
+
+	// property_revoke_access (destructive)
+	mcp.AddTool(server,
+		&mcp.Tool{
+			Name:        "property_revoke_access",
+			Description: "Admin: Revoke one or more users' access to a property",
+			Annotations: &mcp.ToolAnnotations{
+				DestructiveHint: &destructive,
+			},
+		},
+		wrapTool(debug, "property_revoke_access", func(ctx context.Context, _ *mcp.CallToolRequest, input PropertyUserAccessMCPInput) (*mcp.CallToolResult, any, error) {
+			if errResult := requireID("property_id", input.PropertyID); errResult != nil {
+				return errResult, nil, nil
+			}
+			userIDs, errResult := parseIDList("user_id", input.UserID)
+			if errResult != nil {
+				return errResult, nil, nil
+			}
+
+			ctx, cancel := context.WithTimeout(ctx, toolTimeout)
+			defer cancel()
+
+			result, err := client.PropertyRevokeUserAccess(ctx, models.PropertyRevokeUserAccessInput{
+				PropertyID: input.PropertyID,
+				UserID:     userIDs,
+			})
+			if err != nil {
+				return toolError(err), nil, nil
+			}
+			return toolJSON(result)
+		}),
+	)
+
+	// property_set_account_wide_access (destructive — privilege-widening)
+	mcp.AddTool(server,
+		&mcp.Tool{
+			Name:        "property_set_account_wide_access",
+			Description: "Admin: Set whether a property is accessible to all users in the account",
+			Annotations: &mcp.ToolAnnotations{
+				DestructiveHint: &destructive,
+			},
+		},
+		wrapTool(debug, "property_set_account_wide_access", func(ctx context.Context, _ *mcp.CallToolRequest, input PropertySetAccountWideAccessMCPInput) (*mcp.CallToolResult, any, error) {
+			if errResult := requireID("property_id", input.PropertyID); errResult != nil {
+				return errResult, nil, nil
+			}
+
+			ctx, cancel := context.WithTimeout(ctx, toolTimeout)
+			defer cancel()
+
+			result, err := client.PropertySetAccountWideAccess(ctx, models.PropertySetAccountWideAccessInput{
+				PropertyID:        input.PropertyID,
+				AccountWideAccess: input.AccountWideAccess,
+			})
+			if err != nil {
+				return toolError(err), nil, nil
+			}
+			return toolJSON(result)
+		}),
+	)
+
+	// --- User Property Access Tools (2) ---
+
+	// user_grant_property_access
+	mcp.AddTool(server,
+		&mcp.Tool{
+			Name:        "user_grant_property_access",
+			Description: "Admin: Grant a user access to one or more properties",
+		},
+		wrapTool(debug, "user_grant_property_access", func(ctx context.Context, _ *mcp.CallToolRequest, input UserPropertyAccessMCPInput) (*mcp.CallToolResult, any, error) {
+			if errResult := requireID("user_id", input.UserID); errResult != nil {
+				return errResult, nil, nil
+			}
+			propertyIDs, errResult := parseIDList("property_id", input.PropertyID)
+			if errResult != nil {
+				return errResult, nil, nil
+			}
+
+			ctx, cancel := context.WithTimeout(ctx, toolTimeout)
+			defer cancel()
+
+			user, err := client.UserGrantPropertyAccess(ctx, models.UserGrantPropertyAccessInput{
+				UserID:     input.UserID,
+				PropertyID: propertyIDs,
+			})
+			if err != nil {
+				return toolError(err), nil, nil
+			}
+			return toolJSON(user)
+		}),
+	)
+
+	// user_revoke_property_access (destructive)
+	mcp.AddTool(server,
+		&mcp.Tool{
+			Name:        "user_revoke_property_access",
+			Description: "Admin: Revoke a user's access to one or more properties",
+			Annotations: &mcp.ToolAnnotations{
+				DestructiveHint: &destructive,
+			},
+		},
+		wrapTool(debug, "user_revoke_property_access", func(ctx context.Context, _ *mcp.CallToolRequest, input UserPropertyAccessMCPInput) (*mcp.CallToolResult, any, error) {
+			if errResult := requireID("user_id", input.UserID); errResult != nil {
+				return errResult, nil, nil
+			}
+			propertyIDs, errResult := parseIDList("property_id", input.PropertyID)
+			if errResult != nil {
+				return errResult, nil, nil
+			}
+
+			ctx, cancel := context.WithTimeout(ctx, toolTimeout)
+			defer cancel()
+
+			user, err := client.UserRevokePropertyAccess(ctx, models.UserRevokePropertyAccessInput{
+				UserID:     input.UserID,
+				PropertyID: propertyIDs,
+			})
+			if err != nil {
+				return toolError(err), nil, nil
+			}
+			return toolJSON(user)
+		}),
+	)
+}
+
+// registerRoleMutationTools registers all 4 role mutation tools.
+func registerRoleMutationTools(server *mcp.Server, client apiClient, debug bool) {
+	destructive := true
+
+	// role_create
+	mcp.AddTool(server,
+		&mcp.Tool{
+			Name:        "role_create",
+			Description: "Admin: Create a new permission role in an account",
+		},
+		wrapTool(debug, "role_create", func(ctx context.Context, _ *mcp.CallToolRequest, input RoleCreateMCPInput) (*mcp.CallToolResult, any, error) {
+			if errResult := requireID("account_id", input.AccountID); errResult != nil {
+				return errResult, nil, nil
+			}
+			if input.Name == "" {
+				return toolInputError("name is required"), nil, nil
+			}
+			if err := models.ValidateFreeText("name", input.Name); err != nil {
+				return toolInputError(err.Error()), nil, nil
+			}
+			if input.Description != "" {
+				if err := models.ValidateFreeText("description", input.Description); err != nil {
+					return toolInputError(err.Error()), nil, nil
+				}
+			}
+
+			grant := models.SplitCSV(input.PermissionsGrant)
+			revoke := models.SplitCSV(input.PermissionsRevoke)
+			if len(grant) == 0 && len(revoke) == 0 {
+				return toolInputError("permissions_grant is required"), nil, nil
+			}
+
+			ctx, cancel := context.WithTimeout(ctx, toolTimeout)
+			defer cancel()
+
+			role, err := client.RoleCreate(ctx, models.RoleCreateInput{
+				AccountID:   input.AccountID,
+				Name:        input.Name,
+				Description: input.Description,
+				Permissions: models.PermissionsInput{
+					Grant:  grant,
+					Revoke: revoke,
+				},
+			})
+			if err != nil {
+				return toolError(err), nil, nil
+			}
+			return toolJSON(role)
+		}),
+	)
+
+	// role_set_name
+	mcp.AddTool(server,
+		&mcp.Tool{
+			Name:        "role_set_name",
+			Description: "Admin: Update a role's display name",
+		},
+		wrapTool(debug, "role_set_name", func(ctx context.Context, _ *mcp.CallToolRequest, input RoleSetNameMCPInput) (*mcp.CallToolResult, any, error) {
+			if errResult := requireID("account_id", input.AccountID); errResult != nil {
+				return errResult, nil, nil
+			}
+			if errResult := requireID("role_id", input.RoleID); errResult != nil {
+				return errResult, nil, nil
+			}
+			if input.Name == "" {
+				return toolInputError("name is required"), nil, nil
+			}
+			if err := models.ValidateFreeText("name", input.Name); err != nil {
+				return toolInputError(err.Error()), nil, nil
+			}
+
+			ctx, cancel := context.WithTimeout(ctx, toolTimeout)
+			defer cancel()
+
+			role, err := client.RoleSetName(ctx, models.RoleSetNameInput{
+				AccountID: input.AccountID,
+				RoleID:    input.RoleID,
+				Name:      input.Name,
+			})
+			if err != nil {
+				return toolError(err), nil, nil
+			}
+			return toolJSON(role)
+		}),
+	)
+
+	// role_set_description
+	mcp.AddTool(server,
+		&mcp.Tool{
+			Name:        "role_set_description",
+			Description: "Admin: Update or clear a role's description",
+		},
+		wrapTool(debug, "role_set_description", func(ctx context.Context, _ *mcp.CallToolRequest, input RoleSetDescriptionMCPInput) (*mcp.CallToolResult, any, error) {
+			if errResult := requireID("account_id", input.AccountID); errResult != nil {
+				return errResult, nil, nil
+			}
+			if errResult := requireID("role_id", input.RoleID); errResult != nil {
+				return errResult, nil, nil
+			}
+			if input.Description != nil && *input.Description != "" {
+				if err := models.ValidateFreeText("description", *input.Description); err != nil {
+					return toolInputError(err.Error()), nil, nil
+				}
+			}
+
+			ctx, cancel := context.WithTimeout(ctx, toolTimeout)
+			defer cancel()
+
+			role, err := client.RoleSetDescription(ctx, models.RoleSetDescriptionInput{
+				AccountID:   input.AccountID,
+				RoleID:      input.RoleID,
+				Description: input.Description,
+			})
+			if err != nil {
+				return toolError(err), nil, nil
+			}
+			return toolJSON(role)
+		}),
+	)
+
+	// role_set_permissions (destructive — privilege-changing)
+	mcp.AddTool(server,
+		&mcp.Tool{
+			Name:        "role_set_permissions",
+			Description: "Admin: Update permissions for a role. Only specified actions are modified; others are unchanged",
+			Annotations: &mcp.ToolAnnotations{
+				DestructiveHint: &destructive,
+			},
+		},
+		wrapTool(debug, "role_set_permissions", func(ctx context.Context, _ *mcp.CallToolRequest, input RoleSetPermissionsMCPInput) (*mcp.CallToolResult, any, error) {
+			if errResult := requireID("account_id", input.AccountID); errResult != nil {
+				return errResult, nil, nil
+			}
+			if errResult := requireID("role_id", input.RoleID); errResult != nil {
+				return errResult, nil, nil
+			}
+
+			grant := models.SplitCSV(input.PermissionsGrant)
+			revoke := models.SplitCSV(input.PermissionsRevoke)
+			if len(grant) == 0 && len(revoke) == 0 {
+				return toolInputError("at least one of permissions_grant or permissions_revoke is required"), nil, nil
+			}
+
+			ctx, cancel := context.WithTimeout(ctx, toolTimeout)
+			defer cancel()
+
+			role, err := client.RoleSetPermissions(ctx, models.RoleSetPermissionsInput{
+				AccountID: input.AccountID,
+				RoleID:    input.RoleID,
+				Permissions: models.PermissionsInput{
+					Grant:  grant,
+					Revoke: revoke,
+				},
+			})
+			if err != nil {
+				return toolError(err), nil, nil
+			}
+			return toolJSON(role)
+		}),
+	)
+}
+
+// registerWebhookMutationTools registers all 2 webhook mutation tools.
+func registerWebhookMutationTools(server *mcp.Server, client apiClient, debug bool) {
+	// webhook_create
+	mcp.AddTool(server,
+		&mcp.Tool{
+			Name:        "webhook_create",
+			Description: "Admin: Create a new webhook subscription for event notifications (Standard Webhooks protocol)",
+		},
+		wrapTool(debug, "webhook_create", func(ctx context.Context, _ *mcp.CallToolRequest, input WebhookCreateMCPInput) (*mcp.CallToolResult, any, error) {
+			if errResult := requireID("subscriber_id", input.SubscriberID); errResult != nil {
+				return errResult, nil, nil
+			}
+			if input.SubscriberType == "" {
+				return toolInputError("subscriber_type is required"), nil, nil
+			}
+			upperType := strings.ToUpper(input.SubscriberType)
+			if !models.ValidWebhookSubscriberTypes[upperType] {
+				return toolInputError("subscriber_type must be ACCOUNT or PLUGIN"), nil, nil
+			}
+			url := strings.TrimSpace(input.URL)
+			if url == "" {
+				return toolInputError("url is required"), nil, nil
+			}
+			if err := models.ValidateWebhookURL(url); err != nil {
+				return toolInputError(err.Error()), nil, nil
+			}
+
+			createInput := models.WebhookCreateInput{
+				SubscriberID:   input.SubscriberID,
+				SubscriberType: upperType,
+				URL:            url,
+			}
+
+			if input.Subjects != "" {
+				subjects, err := models.ValidateWebhookSubjects(input.Subjects)
+				if err != nil {
+					return toolInputError(err.Error()), nil, nil
+				}
+				if len(subjects) > 0 {
+					createInput.Subjects = subjects
+				}
+			}
+
+			if input.Status != "" {
+				upper := strings.ToUpper(input.Status)
+				if !models.ValidWebhookStatuses[upper] {
+					return toolInputError("status must be ENABLED or DISABLED"), nil, nil
+				}
+				createInput.Status = upper
+			}
+
+			ctx, cancel := context.WithTimeout(ctx, toolTimeout)
+			defer cancel()
+
+			webhook, err := client.WebhookCreate(ctx, createInput)
+			if err != nil {
+				return toolError(err), nil, nil
+			}
+			return toolJSON(webhook)
+		}),
+	)
+
+	// webhook_update
+	mcp.AddTool(server,
+		&mcp.Tool{
+			Name:        "webhook_update",
+			Description: "Admin: Update an existing webhook's URL, status, or subjects",
+		},
+		wrapTool(debug, "webhook_update", func(ctx context.Context, _ *mcp.CallToolRequest, input WebhookUpdateMCPInput) (*mcp.CallToolResult, any, error) {
+			if errResult := requireID("id", input.ID); errResult != nil {
+				return errResult, nil, nil
+			}
+
+			updateInput := models.WebhookUpdateInput{
+				ID: input.ID,
+			}
+
+			url := strings.TrimSpace(input.URL)
+			if url != "" {
+				if err := models.ValidateWebhookURL(url); err != nil {
+					return toolInputError(err.Error()), nil, nil
+				}
+				updateInput.URL = url
+			}
+
+			if input.Status != "" {
+				upper := strings.ToUpper(input.Status)
+				if !models.ValidWebhookStatuses[upper] {
+					return toolInputError("status must be ENABLED or DISABLED"), nil, nil
+				}
+				updateInput.Status = upper
+			}
+
+			if input.Subjects != "" {
+				subjects, err := models.ValidateWebhookSubjects(input.Subjects)
+				if err != nil {
+					return toolInputError(err.Error()), nil, nil
+				}
+				if len(subjects) > 0 {
+					updateInput.Subjects = subjects
+				}
+			}
+
+			if url == "" && input.Status == "" && input.Subjects == "" {
+				return toolInputError("at least one of url, status, or subjects is required"), nil, nil
+			}
+
+			ctx, cancel := context.WithTimeout(ctx, toolTimeout)
+			defer cancel()
+
+			webhook, err := client.WebhookUpdate(ctx, updateInput)
+			if err != nil {
+				return toolError(err), nil, nil
+			}
+			return toolJSON(webhook)
 		}),
 	)
 }
