@@ -316,7 +316,7 @@ hppycli mcp setup --client cursor
 
 The output is a JSON snippet to add to your client's MCP configuration. The server binary (`hppymcp`) runs via stdio transport and reads the same `~/.hppycli.yaml` config file.
 
-### MCP Tools
+### MCP Tools (76 total: 5 read + 71 mutation)
 
 #### Read Tools
 

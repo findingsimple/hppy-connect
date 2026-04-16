@@ -36,6 +36,7 @@ cmd/
       helpers.go   # Shared output formatting, flag parsing, validation, confirmAction
       workorders.go / inspections.go / properties.go / units.go / account.go
       projects.go / users.go / memberships.go / roles.go / webhooks.go
+      config.go / completion.go / version.go  # Utility commands
       mcp.go       # `mcp setup` — generates MCP client config JSON
   hppymcp/         # MCP server binary (stdio transport)
     main.go        # Entry point — server setup
