@@ -14,15 +14,6 @@ Built during the 2-day HappyCo AI Hackathon (April 2026).
 
 ---
 
-<table>
-<tr>
-<td align="center"><strong>76</strong><br/>MCP Tools</td>
-<td align="center"><strong>71</strong><br/>Mutations</td>
-<td align="center"><strong>8</strong><br/>Domains</td>
-<td align="center"><strong>4</strong><br/>Output Formats</td>
-</tr>
-</table>
-
 </div>
 
 <br/>
