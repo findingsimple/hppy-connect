@@ -84,6 +84,7 @@ type Client struct {
 	retryBackoff   []time.Duration
 	lastLoginFail  time.Time // protected by mu — prevents login hammering
 	lastLoginError error     // protected by mu — cached error during cooldown
+	onStatus       func(msg string)
 }
 
 // Option configures a Client.
@@ -98,6 +99,13 @@ func WithDebug(debug bool) Option {
 // Validation (HTTPS requirement) is deferred to NewClient.
 func WithEndpoint(endpoint string) Option {
 	return func(c *Client) { c.endpoint = endpoint }
+}
+
+// WithStatusFunc registers a callback for user-visible status messages
+// (e.g. "Authenticating...", "Retrying..."). Used by the CLI to provide
+// feedback on operations that would otherwise appear to hang.
+func WithStatusFunc(fn func(msg string)) Option {
+	return func(c *Client) { c.onStatus = fn }
 }
 
 // WithToken pre-seeds the auth state with a token from a prior Login call.
@@ -155,6 +163,12 @@ func (c *Client) getAuth() tokenState {
 	return *c.authState.Load()
 }
 
+func (c *Client) emitStatus(msg string) {
+	if c.onStatus != nil {
+		c.onStatus(msg)
+	}
+}
+
 // ensureAuth returns a valid tokenState, re-authenticating if needed.
 // Returning the state directly eliminates the TOCTOU gap between
 // checking auth and reading the token in doQuery.
@@ -177,6 +191,7 @@ func (c *Client) ensureAuth(ctx context.Context) (tokenState, error) {
 		return tokenState{}, c.lastLoginError
 	}
 
+	c.emitStatus("Authenticating...")
 	if err := c.login(ctx); err != nil {
 		// Only apply cooldown for permanent failures (bad credentials, rejected input).
 		// Transient errors (network timeouts, 5xx, rate limiting) should allow immediate retry.
@@ -475,6 +490,7 @@ func (c *Client) doQueryWithRetry(ctx context.Context, query string, variables m
 				backoff = ae.RetryAfter
 			}
 			jitter := time.Duration(rand.Int64N(int64(backoff/2))) - backoff/4
+			c.emitStatus(fmt.Sprintf("Retrying (%d/%d)...", attempt+1, maxRetries-1))
 			select {
 			case <-ctx.Done():
 				return errAPIFatal(fmt.Sprintf("context cancelled: %v", ctx.Err()))
