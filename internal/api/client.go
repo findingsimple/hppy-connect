@@ -762,6 +762,264 @@ func (c *Client) WorkOrderStopTimer(ctx context.Context, workOrderID, stoppedAt 
 	return &resp.WorkOrderStopTimer, nil
 }
 
+// --- Inspection Mutations (24) ---
+
+// InspectionCreate creates a new inspection. Non-idempotent: auth-retry only.
+func (c *Client) InspectionCreate(ctx context.Context, input models.InspectionCreateInput) (*models.Inspection, error) {
+	vars := map[string]interface{}{"input": input}
+	var resp inspectionCreateResponse
+	if err := c.doMutation(ctx, inspectionCreateMutation, vars, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.InspectionCreate, nil
+}
+
+// InspectionStart starts an inspection. Idempotent.
+func (c *Client) InspectionStart(ctx context.Context, inspectionID string) (*models.Inspection, error) {
+	vars := map[string]interface{}{"input": map[string]interface{}{
+		"inspectionId": inspectionID,
+	}}
+	var resp inspectionStartResponse
+	if err := c.doMutationIdempotent(ctx, inspectionStartMutation, vars, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.InspectionStart, nil
+}
+
+// InspectionComplete marks an inspection as complete. Idempotent.
+func (c *Client) InspectionComplete(ctx context.Context, inspectionID string) (*models.Inspection, error) {
+	vars := map[string]interface{}{"input": map[string]interface{}{
+		"inspectionId": inspectionID,
+	}}
+	var resp inspectionCompleteResponse
+	if err := c.doMutationIdempotent(ctx, inspectionCompleteMutation, vars, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.InspectionComplete, nil
+}
+
+// InspectionReopen reopens a completed inspection. Idempotent.
+func (c *Client) InspectionReopen(ctx context.Context, inspectionID string) (*models.Inspection, error) {
+	vars := map[string]interface{}{"input": map[string]interface{}{
+		"inspectionId": inspectionID,
+	}}
+	var resp inspectionReopenResponse
+	if err := c.doMutationIdempotent(ctx, inspectionReopenMutation, vars, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.InspectionReopen, nil
+}
+
+// InspectionArchive archives an inspection. Idempotent.
+func (c *Client) InspectionArchive(ctx context.Context, inspectionID string) (*models.Inspection, error) {
+	vars := map[string]interface{}{"input": map[string]interface{}{
+		"inspectionId": inspectionID,
+	}}
+	var resp inspectionArchiveResponse
+	if err := c.doMutationIdempotent(ctx, inspectionArchiveMutation, vars, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.InspectionArchive, nil
+}
+
+// InspectionExpire expires an inspection. Idempotent.
+func (c *Client) InspectionExpire(ctx context.Context, inspectionID string) (*models.Inspection, error) {
+	vars := map[string]interface{}{"input": map[string]interface{}{
+		"inspectionId": inspectionID,
+	}}
+	var resp inspectionExpireResponse
+	if err := c.doMutationIdempotent(ctx, inspectionExpireMutation, vars, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.InspectionExpire, nil
+}
+
+// InspectionUnexpire unexpires an inspection. Idempotent.
+func (c *Client) InspectionUnexpire(ctx context.Context, inspectionID string) (*models.Inspection, error) {
+	vars := map[string]interface{}{"input": map[string]interface{}{
+		"inspectionId": inspectionID,
+	}}
+	var resp inspectionUnexpireResponse
+	if err := c.doMutationIdempotent(ctx, inspectionUnexpireMutation, vars, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.InspectionUnexpire, nil
+}
+
+// InspectionSetAssignee assigns a user to an inspection. Idempotent.
+func (c *Client) InspectionSetAssignee(ctx context.Context, input models.InspectionSetAssigneeInput) (*models.Inspection, error) {
+	vars := map[string]interface{}{"input": input}
+	var resp inspectionSetAssigneeResponse
+	if err := c.doMutationIdempotent(ctx, inspectionSetAssigneeMutation, vars, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.InspectionSetAssignee, nil
+}
+
+// InspectionSetDueBy sets the due date for an inspection. Idempotent.
+func (c *Client) InspectionSetDueBy(ctx context.Context, input models.InspectionSetDueByInput) (*models.Inspection, error) {
+	vars := map[string]interface{}{"input": input}
+	var resp inspectionSetDueByResponse
+	if err := c.doMutationIdempotent(ctx, inspectionSetDueByMutation, vars, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.InspectionSetDueBy, nil
+}
+
+// InspectionSetScheduledFor sets the scheduled date for an inspection. Idempotent.
+func (c *Client) InspectionSetScheduledFor(ctx context.Context, inspectionID, scheduledFor string) (*models.Inspection, error) {
+	vars := map[string]interface{}{"input": map[string]interface{}{
+		"inspectionId": inspectionID,
+		"scheduledFor": scheduledFor,
+	}}
+	var resp inspectionSetScheduledForResponse
+	if err := c.doMutationIdempotent(ctx, inspectionSetScheduledForMutation, vars, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.InspectionSetScheduledFor, nil
+}
+
+// InspectionSetHeaderField updates a header field. Idempotent.
+func (c *Client) InspectionSetHeaderField(ctx context.Context, input models.InspectionSetHeaderFieldInput) (*models.Inspection, error) {
+	vars := map[string]interface{}{"input": input}
+	var resp inspectionSetHeaderFieldResponse
+	if err := c.doMutationIdempotent(ctx, inspectionSetHeaderFieldMutation, vars, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.InspectionSetHeaderField, nil
+}
+
+// InspectionSetFooterField updates a footer field. Idempotent.
+func (c *Client) InspectionSetFooterField(ctx context.Context, input models.InspectionSetFooterFieldInput) (*models.Inspection, error) {
+	vars := map[string]interface{}{"input": input}
+	var resp inspectionSetFooterFieldResponse
+	if err := c.doMutationIdempotent(ctx, inspectionSetFooterFieldMutation, vars, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.InspectionSetFooterField, nil
+}
+
+// InspectionSetItemNotes sets notes on an inspection item. Idempotent.
+func (c *Client) InspectionSetItemNotes(ctx context.Context, input models.InspectionSetItemNotesInput) (*models.Inspection, error) {
+	vars := map[string]interface{}{"input": input}
+	var resp inspectionSetItemNotesResponse
+	if err := c.doMutationIdempotent(ctx, inspectionSetItemNotesMutation, vars, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.InspectionSetItemNotes, nil
+}
+
+// InspectionRateItem rates an item in an inspection. Idempotent.
+func (c *Client) InspectionRateItem(ctx context.Context, input models.InspectionRateItemInput) (*models.Inspection, error) {
+	vars := map[string]interface{}{"input": input}
+	var resp inspectionRateItemResponse
+	if err := c.doMutationIdempotent(ctx, inspectionRateItemMutation, vars, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.InspectionRateItem, nil
+}
+
+// InspectionAddSection adds a section to an inspection. Non-idempotent: auth-retry only.
+func (c *Client) InspectionAddSection(ctx context.Context, input models.InspectionAddSectionInput) (*models.Inspection, error) {
+	vars := map[string]interface{}{"input": input}
+	var resp inspectionAddSectionResponse
+	if err := c.doMutation(ctx, inspectionAddSectionMutation, vars, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.InspectionAddSection, nil
+}
+
+// InspectionDeleteSection deletes a section from an inspection. Idempotent.
+func (c *Client) InspectionDeleteSection(ctx context.Context, input models.InspectionDeleteSectionInput) (*models.Inspection, error) {
+	vars := map[string]interface{}{"input": input}
+	var resp inspectionDeleteSectionResponse
+	if err := c.doMutationIdempotent(ctx, inspectionDeleteSectionMutation, vars, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.InspectionDeleteSection, nil
+}
+
+// InspectionDuplicateSection duplicates a section. Non-idempotent: auth-retry only.
+func (c *Client) InspectionDuplicateSection(ctx context.Context, input models.InspectionDuplicateSectionInput) (*models.Inspection, error) {
+	vars := map[string]interface{}{"input": input}
+	var resp inspectionDuplicateSectionResponse
+	if err := c.doMutation(ctx, inspectionDuplicateSectionMutation, vars, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.InspectionDuplicateSection, nil
+}
+
+// InspectionRenameSection renames a section. Idempotent.
+func (c *Client) InspectionRenameSection(ctx context.Context, input models.InspectionRenameSectionInput) (*models.Inspection, error) {
+	vars := map[string]interface{}{"input": input}
+	var resp inspectionRenameSectionResponse
+	if err := c.doMutationIdempotent(ctx, inspectionRenameSectionMutation, vars, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.InspectionRenameSection, nil
+}
+
+// InspectionAddItem adds an item to a section. Non-idempotent: auth-retry only.
+func (c *Client) InspectionAddItem(ctx context.Context, input models.InspectionAddItemInput) (*models.Inspection, error) {
+	vars := map[string]interface{}{"input": input}
+	var resp inspectionAddItemResponse
+	if err := c.doMutation(ctx, inspectionAddItemMutation, vars, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.InspectionAddItem, nil
+}
+
+// InspectionDeleteItem deletes an item from a section. Idempotent.
+func (c *Client) InspectionDeleteItem(ctx context.Context, input models.InspectionDeleteItemInput) (*models.Inspection, error) {
+	vars := map[string]interface{}{"input": input}
+	var resp inspectionDeleteItemResponse
+	if err := c.doMutationIdempotent(ctx, inspectionDeleteItemMutation, vars, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.InspectionDeleteItem, nil
+}
+
+// InspectionAddItemPhoto adds a photo to an inspection item. Non-idempotent: auth-retry only.
+// Returns the updated inspection, photo metadata, and a signed upload URL.
+func (c *Client) InspectionAddItemPhoto(ctx context.Context, input models.InspectionAddItemPhotoInput) (*models.InspectionAddItemPhotoResult, error) {
+	vars := map[string]interface{}{"input": input}
+	var resp inspectionAddItemPhotoResponse
+	if err := c.doMutation(ctx, inspectionAddItemPhotoMutation, vars, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.InspectionAddItemPhoto, nil
+}
+
+// InspectionRemoveItemPhoto removes a photo from an item. Idempotent.
+func (c *Client) InspectionRemoveItemPhoto(ctx context.Context, input models.InspectionRemoveItemPhotoInput) (*models.Inspection, error) {
+	vars := map[string]interface{}{"input": input}
+	var resp inspectionRemoveItemPhotoResponse
+	if err := c.doMutationIdempotent(ctx, inspectionRemoveItemPhotoMutation, vars, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.InspectionRemoveItemPhoto, nil
+}
+
+// InspectionMoveItemPhoto moves a photo between items. Idempotent.
+func (c *Client) InspectionMoveItemPhoto(ctx context.Context, input models.InspectionMoveItemPhotoInput) (*models.Inspection, error) {
+	vars := map[string]interface{}{"input": input}
+	var resp inspectionMoveItemPhotoResponse
+	if err := c.doMutationIdempotent(ctx, inspectionMoveItemPhotoMutation, vars, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.InspectionMoveItemPhoto, nil
+}
+
+// InspectionSendToGuest sends an inspection to a guest. Non-idempotent: auth-retry only.
+func (c *Client) InspectionSendToGuest(ctx context.Context, input models.InspectionSendToGuestInput) (*models.InspectionGuestLink, error) {
+	vars := map[string]interface{}{"input": input}
+	var resp inspectionSendToGuestResponse
+	if err := c.doMutation(ctx, inspectionSendToGuestMutation, vars, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.InspectionSendToGuest, nil
+}
+
 // paginate is a generic pagination loop shared by all List* methods.
 func paginate[T any](
 	ctx context.Context,

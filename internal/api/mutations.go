@@ -90,3 +90,117 @@ const workOrderStartTimerMutation = `mutation WorkOrderStartTimer($input: WorkOr
 const workOrderStopTimerMutation = `mutation WorkOrderStopTimer($input: WorkOrderStopTimerInput!) {
   workOrderStopTimer(input: $input) {` + workOrderFields + `}
 }`
+
+// inspectionFields is the shared return fragment for inspection mutations.
+// Matches the fields returned by listInspectionsQuery for consistency.
+const inspectionFields = `
+    id name status startedAt endedAt scheduledFor dueBy score potentialScore
+    assignedTo { ... on InspectionAssigneeUser { __typename id name email type } }
+    locationV2 { id name property { id name } }
+    templateV2 { id name }
+`
+
+// --- Inspection Mutations (24) ---
+
+const inspectionCreateMutation = `mutation InspectionCreate($input: InspectionCreateInput!) {
+  inspectionCreate(input: $input) {` + inspectionFields + `}
+}`
+
+const inspectionStartMutation = `mutation InspectionStart($input: InspectionStartInput!) {
+  inspectionStart(input: $input) {` + inspectionFields + `}
+}`
+
+const inspectionCompleteMutation = `mutation InspectionComplete($input: InspectionCompleteInput!) {
+  inspectionComplete(input: $input) {` + inspectionFields + `}
+}`
+
+const inspectionReopenMutation = `mutation InspectionReopen($input: InspectionReopenInput!) {
+  inspectionReopen(input: $input) {` + inspectionFields + `}
+}`
+
+const inspectionArchiveMutation = `mutation InspectionArchive($input: InspectionArchiveInput!) {
+  inspectionArchive(input: $input) {` + inspectionFields + `}
+}`
+
+const inspectionExpireMutation = `mutation InspectionExpire($input: InspectionExpireInput!) {
+  inspectionExpire(input: $input) {` + inspectionFields + `}
+}`
+
+const inspectionUnexpireMutation = `mutation InspectionUnexpire($input: InspectionUnexpireInput!) {
+  inspectionUnexpire(input: $input) {` + inspectionFields + `}
+}`
+
+const inspectionSetAssigneeMutation = `mutation InspectionSetAssignee($input: InspectionSetAssigneeInput!) {
+  inspectionSetAssignee(input: $input) {` + inspectionFields + `}
+}`
+
+const inspectionSetDueByMutation = `mutation InspectionSetDueBy($input: InspectionSetDueByInput!) {
+  inspectionSetDueBy(input: $input) {` + inspectionFields + `}
+}`
+
+const inspectionSetScheduledForMutation = `mutation InspectionSetScheduledFor($input: InspectionSetScheduledForInput!) {
+  inspectionSetScheduledFor(input: $input) {` + inspectionFields + `}
+}`
+
+const inspectionSetHeaderFieldMutation = `mutation InspectionSetHeaderField($input: InspectionSetHeaderFieldInput!) {
+  inspectionSetHeaderField(input: $input) {` + inspectionFields + `}
+}`
+
+const inspectionSetFooterFieldMutation = `mutation InspectionSetFooterField($input: InspectionSetFooterFieldInput!) {
+  inspectionSetFooterField(input: $input) {` + inspectionFields + `}
+}`
+
+const inspectionSetItemNotesMutation = `mutation InspectionSetItemNotes($input: InspectionSetItemNotesInput!) {
+  inspectionSetItemNotes(input: $input) {` + inspectionFields + `}
+}`
+
+const inspectionRateItemMutation = `mutation InspectionRateItem($input: InspectionRateItemInput!) {
+  inspectionRateItem(input: $input) {` + inspectionFields + `}
+}`
+
+const inspectionAddSectionMutation = `mutation InspectionAddSection($input: InspectionAddSectionInput!) {
+  inspectionAddSection(input: $input) {` + inspectionFields + `}
+}`
+
+const inspectionDeleteSectionMutation = `mutation InspectionDeleteSection($input: InspectionDeleteSectionInput!) {
+  inspectionDeleteSection(input: $input) {` + inspectionFields + `}
+}`
+
+const inspectionDuplicateSectionMutation = `mutation InspectionDuplicateSection($input: InspectionDuplicateSectionInput!) {
+  inspectionDuplicateSection(input: $input) {` + inspectionFields + `}
+}`
+
+const inspectionRenameSectionMutation = `mutation InspectionRenameSection($input: InspectionRenameSectionInput!) {
+  inspectionRenameSection(input: $input) {` + inspectionFields + `}
+}`
+
+const inspectionAddItemMutation = `mutation InspectionAddItem($input: InspectionAddItemInput!) {
+  inspectionAddItem(input: $input) {` + inspectionFields + `}
+}`
+
+const inspectionDeleteItemMutation = `mutation InspectionDeleteItem($input: InspectionDeleteItemInput!) {
+  inspectionDeleteItem(input: $input) {` + inspectionFields + `}
+}`
+
+const inspectionAddItemPhotoMutation = `mutation InspectionAddItemPhoto($input: InspectionAddItemPhotoInput!) {
+  inspectionAddItemPhoto(input: $input) {
+    inspection {` + inspectionFields + `}
+    inspectionPhoto { id mimeType }
+    signedURL
+  }
+}`
+
+const inspectionRemoveItemPhotoMutation = `mutation InspectionRemoveItemPhoto($input: InspectionRemoveItemPhotoInput!) {
+  inspectionRemoveItemPhoto(input: $input) {` + inspectionFields + `}
+}`
+
+const inspectionMoveItemPhotoMutation = `mutation InspectionMoveItemPhoto($input: InspectionMoveItemPhotoInput!) {
+  inspectionMoveItemPhoto(input: $input) {` + inspectionFields + `}
+}`
+
+const inspectionSendToGuestMutation = `mutation InspectionSendToGuest($input: InspectionSendToGuestInput!) {
+  inspectionSendToGuest(input: $input) {
+    inspectionId
+    link
+  }
+}`

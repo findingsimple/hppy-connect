@@ -33,6 +33,11 @@ type mockClient struct {
 	mutatedWorkOrder *models.WorkOrder
 	attachmentResult *models.WorkOrderAddAttachmentResult
 
+	// Inspection mutation response fields
+	mutatedInspection *models.Inspection
+	photoResult       *models.InspectionAddItemPhotoResult
+	guestLinkResult   *models.InspectionGuestLink
+
 	// Capture call args for verification.
 	lastListOpts    models.ListOptions
 	lastPropertyID  string
@@ -43,6 +48,25 @@ type mockClient struct {
 	lastAttachInput models.WorkOrderAddAttachmentInput
 	lastStringValue string
 	lastBoolValue   bool
+
+	// Inspection capture fields
+	lastInspCreateInput        models.InspectionCreateInput
+	lastInspAssignInput        models.InspectionSetAssigneeInput
+	lastInspDueByInput         models.InspectionSetDueByInput
+	lastInspHeaderInput        models.InspectionSetHeaderFieldInput
+	lastInspFooterInput        models.InspectionSetFooterFieldInput
+	lastInspItemNotesInput     models.InspectionSetItemNotesInput
+	lastInspRateItemInput      models.InspectionRateItemInput
+	lastInspAddSectionInput    models.InspectionAddSectionInput
+	lastInspDeleteSectionInput models.InspectionDeleteSectionInput
+	lastInspDupSectionInput    models.InspectionDuplicateSectionInput
+	lastInspRenameSectionInput models.InspectionRenameSectionInput
+	lastInspAddItemInput       models.InspectionAddItemInput
+	lastInspDeleteItemInput    models.InspectionDeleteItemInput
+	lastInspAddPhotoInput      models.InspectionAddItemPhotoInput
+	lastInspRemovePhotoInput   models.InspectionRemoveItemPhotoInput
+	lastInspMovePhotoInput     models.InspectionMoveItemPhotoInput
+	lastInspSendToGuestInput   models.InspectionSendToGuestInput
 }
 
 func (m *mockClient) GetAccount(_ context.Context) (*models.Account, error) {
@@ -259,6 +283,235 @@ func (m *mockClient) WorkOrderStopTimer(_ context.Context, id, _ string) (*model
 		return nil, m.err
 	}
 	return m.woResult(), nil
+}
+
+// --- Inspection Mutation Mocks ---
+
+func (m *mockClient) inspResult() *models.Inspection {
+	if m.mutatedInspection != nil {
+		return m.mutatedInspection
+	}
+	return &models.Inspection{ID: "insp-mock", Status: "SCHEDULED"}
+}
+
+func (m *mockClient) InspectionCreate(_ context.Context, input models.InspectionCreateInput) (*models.Inspection, error) {
+	m.lastInspCreateInput = input
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.inspResult(), nil
+}
+
+func (m *mockClient) InspectionStart(_ context.Context, id string) (*models.Inspection, error) {
+	m.lastMutationID = id
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.inspResult(), nil
+}
+
+func (m *mockClient) InspectionComplete(_ context.Context, id string) (*models.Inspection, error) {
+	m.lastMutationID = id
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.inspResult(), nil
+}
+
+func (m *mockClient) InspectionReopen(_ context.Context, id string) (*models.Inspection, error) {
+	m.lastMutationID = id
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.inspResult(), nil
+}
+
+func (m *mockClient) InspectionArchive(_ context.Context, id string) (*models.Inspection, error) {
+	m.lastMutationID = id
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.inspResult(), nil
+}
+
+func (m *mockClient) InspectionExpire(_ context.Context, id string) (*models.Inspection, error) {
+	m.lastMutationID = id
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.inspResult(), nil
+}
+
+func (m *mockClient) InspectionUnexpire(_ context.Context, id string) (*models.Inspection, error) {
+	m.lastMutationID = id
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.inspResult(), nil
+}
+
+func (m *mockClient) InspectionSetAssignee(_ context.Context, input models.InspectionSetAssigneeInput) (*models.Inspection, error) {
+	m.lastMutationID = input.InspectionID
+	m.lastInspAssignInput = input
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.inspResult(), nil
+}
+
+func (m *mockClient) InspectionSetDueBy(_ context.Context, input models.InspectionSetDueByInput) (*models.Inspection, error) {
+	m.lastMutationID = input.InspectionID
+	m.lastInspDueByInput = input
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.inspResult(), nil
+}
+
+func (m *mockClient) InspectionSetScheduledFor(_ context.Context, id, _ string) (*models.Inspection, error) {
+	m.lastMutationID = id
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.inspResult(), nil
+}
+
+func (m *mockClient) InspectionSetHeaderField(_ context.Context, input models.InspectionSetHeaderFieldInput) (*models.Inspection, error) {
+	m.lastMutationID = input.InspectionID
+	m.lastInspHeaderInput = input
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.inspResult(), nil
+}
+
+func (m *mockClient) InspectionSetFooterField(_ context.Context, input models.InspectionSetFooterFieldInput) (*models.Inspection, error) {
+	m.lastMutationID = input.InspectionID
+	m.lastInspFooterInput = input
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.inspResult(), nil
+}
+
+func (m *mockClient) InspectionSetItemNotes(_ context.Context, input models.InspectionSetItemNotesInput) (*models.Inspection, error) {
+	m.lastMutationID = input.InspectionID
+	m.lastInspItemNotesInput = input
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.inspResult(), nil
+}
+
+func (m *mockClient) InspectionRateItem(_ context.Context, input models.InspectionRateItemInput) (*models.Inspection, error) {
+	m.lastMutationID = input.InspectionID
+	m.lastInspRateItemInput = input
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.inspResult(), nil
+}
+
+func (m *mockClient) InspectionAddSection(_ context.Context, input models.InspectionAddSectionInput) (*models.Inspection, error) {
+	m.lastMutationID = input.InspectionID
+	m.lastInspAddSectionInput = input
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.inspResult(), nil
+}
+
+func (m *mockClient) InspectionDeleteSection(_ context.Context, input models.InspectionDeleteSectionInput) (*models.Inspection, error) {
+	m.lastMutationID = input.InspectionID
+	m.lastInspDeleteSectionInput = input
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.inspResult(), nil
+}
+
+func (m *mockClient) InspectionDuplicateSection(_ context.Context, input models.InspectionDuplicateSectionInput) (*models.Inspection, error) {
+	m.lastMutationID = input.InspectionID
+	m.lastInspDupSectionInput = input
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.inspResult(), nil
+}
+
+func (m *mockClient) InspectionRenameSection(_ context.Context, input models.InspectionRenameSectionInput) (*models.Inspection, error) {
+	m.lastMutationID = input.InspectionID
+	m.lastInspRenameSectionInput = input
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.inspResult(), nil
+}
+
+func (m *mockClient) InspectionAddItem(_ context.Context, input models.InspectionAddItemInput) (*models.Inspection, error) {
+	m.lastMutationID = input.InspectionID
+	m.lastInspAddItemInput = input
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.inspResult(), nil
+}
+
+func (m *mockClient) InspectionDeleteItem(_ context.Context, input models.InspectionDeleteItemInput) (*models.Inspection, error) {
+	m.lastMutationID = input.InspectionID
+	m.lastInspDeleteItemInput = input
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.inspResult(), nil
+}
+
+func (m *mockClient) InspectionAddItemPhoto(_ context.Context, input models.InspectionAddItemPhotoInput) (*models.InspectionAddItemPhotoResult, error) {
+	m.lastInspAddPhotoInput = input
+	if m.err != nil {
+		return nil, m.err
+	}
+	if m.photoResult != nil {
+		return m.photoResult, nil
+	}
+	return &models.InspectionAddItemPhotoResult{
+		Inspection:      *m.inspResult(),
+		InspectionPhoto: models.InspectionPhoto{ID: "photo-1", MimeType: "image/jpeg"},
+		SignedURL:       "https://storage.example.com/upload/photo-1",
+	}, nil
+}
+
+func (m *mockClient) InspectionRemoveItemPhoto(_ context.Context, input models.InspectionRemoveItemPhotoInput) (*models.Inspection, error) {
+	m.lastMutationID = input.InspectionID
+	m.lastInspRemovePhotoInput = input
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.inspResult(), nil
+}
+
+func (m *mockClient) InspectionMoveItemPhoto(_ context.Context, input models.InspectionMoveItemPhotoInput) (*models.Inspection, error) {
+	m.lastMutationID = input.InspectionID
+	m.lastInspMovePhotoInput = input
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.inspResult(), nil
+}
+
+func (m *mockClient) InspectionSendToGuest(_ context.Context, input models.InspectionSendToGuestInput) (*models.InspectionGuestLink, error) {
+	m.lastMutationID = input.InspectionID
+	m.lastInspSendToGuestInput = input
+	if m.err != nil {
+		return nil, m.err
+	}
+	if m.guestLinkResult != nil {
+		return m.guestLinkResult, nil
+	}
+	return &models.InspectionGuestLink{
+		InspectionID: input.InspectionID,
+		Link:         "https://app.happyco.com/inspect/guest/abc123",
+	}, nil
 }
 
 // Verify mockClient satisfies the interface at compile time.
@@ -1474,6 +1727,845 @@ func TestToolWorkOrderMutationAPIError(t *testing.T) {
 
 	result := callTool(t, cs, "work_order_archive", map[string]any{
 		"work_order_id": "wo-123",
+	})
+	assert.True(t, result.IsError)
+	assert.Contains(t, toolText(t, result), "api_error")
+}
+
+// ---------------------------------------------------------------------------
+// Inspection Mutation Tool Tests
+// ---------------------------------------------------------------------------
+
+func TestToolInspectionCreate(t *testing.T) {
+	t.Run("happy path", func(t *testing.T) {
+		mock := &mockClient{
+			mutatedInspection: &models.Inspection{ID: "insp-new", Status: "SCHEDULED", Name: "Move-in"},
+		}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "inspection_create", map[string]any{
+			"location_id":   "loc-123",
+			"template_id":   "tmpl-456",
+			"scheduled_for": "2026-05-01T09:00:00Z",
+		})
+		assert.False(t, result.IsError)
+
+		var insp models.Inspection
+		require.NoError(t, json.Unmarshal([]byte(toolText(t, result)), &insp))
+		assert.Equal(t, "insp-new", insp.ID)
+		assert.Equal(t, "SCHEDULED", insp.Status)
+		assert.Equal(t, "loc-123", mock.lastInspCreateInput.LocationID)
+		assert.Equal(t, "tmpl-456", mock.lastInspCreateInput.TemplateID)
+	})
+
+	t.Run("missing location_id returns error", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "inspection_create", map[string]any{
+			"template_id":   "tmpl-456",
+			"scheduled_for": "2026-05-01T09:00:00Z",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "location_id")
+	})
+
+	t.Run("missing template_id returns error", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "inspection_create", map[string]any{
+			"location_id":   "loc-123",
+			"scheduled_for": "2026-05-01T09:00:00Z",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "template_id")
+	})
+
+	t.Run("invalid location_id rejected", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "inspection_create", map[string]any{
+			"location_id":   "../../bad",
+			"template_id":   "tmpl-456",
+			"scheduled_for": "2026-05-01T09:00:00Z",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "invalid_input")
+	})
+
+	t.Run("invalid scheduled_for rejected", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "inspection_create", map[string]any{
+			"location_id":   "loc-123",
+			"template_id":   "tmpl-456",
+			"scheduled_for": "not-a-date",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "invalid_input")
+	})
+}
+
+func TestToolInspectionArchive(t *testing.T) {
+	t.Run("happy path", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "inspection_archive", map[string]any{
+			"inspection_id": "insp-123",
+		})
+		assert.False(t, result.IsError)
+		assert.Equal(t, "insp-123", mock.lastMutationID)
+	})
+
+	t.Run("missing inspection_id", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "inspection_archive", map[string]any{})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "inspection_id")
+	})
+
+	t.Run("invalid ID rejected", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "inspection_archive", map[string]any{
+			"inspection_id": "../bad",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "invalid_input")
+	})
+}
+
+func TestToolInspectionStart(t *testing.T) {
+	t.Run("happy path", func(t *testing.T) {
+		mock := &mockClient{
+			mutatedInspection: &models.Inspection{ID: "insp-123", Status: "IN_PROGRESS"},
+		}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "inspection_start", map[string]any{
+			"inspection_id": "insp-123",
+		})
+		assert.False(t, result.IsError)
+		assert.Equal(t, "insp-123", mock.lastMutationID)
+
+		var insp models.Inspection
+		require.NoError(t, json.Unmarshal([]byte(toolText(t, result)), &insp))
+		assert.Equal(t, "insp-123", insp.ID)
+		assert.Equal(t, "IN_PROGRESS", insp.Status)
+	})
+
+	t.Run("invalid ID rejected", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "inspection_start", map[string]any{
+			"inspection_id": "../bad",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "invalid_input")
+	})
+}
+
+func TestToolInspectionComplete(t *testing.T) {
+	t.Run("happy path", func(t *testing.T) {
+		mock := &mockClient{
+			mutatedInspection: &models.Inspection{ID: "insp-123", Status: "COMPLETE"},
+		}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "inspection_complete", map[string]any{
+			"inspection_id": "insp-123",
+		})
+		assert.False(t, result.IsError)
+		assert.Equal(t, "insp-123", mock.lastMutationID)
+
+		var insp models.Inspection
+		require.NoError(t, json.Unmarshal([]byte(toolText(t, result)), &insp))
+		assert.Equal(t, "insp-123", insp.ID)
+		assert.Equal(t, "COMPLETE", insp.Status)
+	})
+}
+
+func TestToolInspectionReopen(t *testing.T) {
+	t.Run("happy path", func(t *testing.T) {
+		mock := &mockClient{
+			mutatedInspection: &models.Inspection{ID: "insp-123", Status: "SCHEDULED"},
+		}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "inspection_reopen", map[string]any{
+			"inspection_id": "insp-123",
+		})
+		assert.False(t, result.IsError)
+		assert.Equal(t, "insp-123", mock.lastMutationID)
+
+		var insp models.Inspection
+		require.NoError(t, json.Unmarshal([]byte(toolText(t, result)), &insp))
+		assert.Equal(t, "SCHEDULED", insp.Status)
+	})
+
+	t.Run("missing inspection_id", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "inspection_reopen", map[string]any{})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "inspection_id")
+	})
+}
+
+func TestToolInspectionExpire(t *testing.T) {
+	t.Run("happy path", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "inspection_expire", map[string]any{
+			"inspection_id": "insp-123",
+		})
+		assert.False(t, result.IsError)
+		assert.Equal(t, "insp-123", mock.lastMutationID)
+	})
+
+	t.Run("invalid ID rejected", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "inspection_expire", map[string]any{
+			"inspection_id": "../bad",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "invalid_input")
+	})
+}
+
+func TestToolInspectionUnexpire(t *testing.T) {
+	t.Run("happy path", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "inspection_unexpire", map[string]any{
+			"inspection_id": "insp-123",
+		})
+		assert.False(t, result.IsError)
+		assert.Equal(t, "insp-123", mock.lastMutationID)
+	})
+}
+
+func TestToolInspectionSetScheduledFor(t *testing.T) {
+	t.Run("happy path", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "inspection_set_scheduled_for", map[string]any{
+			"inspection_id": "insp-123",
+			"scheduled_for": "2026-05-01T09:00:00Z",
+		})
+		assert.False(t, result.IsError)
+		assert.Equal(t, "insp-123", mock.lastMutationID)
+	})
+
+	t.Run("missing scheduled_for rejected", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "inspection_set_scheduled_for", map[string]any{
+			"inspection_id": "insp-123",
+			"scheduled_for": "",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "invalid_input")
+	})
+
+	t.Run("invalid timestamp rejected", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "inspection_set_scheduled_for", map[string]any{
+			"inspection_id": "insp-123",
+			"scheduled_for": "not-a-date",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "invalid_input")
+	})
+}
+
+func TestToolInspectionSetAssignee(t *testing.T) {
+	t.Run("happy path", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "inspection_set_assignee", map[string]any{
+			"inspection_id": "insp-123",
+			"user_id":       "user-456",
+		})
+		assert.False(t, result.IsError)
+		assert.Equal(t, "insp-123", mock.lastInspAssignInput.InspectionID)
+		assert.Equal(t, "user-456", mock.lastInspAssignInput.UserID)
+	})
+
+	t.Run("missing user_id rejected", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "inspection_set_assignee", map[string]any{
+			"inspection_id": "insp-123",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "user_id")
+	})
+}
+
+func TestToolInspectionSetDueBy(t *testing.T) {
+	t.Run("happy path", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "inspection_set_due_by", map[string]any{
+			"inspection_id": "insp-123",
+			"due_by":        "2026-06-01T00:00:00Z",
+			"expires":       true,
+		})
+		assert.False(t, result.IsError)
+		assert.Equal(t, "insp-123", mock.lastInspDueByInput.InspectionID)
+		assert.Equal(t, "2026-06-01T00:00:00Z", mock.lastInspDueByInput.DueBy)
+		assert.True(t, mock.lastInspDueByInput.Expires)
+	})
+
+	t.Run("missing due_by rejected", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "inspection_set_due_by", map[string]any{
+			"inspection_id": "insp-123",
+			"expires":       true,
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "due_by")
+	})
+}
+
+func TestToolInspectionAddSection(t *testing.T) {
+	t.Run("happy path", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "inspection_add_section", map[string]any{
+			"inspection_id": "insp-123",
+			"section_name":  "Kitchen",
+		})
+		assert.False(t, result.IsError)
+		assert.Equal(t, "insp-123", mock.lastInspAddSectionInput.InspectionID)
+		assert.Equal(t, "Kitchen", mock.lastInspAddSectionInput.Name)
+	})
+
+	t.Run("missing section_name rejected", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "inspection_add_section", map[string]any{
+			"inspection_id": "insp-123",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "section_name")
+	})
+}
+
+func TestToolInspectionDeleteSection(t *testing.T) {
+	t.Run("happy path", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "inspection_delete_section", map[string]any{
+			"inspection_id": "insp-123",
+			"section_name":  "Kitchen",
+		})
+		assert.False(t, result.IsError)
+		assert.Equal(t, "insp-123", mock.lastInspDeleteSectionInput.InspectionID)
+		assert.Equal(t, "Kitchen", mock.lastInspDeleteSectionInput.SectionName)
+	})
+
+	t.Run("missing section_name rejected", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "inspection_delete_section", map[string]any{
+			"inspection_id": "insp-123",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "section_name")
+	})
+}
+
+func TestToolInspectionSetFooterField(t *testing.T) {
+	t.Run("happy path", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "inspection_set_footer_field", map[string]any{
+			"inspection_id": "insp-123",
+			"label":         "Inspector Signature",
+			"value":         "J. Smith",
+		})
+		assert.False(t, result.IsError)
+		assert.Equal(t, "insp-123", mock.lastInspFooterInput.InspectionID)
+		assert.Equal(t, "Inspector Signature", mock.lastInspFooterInput.Label)
+		assert.Equal(t, "J. Smith", mock.lastInspFooterInput.Value)
+	})
+
+	t.Run("missing label rejected", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "inspection_set_footer_field", map[string]any{
+			"inspection_id": "insp-123",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "label")
+	})
+}
+
+func TestToolInspectionSetItemNotes(t *testing.T) {
+	t.Run("happy path", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "inspection_set_item_notes", map[string]any{
+			"inspection_id": "insp-123",
+			"section_name":  "Kitchen",
+			"item_name":     "Stove",
+			"notes":         "Burner not working",
+		})
+		assert.False(t, result.IsError)
+		assert.Equal(t, "insp-123", mock.lastInspItemNotesInput.InspectionID)
+		assert.Equal(t, "Kitchen", mock.lastInspItemNotesInput.SectionName)
+		assert.Equal(t, "Stove", mock.lastInspItemNotesInput.ItemName)
+		assert.Equal(t, "Burner not working", mock.lastInspItemNotesInput.Notes)
+	})
+
+	t.Run("missing section_name rejected", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "inspection_set_item_notes", map[string]any{
+			"inspection_id": "insp-123",
+			"item_name":     "Stove",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "section_name")
+	})
+
+	t.Run("missing item_name rejected", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "inspection_set_item_notes", map[string]any{
+			"inspection_id": "insp-123",
+			"section_name":  "Kitchen",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "item_name")
+	})
+
+	t.Run("oversized notes rejected", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "inspection_set_item_notes", map[string]any{
+			"inspection_id": "insp-123",
+			"section_name":  "Kitchen",
+			"item_name":     "Stove",
+			"notes":         string(make([]byte, models.MaxFreeTextLength+1)),
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "invalid_input")
+	})
+}
+
+func TestToolInspectionDuplicateSection(t *testing.T) {
+	t.Run("happy path", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "inspection_duplicate_section", map[string]any{
+			"inspection_id": "insp-123",
+			"section_name":  "Kitchen",
+		})
+		assert.False(t, result.IsError)
+		assert.Equal(t, "insp-123", mock.lastInspDupSectionInput.InspectionID)
+		assert.Equal(t, "Kitchen", mock.lastInspDupSectionInput.SectionName)
+	})
+
+	t.Run("missing section_name rejected", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "inspection_duplicate_section", map[string]any{
+			"inspection_id": "insp-123",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "section_name")
+	})
+}
+
+func TestToolInspectionRenameSection(t *testing.T) {
+	t.Run("happy path", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "inspection_rename_section", map[string]any{
+			"inspection_id": "insp-123",
+			"section_name":  "Kitchen",
+			"new_name":      "Kitchen (Updated)",
+		})
+		assert.False(t, result.IsError)
+		assert.Equal(t, "insp-123", mock.lastInspRenameSectionInput.InspectionID)
+		assert.Equal(t, "Kitchen", mock.lastInspRenameSectionInput.SectionName)
+		assert.Equal(t, "Kitchen (Updated)", mock.lastInspRenameSectionInput.NewSectionName)
+	})
+
+	t.Run("missing new_name rejected", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "inspection_rename_section", map[string]any{
+			"inspection_id": "insp-123",
+			"section_name":  "Kitchen",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "new_name")
+	})
+}
+
+func TestToolInspectionDeleteItem(t *testing.T) {
+	t.Run("happy path", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "inspection_delete_item", map[string]any{
+			"inspection_id": "insp-123",
+			"section_name":  "Kitchen",
+			"item_name":     "Stove",
+		})
+		assert.False(t, result.IsError)
+		assert.Equal(t, "insp-123", mock.lastInspDeleteItemInput.InspectionID)
+		assert.Equal(t, "Kitchen", mock.lastInspDeleteItemInput.SectionName)
+		assert.Equal(t, "Stove", mock.lastInspDeleteItemInput.ItemName)
+	})
+
+	t.Run("missing item_name rejected", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "inspection_delete_item", map[string]any{
+			"inspection_id": "insp-123",
+			"section_name":  "Kitchen",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "item_name")
+	})
+}
+
+func TestToolInspectionAddItem(t *testing.T) {
+	t.Run("happy path", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "inspection_add_item", map[string]any{
+			"inspection_id":   "insp-123",
+			"section_name":    "Kitchen",
+			"name":            "Stove",
+			"rating_group_id": "rg-1",
+		})
+		assert.False(t, result.IsError)
+		assert.Equal(t, "insp-123", mock.lastInspAddItemInput.InspectionID)
+		assert.Equal(t, "Kitchen", mock.lastInspAddItemInput.SectionName)
+		assert.Equal(t, "Stove", mock.lastInspAddItemInput.Name)
+		assert.Equal(t, "rg-1", mock.lastInspAddItemInput.RatingGroupID)
+	})
+
+	t.Run("missing required fields rejected", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "inspection_add_item", map[string]any{
+			"inspection_id": "insp-123",
+		})
+		assert.True(t, result.IsError)
+	})
+}
+
+func TestToolInspectionAddItemPhoto(t *testing.T) {
+	t.Run("happy path returns signed URL and verifies capture", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "inspection_add_item_photo", map[string]any{
+			"inspection_id": "insp-123",
+			"section_name":  "Kitchen",
+			"item_name":     "Stove",
+			"mime_type":     "image/jpeg",
+		})
+		assert.False(t, result.IsError)
+		text := toolText(t, result)
+		assert.Contains(t, text, "signedURL")
+		assert.Contains(t, text, "photo-1")
+
+		assert.Equal(t, "insp-123", mock.lastInspAddPhotoInput.InspectionID)
+		assert.Equal(t, "Kitchen", mock.lastInspAddPhotoInput.SectionName)
+		assert.Equal(t, "Stove", mock.lastInspAddPhotoInput.ItemName)
+		assert.Equal(t, "image/jpeg", mock.lastInspAddPhotoInput.MimeType)
+	})
+
+	t.Run("invalid mime_type rejected", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "inspection_add_item_photo", map[string]any{
+			"inspection_id": "insp-123",
+			"section_name":  "Kitchen",
+			"item_name":     "Stove",
+			"mime_type":     "not a mime",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "invalid_input")
+	})
+
+	t.Run("negative size rejected", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "inspection_add_item_photo", map[string]any{
+			"inspection_id": "insp-123",
+			"section_name":  "Kitchen",
+			"item_name":     "Stove",
+			"mime_type":     "image/jpeg",
+			"size":          -1,
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "invalid_input")
+	})
+
+	t.Run("missing required fields rejected", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "inspection_add_item_photo", map[string]any{
+			"inspection_id": "insp-123",
+		})
+		assert.True(t, result.IsError)
+	})
+}
+
+func TestToolInspectionRemoveItemPhoto(t *testing.T) {
+	t.Run("happy path", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "inspection_remove_item_photo", map[string]any{
+			"inspection_id": "insp-123",
+			"photo_id":      "photo-456",
+			"section_name":  "Kitchen",
+			"item_name":     "Stove",
+		})
+		assert.False(t, result.IsError)
+		assert.Equal(t, "insp-123", mock.lastInspRemovePhotoInput.InspectionID)
+		assert.Equal(t, "photo-456", mock.lastInspRemovePhotoInput.PhotoID)
+	})
+}
+
+func TestToolInspectionMoveItemPhoto(t *testing.T) {
+	t.Run("happy path", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "inspection_move_item_photo", map[string]any{
+			"inspection_id":     "insp-123",
+			"photo_id":          "photo-456",
+			"from_section_name": "Kitchen",
+			"from_item_name":    "Stove",
+			"to_section_name":   "Bathroom",
+			"to_item_name":      "Sink",
+		})
+		assert.False(t, result.IsError)
+		assert.Equal(t, "insp-123", mock.lastInspMovePhotoInput.InspectionID)
+		assert.Equal(t, "photo-456", mock.lastInspMovePhotoInput.PhotoID)
+		assert.Equal(t, "Kitchen", mock.lastInspMovePhotoInput.FromSectionName)
+		assert.Equal(t, "Stove", mock.lastInspMovePhotoInput.FromItemName)
+		assert.Equal(t, "Bathroom", mock.lastInspMovePhotoInput.ToSectionName)
+		assert.Equal(t, "Sink", mock.lastInspMovePhotoInput.ToItemName)
+	})
+
+	t.Run("missing required fields rejected", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "inspection_move_item_photo", map[string]any{
+			"inspection_id": "insp-123",
+			"photo_id":      "photo-456",
+		})
+		assert.True(t, result.IsError)
+	})
+}
+
+func TestToolInspectionSendToGuest(t *testing.T) {
+	t.Run("happy path returns guest link", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "inspection_send_to_guest", map[string]any{
+			"inspection_id": "insp-123",
+			"email":         "guest@example.com",
+		})
+		assert.False(t, result.IsError)
+		text := toolText(t, result)
+		assert.Contains(t, text, "inspectionId")
+		assert.Contains(t, text, "link")
+		assert.Equal(t, "guest@example.com", mock.lastInspSendToGuestInput.Email)
+	})
+
+	t.Run("missing email rejected", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "inspection_send_to_guest", map[string]any{
+			"inspection_id": "insp-123",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "email")
+	})
+
+	t.Run("invalid email rejected", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "inspection_send_to_guest", map[string]any{
+			"inspection_id": "insp-123",
+			"email":         "notanemail",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "invalid_input")
+	})
+
+	t.Run("with optional fields", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "inspection_send_to_guest", map[string]any{
+			"inspection_id": "insp-123",
+			"email":         "guest@example.com",
+			"name":          "John Doe",
+			"message":       "Please complete this inspection",
+		})
+		assert.False(t, result.IsError)
+		assert.Equal(t, "John Doe", mock.lastInspSendToGuestInput.Name)
+		assert.Equal(t, "Please complete this inspection", mock.lastInspSendToGuestInput.Message)
+	})
+}
+
+func TestToolInspectionRateItem(t *testing.T) {
+	t.Run("happy path", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "inspection_rate_item", map[string]any{
+			"inspection_id": "insp-123",
+			"section_name":  "Kitchen",
+			"item_name":     "Stove",
+			"rating_key":    "condition",
+		})
+		assert.False(t, result.IsError)
+		assert.Equal(t, "insp-123", mock.lastInspRateItemInput.InspectionID)
+		assert.Equal(t, "Kitchen", mock.lastInspRateItemInput.SectionName)
+		assert.Equal(t, "Stove", mock.lastInspRateItemInput.ItemName)
+		assert.Equal(t, "condition", mock.lastInspRateItemInput.Rating.Key)
+	})
+
+	t.Run("with score", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "inspection_rate_item", map[string]any{
+			"inspection_id": "insp-123",
+			"section_name":  "Kitchen",
+			"item_name":     "Stove",
+			"rating_key":    "condition",
+			"rating_score":  4.5,
+		})
+		assert.False(t, result.IsError)
+		require.NotNil(t, mock.lastInspRateItemInput.Rating.Score)
+		assert.Equal(t, 4.5, *mock.lastInspRateItemInput.Rating.Score)
+	})
+
+	t.Run("negative score rejected", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "inspection_rate_item", map[string]any{
+			"inspection_id": "insp-123",
+			"section_name":  "Kitchen",
+			"item_name":     "Stove",
+			"rating_key":    "condition",
+			"rating_score":  -1.0,
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "invalid_input")
+	})
+
+	t.Run("missing rating_key rejected", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "inspection_rate_item", map[string]any{
+			"inspection_id": "insp-123",
+			"section_name":  "Kitchen",
+			"item_name":     "Stove",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "rating_key")
+	})
+}
+
+func TestToolInspectionSetHeaderField(t *testing.T) {
+	t.Run("happy path", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "inspection_set_header_field", map[string]any{
+			"inspection_id": "insp-123",
+			"label":         "Tenant Name",
+			"value":         "John Doe",
+		})
+		assert.False(t, result.IsError)
+		assert.Equal(t, "insp-123", mock.lastInspHeaderInput.InspectionID)
+		assert.Equal(t, "Tenant Name", mock.lastInspHeaderInput.Label)
+		assert.Equal(t, "John Doe", mock.lastInspHeaderInput.Value)
+	})
+
+	t.Run("missing label rejected", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "inspection_set_header_field", map[string]any{
+			"inspection_id": "insp-123",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "label")
+	})
+}
+
+func TestToolInspectionMutationAPIError(t *testing.T) {
+	mock := &mockClient{err: fmt.Errorf("api_error: HTTP 500")}
+	cs := newTestServer(t, mock)
+
+	result := callTool(t, cs, "inspection_archive", map[string]any{
+		"inspection_id": "insp-123",
 	})
 	assert.True(t, result.IsError)
 	assert.Contains(t, toolText(t, result), "api_error")

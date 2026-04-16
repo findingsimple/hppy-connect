@@ -1,6 +1,7 @@
 package models
 
 import (
+	"math"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -77,6 +78,9 @@ func TestValidateMIMEType(t *testing.T) {
 		{"empty string", "", true},
 		{"just slash", "/", true},
 		{"no type", "/jpeg", true},
+		{"trailing semicolon rejected", "image/jpeg; charset=utf-8", true},
+		{"trailing space rejected", "image/jpeg extra", true},
+		{"double slash rejected", "image/jpeg/extra", true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -203,6 +207,86 @@ func TestValidateWebhookURL(t *testing.T) {
 				if tt.errMsg != "" {
 					assert.Contains(t, err.Error(), tt.errMsg)
 				}
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestValidateRatingScore(t *testing.T) {
+	score := func(v float64) *float64 { return &v }
+
+	tests := []struct {
+		name    string
+		value   *float64
+		wantErr bool
+		errMsg  string
+	}{
+		{"nil is valid", nil, false, ""},
+		{"zero is valid", score(0), false, ""},
+		{"positive is valid", score(5.5), false, ""},
+		{"negative rejected", score(-1), true, "must not be negative"},
+		{"NaN rejected", score(math.NaN()), true, "must be a finite number"},
+		{"positive infinity rejected", score(math.Inf(1)), true, "must be a finite number"},
+		{"negative infinity rejected", score(math.Inf(-1)), true, "must be a finite number"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateRatingScore(tt.value)
+			if tt.wantErr {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), tt.errMsg)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestValidatePhotoSize(t *testing.T) {
+	size := func(v int) *int { return &v }
+
+	tests := []struct {
+		name    string
+		value   *int
+		wantErr bool
+	}{
+		{"nil is valid", nil, false},
+		{"positive is valid", size(1024), false},
+		{"zero rejected", size(0), true},
+		{"negative rejected", size(-1), true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidatePhotoSize(tt.value)
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestValidateEmail(t *testing.T) {
+	tests := []struct {
+		name    string
+		value   string
+		wantErr bool
+	}{
+		{"valid email", "user@example.com", false},
+		{"valid with display name", "John Doe <john@example.com>", false},
+		{"no at sign", "notanemail", true},
+		{"empty string", "", true},
+		{"whitespace only", "   ", true},
+		{"missing domain", "user@", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateEmail(tt.value)
+			if tt.wantErr {
+				assert.Error(t, err)
 			} else {
 				assert.NoError(t, err)
 			}

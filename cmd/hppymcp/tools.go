@@ -96,7 +96,32 @@ type workOrderMutator interface {
 	WorkOrderStartTimer(ctx context.Context, workOrderID, startedAt string) (*models.WorkOrder, error)
 	WorkOrderStopTimer(ctx context.Context, workOrderID, stoppedAt string) (*models.WorkOrder, error)
 }
-type inspectionMutator interface{}
+type inspectionMutator interface {
+	InspectionCreate(ctx context.Context, input models.InspectionCreateInput) (*models.Inspection, error)
+	InspectionStart(ctx context.Context, inspectionID string) (*models.Inspection, error)
+	InspectionComplete(ctx context.Context, inspectionID string) (*models.Inspection, error)
+	InspectionReopen(ctx context.Context, inspectionID string) (*models.Inspection, error)
+	InspectionArchive(ctx context.Context, inspectionID string) (*models.Inspection, error)
+	InspectionExpire(ctx context.Context, inspectionID string) (*models.Inspection, error)
+	InspectionUnexpire(ctx context.Context, inspectionID string) (*models.Inspection, error)
+	InspectionSetAssignee(ctx context.Context, input models.InspectionSetAssigneeInput) (*models.Inspection, error)
+	InspectionSetDueBy(ctx context.Context, input models.InspectionSetDueByInput) (*models.Inspection, error)
+	InspectionSetScheduledFor(ctx context.Context, inspectionID, scheduledFor string) (*models.Inspection, error)
+	InspectionSetHeaderField(ctx context.Context, input models.InspectionSetHeaderFieldInput) (*models.Inspection, error)
+	InspectionSetFooterField(ctx context.Context, input models.InspectionSetFooterFieldInput) (*models.Inspection, error)
+	InspectionSetItemNotes(ctx context.Context, input models.InspectionSetItemNotesInput) (*models.Inspection, error)
+	InspectionRateItem(ctx context.Context, input models.InspectionRateItemInput) (*models.Inspection, error)
+	InspectionAddSection(ctx context.Context, input models.InspectionAddSectionInput) (*models.Inspection, error)
+	InspectionDeleteSection(ctx context.Context, input models.InspectionDeleteSectionInput) (*models.Inspection, error)
+	InspectionDuplicateSection(ctx context.Context, input models.InspectionDuplicateSectionInput) (*models.Inspection, error)
+	InspectionRenameSection(ctx context.Context, input models.InspectionRenameSectionInput) (*models.Inspection, error)
+	InspectionAddItem(ctx context.Context, input models.InspectionAddItemInput) (*models.Inspection, error)
+	InspectionDeleteItem(ctx context.Context, input models.InspectionDeleteItemInput) (*models.Inspection, error)
+	InspectionAddItemPhoto(ctx context.Context, input models.InspectionAddItemPhotoInput) (*models.InspectionAddItemPhotoResult, error)
+	InspectionRemoveItemPhoto(ctx context.Context, input models.InspectionRemoveItemPhotoInput) (*models.Inspection, error)
+	InspectionMoveItemPhoto(ctx context.Context, input models.InspectionMoveItemPhotoInput) (*models.Inspection, error)
+	InspectionSendToGuest(ctx context.Context, input models.InspectionSendToGuestInput) (*models.InspectionGuestLink, error)
+}
 type projectMutator interface{}
 type userMutator interface{}
 type membershipMutator interface{}
@@ -259,6 +284,7 @@ func registerTools(server *mcp.Server, client apiClient, debug bool) {
 
 	// Register mutation tools by domain
 	registerWorkOrderMutationTools(server, client, debug)
+	registerInspectionMutationTools(server, client, debug)
 }
 
 // acquireSem acquires a semaphore slot, respecting context cancellation.

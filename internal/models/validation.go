@@ -2,7 +2,9 @@ package models
 
 import (
 	"fmt"
+	"math"
 	"net"
+	"net/mail"
 	"net/url"
 	"regexp"
 	"strings"
@@ -36,8 +38,8 @@ func ValidateFileName(name string) error {
 	return nil
 }
 
-// validMIME matches standard MIME type format: type/subtype with optional parameters.
-var validMIME = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9!#$&\-^_.+]*\/[a-zA-Z0-9][a-zA-Z0-9!#$&\-^_.+]*`)
+// validMIME matches standard MIME type format: type/subtype (no parameters or trailing content).
+var validMIME = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9!#$&\-^_.+]*\/[a-zA-Z0-9][a-zA-Z0-9!#$&\-^_.+]*$`)
 
 // ValidateMIMEType checks that a MIME type string matches the standard type/subtype format.
 func ValidateMIMEType(mimeType string) error {
@@ -76,6 +78,37 @@ func ValidateDuration(value string) error {
 func ValidateFreeText(name, value string) error {
 	if len(value) > MaxFreeTextLength {
 		return fmt.Errorf("%s exceeds maximum length of %d bytes", name, MaxFreeTextLength)
+	}
+	return nil
+}
+
+// ValidateRatingScore checks that a rating score is a finite, non-negative number.
+func ValidateRatingScore(score *float64) error {
+	if score == nil {
+		return nil
+	}
+	if math.IsNaN(*score) || math.IsInf(*score, 0) {
+		return fmt.Errorf("rating score must be a finite number")
+	}
+	if *score < 0 {
+		return fmt.Errorf("rating score must not be negative")
+	}
+	return nil
+}
+
+// ValidatePhotoSize checks that a photo size is positive when provided.
+func ValidatePhotoSize(size *int) error {
+	if size != nil && *size <= 0 {
+		return fmt.Errorf("photo size must be a positive number of bytes")
+	}
+	return nil
+}
+
+// ValidateEmail performs basic email format validation.
+func ValidateEmail(value string) error {
+	_, err := mail.ParseAddress(value)
+	if err != nil {
+		return fmt.Errorf("invalid email address format")
 	}
 	return nil
 }

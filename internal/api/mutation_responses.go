@@ -83,3 +83,101 @@ type workOrderStartTimerResponse struct {
 type workOrderStopTimerResponse struct {
 	WorkOrderStopTimer models.WorkOrder `json:"workOrderStopTimer"`
 }
+
+// --- Inspection Mutation Responses ---
+
+type inspectionCreateResponse struct {
+	InspectionCreate models.Inspection `json:"inspectionCreate"`
+}
+
+type inspectionStartResponse struct {
+	InspectionStart models.Inspection `json:"inspectionStart"`
+}
+
+type inspectionCompleteResponse struct {
+	InspectionComplete models.Inspection `json:"inspectionComplete"`
+}
+
+type inspectionReopenResponse struct {
+	InspectionReopen models.Inspection `json:"inspectionReopen"`
+}
+
+type inspectionArchiveResponse struct {
+	InspectionArchive models.Inspection `json:"inspectionArchive"`
+}
+
+type inspectionExpireResponse struct {
+	InspectionExpire models.Inspection `json:"inspectionExpire"`
+}
+
+type inspectionUnexpireResponse struct {
+	InspectionUnexpire models.Inspection `json:"inspectionUnexpire"`
+}
+
+type inspectionSetAssigneeResponse struct {
+	InspectionSetAssignee models.Inspection `json:"inspectionSetAssignee"`
+}
+
+type inspectionSetDueByResponse struct {
+	InspectionSetDueBy models.Inspection `json:"inspectionSetDueBy"`
+}
+
+type inspectionSetScheduledForResponse struct {
+	InspectionSetScheduledFor models.Inspection `json:"inspectionSetScheduledFor"`
+}
+
+type inspectionSetHeaderFieldResponse struct {
+	InspectionSetHeaderField models.Inspection `json:"inspectionSetHeaderField"`
+}
+
+type inspectionSetFooterFieldResponse struct {
+	InspectionSetFooterField models.Inspection `json:"inspectionSetFooterField"`
+}
+
+type inspectionSetItemNotesResponse struct {
+	InspectionSetItemNotes models.Inspection `json:"inspectionSetItemNotes"`
+}
+
+type inspectionRateItemResponse struct {
+	InspectionRateItem models.Inspection `json:"inspectionRateItem"`
+}
+
+type inspectionAddSectionResponse struct {
+	InspectionAddSection models.Inspection `json:"inspectionAddSection"`
+}
+
+type inspectionDeleteSectionResponse struct {
+	InspectionDeleteSection models.Inspection `json:"inspectionDeleteSection"`
+}
+
+type inspectionDuplicateSectionResponse struct {
+	InspectionDuplicateSection models.Inspection `json:"inspectionDuplicateSection"`
+}
+
+type inspectionRenameSectionResponse struct {
+	InspectionRenameSection models.Inspection `json:"inspectionRenameSection"`
+}
+
+type inspectionAddItemResponse struct {
+	InspectionAddItem models.Inspection `json:"inspectionAddItem"`
+}
+
+type inspectionDeleteItemResponse struct {
+	InspectionDeleteItem models.Inspection `json:"inspectionDeleteItem"`
+}
+
+type inspectionAddItemPhotoResponse struct {
+	InspectionAddItemPhoto models.InspectionAddItemPhotoResult `json:"inspectionAddItemPhoto"`
+}
+
+type inspectionRemoveItemPhotoResponse struct {
+	InspectionRemoveItemPhoto models.Inspection `json:"inspectionRemoveItemPhoto"`
+}
+
+type inspectionMoveItemPhotoResponse struct {
+	InspectionMoveItemPhoto models.Inspection `json:"inspectionMoveItemPhoto"`
+}
+
+type inspectionSendToGuestResponse struct {
+	InspectionSendToGuest models.InspectionGuestLink `json:"inspectionSendToGuest"`
+}
