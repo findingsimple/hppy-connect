@@ -30,6 +30,8 @@ An MCP server that exposes the same capabilities to Claude Code, Cursor, and oth
 hppycli mcp setup --client claude
 ```
 
+<video src="docs/images/mcp-demo.mp4" alt="hppymcp demo" width="100%" autoplay loop muted></video>
+
 Both binaries share the same internal Go API client and configuration — one codebase, two interfaces.
 
 ---
