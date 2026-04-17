@@ -3,6 +3,7 @@ package cmd
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"math"
 	"os"
@@ -586,7 +587,8 @@ func TestPrintMutationResultOutputTextWarning(t *testing.T) {
 	var stderrBuf bytes.Buffer
 	stderrBuf.ReadFrom(r)
 
-	assert.Contains(t, stderrBuf.String(), "note: mutation output is always JSON")
+	assert.Contains(t, stderrBuf.String(), "ignored for mutation commands")
+	assert.Contains(t, stderrBuf.String(), "always JSON")
 	// Output should still be valid JSON regardless
 	var parsed map[string]string
 	require.NoError(t, json.Unmarshal(buf.Bytes(), &parsed))
@@ -916,4 +918,51 @@ func TestAtomicWriteConfig_DefeatsSymlinkReplacement(t *testing.T) {
 	got, err = os.ReadFile(configPath)
 	require.NoError(t, err)
 	assert.Equal(t, newContent, string(got))
+}
+
+// --- resolveAccountNames ---
+
+// TestResolveAccountNames_FallsBackToIDsOnError covers the failure path:
+// when GetAccountByID errors for every account (here: unreachable HTTPS
+// endpoint), the function should still return one accountChoice per ID
+// with the ID populated and Name left blank — not return nil or panic.
+//
+// The happy path is exercised end-to-end through the auth/account-discovery
+// flow elsewhere; mocking it here would require an HTTPS test server or
+// refactoring the function to accept an api.Client interface (deferred).
+func TestResolveAccountNames_FallsBackToIDsOnError(t *testing.T) {
+	// Bound the test — GetAccountByID's retry+backoff loop would otherwise
+	// run to completion for each ID against an unreachable endpoint.
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+	accountIDs := []string{"acc-1", "acc-2"}
+
+	// Unreachable HTTPS endpoint — NewClient succeeds (URL shape is valid)
+	// but GetAccountByID will fail on the network call.
+	choices := resolveAccountNames(ctx, accountIDs,
+		"test@example.com", "password",
+		"https://127.0.0.1:1/unreachable",
+		"fake-token", time.Now().Add(time.Hour))
+
+	require.Len(t, choices, 2)
+	for i, c := range choices {
+		assert.Equal(t, accountIDs[i], c.ID, "ID must always be populated")
+		assert.Empty(t, c.Name, "Name must be empty when lookup fails")
+	}
+}
+
+// TestResolveAccountNames_FallsBackOnInvalidEndpoint covers the earlier
+// failure path: NewClient itself rejects the endpoint (non-HTTPS).
+func TestResolveAccountNames_FallsBackOnInvalidEndpoint(t *testing.T) {
+	ctx := context.Background()
+	accountIDs := []string{"acc-1"}
+
+	choices := resolveAccountNames(ctx, accountIDs,
+		"test@example.com", "password",
+		"http://insecure.example.com", // NewClient rejects http://
+		"fake-token", time.Now().Add(time.Hour))
+
+	require.Len(t, choices, 1)
+	assert.Equal(t, "acc-1", choices[0].ID)
+	assert.Empty(t, choices[0].Name)
 }

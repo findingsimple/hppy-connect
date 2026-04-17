@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/findingsimple/hppy-connect/internal/api"
 	"github.com/findingsimple/hppy-connect/internal/models"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -470,15 +471,25 @@ func registerTools(server *mcp.Server, client apiClient, debug bool) {
 }
 
 // acquireSem acquires a semaphore slot, respecting context cancellation.
+//
+// Channel-as-semaphore idiom: a buffered chan struct{} with capacity N acts
+// as a counting semaphore. Acquire = send (blocks when N in flight); release
+// = receive (frees the slot for the next sender).
+//
+// Wraps ctx.Err() so callers can use errors.Is(err, context.DeadlineExceeded)
+// or context.Canceled to distinguish timeout from explicit cancellation. The
+// "api_error:" prefix keeps sanitiseErrorCategory routing working.
 func acquireSem(ctx context.Context, s chan struct{}) error {
 	select {
 	case s <- struct{}{}:
 		return nil
 	case <-ctx.Done():
-		return fmt.Errorf("api_error: request cancelled while waiting for capacity")
+		return fmt.Errorf("api_error: request cancelled while waiting for capacity: %w", ctx.Err())
 	}
 }
 
+// releaseSem frees a slot acquired by acquireSem. The channel-receive idiom
+// is correct (see acquireSem doc) — send to acquire, receive to release.
 func releaseSem(s chan struct{}) { <-s }
 
 // wrapTool adds debug logging around a tool handler.
@@ -510,18 +521,22 @@ func toolError(err error) *mcp.CallToolResult {
 
 // sanitiseErrorCategory extracts "category: generic message" from an api error string,
 // avoiding leaking internal details (URLs, HTTP codes) to the MCP client.
+//
+// Map keys are derived from api.ErrorCategory constants — typo-drift between
+// the api client's emitter and this sanitiser is now a compile-time error
+// rather than a silent fall-through to "An unexpected error occurred".
 func sanitiseErrorCategory(msg string) string {
-	categories := map[string]string{
-		"auth_failed":        "auth_failed: Authentication failed — check credentials",
-		"not_found":          "not_found: The requested resource was not found",
-		"invalid_input":      "invalid_input: Invalid input parameters",
-		"rate_limited":       "rate_limited: API rate limit exceeded — try again later",
-		"api_error":          "api_error: An API error occurred — try again later",
-		"already_applied":    "already_applied: The destructive operation likely succeeded on a prior attempt — verify resource state before retrying",
-		"pagination_aborted": "pagination_aborted: Server returned more pages than the safety ceiling allows; retrying will not help — narrow the query (filter by property_id, unit_id, or a date range) or file an issue at github.com/findingsimple/hppy-connect",
+	categories := map[api.ErrorCategory]string{
+		api.CategoryAuthFailed:        "auth_failed: Authentication failed — check credentials",
+		api.CategoryNotFound:          "not_found: The requested resource was not found",
+		api.CategoryInvalidInput:      "invalid_input: Invalid input parameters",
+		api.CategoryRateLimited:       "rate_limited: API rate limit exceeded — try again later",
+		api.CategoryAPIError:          "api_error: An API error occurred — try again later",
+		api.CategoryAlreadyApplied:    "already_applied: The destructive operation likely succeeded on a prior attempt — verify resource state by calling the corresponding list_* or get_account tool before retrying",
+		api.CategoryPaginationAborted: "pagination_aborted: Server returned more pages than the safety ceiling allows; retrying will not help — narrow the query (filter by property_id, unit_id, or a date range) or file an issue at github.com/findingsimple/hppy-connect",
 	}
 	for prefix, friendly := range categories {
-		if strings.HasPrefix(msg, prefix) {
+		if strings.HasPrefix(msg, string(prefix)) {
 			return friendly
 		}
 	}
@@ -564,9 +579,15 @@ func emptyIfNil[T any](s []T) []T {
 
 // clampLimit ensures limit is within safe bounds.
 // 0 = API default (1000); negative or over-max are clamped to maxLimit.
+//
+// Note the asymmetry vs the API client's `effectiveCap`: there, `limit < 0`
+// means "no cap (fetch all)", which is intentionally available to direct
+// programmatic callers. We clamp `<=0` to 0 here so the MCP server cannot
+// request unlimited results — uncapped fetches into an LLM context window
+// are a runaway-token risk we never want to expose to the model.
 func clampLimit(limit int) int {
 	if limit <= 0 {
-		return 0 // let API client apply its default
+		return 0 // let API client apply its default (1000)
 	}
 	if limit > maxLimit {
 		return maxLimit

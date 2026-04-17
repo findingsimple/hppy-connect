@@ -3818,7 +3818,7 @@ func TestSanitiseErrorCategory(t *testing.T) {
 		{"invalid input", "invalid_input: missing field", "invalid_input: Invalid input parameters"},
 		{"rate limited", "rate_limited: too many requests", "rate_limited: API rate limit exceeded — try again later"},
 		{"api error", "api_error: HTTP 500", "api_error: An API error occurred — try again later"},
-		{"already applied", "already_applied: operation likely succeeded", "already_applied: The destructive operation likely succeeded on a prior attempt — verify resource state before retrying"},
+		{"already applied", "already_applied: operation likely succeeded", "already_applied: The destructive operation likely succeeded on a prior attempt — verify resource state by calling the corresponding list_* or get_account tool before retrying"},
 		{"pagination aborted", "pagination_aborted: item ceiling reached", "pagination_aborted: Server returned more pages than the safety ceiling allows; retrying will not help — narrow the query (filter by property_id, unit_id, or a date range) or file an issue at github.com/findingsimple/hppy-connect"},
 		{"unknown error", "something unexpected", "api_error: An unexpected error occurred"},
 		{"empty string", "", "api_error: An unexpected error occurred"},

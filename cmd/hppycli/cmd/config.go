@@ -2,7 +2,9 @@ package cmd
 
 import (
 	"bufio"
+	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,6 +16,87 @@ import (
 	"golang.org/x/term"
 	"gopkg.in/yaml.v3"
 )
+
+// loginFn matches api.Login's signature so tests can swap in a stub.
+type loginFn func(ctx context.Context, email, password, endpoint string) (*api.LoginResult, error)
+
+// passwordReader returns the (no-echo) password the user typed. In production
+// this reads from the controlling terminal; tests pass a fake.
+type passwordReader func() (string, error)
+
+// configInitMaxAttempts caps the auth-retry loop in `config init`. Three is
+// the right number for a typo-recovery loop — beyond that, the user should
+// give up and check their actual credentials elsewhere.
+const configInitMaxAttempts = 3
+
+// authenticateWithRetry runs the prompt-and-login loop used by `config init`.
+// Extracted so the retry/exhaustion behaviour is testable without touching
+// os.Stdin or syscall.Stdin. Returns the resolved email + password (so the
+// caller can persist them), the LoginResult, or an error after exhaustion
+// or explicit user abort.
+func authenticateWithRetry(ctx context.Context, reader *bufio.Reader, stderr io.Writer, login loginFn, readPassword passwordReader, endpoint string) (email, password string, result *api.LoginResult, err error) {
+	for attempt := 1; ; attempt++ {
+		// Email — first attempt prompts; subsequent attempts allow keep-or-replace.
+		if email == "" {
+			fmt.Fprint(stderr, "Email: ")
+			v, rerr := reader.ReadString('\n')
+			if rerr != nil {
+				return "", "", nil, fmt.Errorf("reading email: %w", rerr)
+			}
+			email = strings.TrimSpace(v)
+			if email == "" {
+				return "", "", nil, fmt.Errorf("email is required")
+			}
+		} else {
+			fmt.Fprintf(stderr, "Email [%s] (Enter to keep): ", email)
+			v, _ := reader.ReadString('\n')
+			v = strings.TrimSpace(v)
+			if v != "" {
+				email = v
+			}
+		}
+
+		// Password — always re-prompt; never reuse, never trim (whitespace
+		// can be legitimate).
+		fmt.Fprint(stderr, "Password: ")
+		pw, perr := readPassword()
+		fmt.Fprintln(stderr)
+		if perr != nil {
+			return "", "", nil, fmt.Errorf("reading password: %w", perr)
+		}
+		password = pw
+		if password == "" {
+			return "", "", nil, fmt.Errorf("password is required")
+		}
+
+		fmt.Fprintln(stderr, "Authenticating...")
+		r, lerr := login(ctx, email, password, endpoint)
+		if lerr == nil {
+			return email, password, r, nil
+		}
+
+		fmt.Fprintf(stderr, "Authentication failed: %v\n", lerr)
+		if attempt >= configInitMaxAttempts {
+			return "", "", nil, fmt.Errorf("authentication failed after %d attempts", configInitMaxAttempts)
+		}
+		fmt.Fprint(stderr, "Try again? [Y/n]: ")
+		ans, _ := reader.ReadString('\n')
+		ans = strings.TrimSpace(strings.ToLower(ans))
+		if ans == "n" || ans == "no" {
+			return "", "", nil, fmt.Errorf("aborted")
+		}
+	}
+}
+
+// readTerminalPassword is the production passwordReader. Reads no-echo from
+// the controlling terminal.
+func readTerminalPassword() (string, error) {
+	pwBytes, err := term.ReadPassword(int(syscall.Stdin))
+	if err != nil {
+		return "", err
+	}
+	return string(pwBytes), nil
+}
 
 var configCmd = &cobra.Command{
 	Use:   "config",
@@ -40,66 +123,14 @@ var configInitCmd = &cobra.Command{
 			}
 		}
 
-		// Prompt and authenticate, with up to 3 attempts on auth failure.
-		// Avoids the failure mode where a typo in the password aborts the
-		// whole flow and forces the user to re-run the command.
-		const maxAttempts = 3
-		var email, password string
-		var result *api.LoginResult
-
-		for attempt := 1; ; attempt++ {
-			// Prompt for email (allow re-use of previous on retry).
-			if email == "" {
-				fmt.Print("Email: ")
-				v, err := reader.ReadString('\n')
-				if err != nil {
-					return fmt.Errorf("reading email: %w", err)
-				}
-				email = strings.TrimSpace(v)
-				if email == "" {
-					return fmt.Errorf("email is required")
-				}
-			} else {
-				fmt.Printf("Email [%s] (Enter to keep): ", email)
-				v, _ := reader.ReadString('\n')
-				v = strings.TrimSpace(v)
-				if v != "" {
-					email = v
-				}
-			}
-
-			// Prompt for password (no-echo, always re-prompt — never reuse).
-			fmt.Print("Password: ")
-			pwBytes, err := term.ReadPassword(int(syscall.Stdin))
-			fmt.Println()
-			if err != nil {
-				return fmt.Errorf("reading password: %w", err)
-			}
-			// Do not TrimSpace — passwords may legitimately contain leading
-			// or trailing whitespace, and silently stripping causes confusing
-			// auth failures the user can't diagnose.
-			password = string(pwBytes)
-			if password == "" {
-				return fmt.Errorf("password is required")
-			}
-
-			fmt.Println("Authenticating...")
-			r, err := api.Login(cmd.Context(), email, password, api.DefaultEndpoint)
-			if err == nil {
-				result = r
-				break
-			}
-
-			fmt.Fprintf(os.Stderr, "Authentication failed: %v\n", err)
-			if attempt >= maxAttempts {
-				return fmt.Errorf("authentication failed after %d attempts", maxAttempts)
-			}
-			fmt.Print("Try again? [Y/n]: ")
-			ans, _ := reader.ReadString('\n')
-			ans = strings.TrimSpace(strings.ToLower(ans))
-			if ans == "n" || ans == "no" {
-				return fmt.Errorf("aborted")
-			}
+		// Prompt and authenticate, with up to configInitMaxAttempts on auth
+		// failure. Avoids the failure mode where a typo aborts the whole flow.
+		email, password, result, err := authenticateWithRetry(
+			cmd.Context(), reader, os.Stderr,
+			api.Login, readTerminalPassword, api.DefaultEndpoint,
+		)
+		if err != nil {
+			return err
 		}
 
 		if len(result.AccountIDs) == 0 {

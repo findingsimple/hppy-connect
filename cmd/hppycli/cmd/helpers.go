@@ -171,7 +171,9 @@ func parseListFlags(cmd *cobra.Command, validStatuses map[string]bool) (models.L
 	}
 
 	if err := models.ValidateDateRange(opts.CreatedAfter, opts.CreatedBefore); err != nil {
-		return models.ListOptions{}, fmt.Errorf("--%s", err)
+		// ValidateDateRange returns "created_after must be before created_before".
+		// We want a CLI-friendly version mentioning both flags by name.
+		return models.ListOptions{}, fmt.Errorf("invalid date range: %w (use --created-after and --created-before)", err)
 	}
 
 	return opts, nil
@@ -299,10 +301,14 @@ func requireFlagID(cmd *cobra.Command, flag string) (string, error) {
 }
 
 // printMutationResult outputs a mutation result as indented JSON to the given writer.
-// If --output text is explicitly set, warns on stderr that mutation output is always JSON.
+// If --output is explicitly set to anything other than json, warns on stderr
+// that mutation output is always JSON regardless.
 func printMutationResult(cmd *cobra.Command, w io.Writer, result any) error {
-	if f, _ := cmd.Flags().GetString("output"); f == "text" && cmd.Flags().Changed("output") {
-		fmt.Fprintln(os.Stderr, "note: mutation output is always JSON")
+	if cmd.Flags().Changed("output") {
+		f, _ := cmd.Flags().GetString("output")
+		if f != "" && f != "json" {
+			fmt.Fprintf(os.Stderr, "note: --output=%s is ignored for mutation commands; output is always JSON\n", f)
+		}
 	}
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")

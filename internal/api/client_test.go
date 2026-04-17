@@ -10,6 +10,7 @@ import (
 	"log"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -551,6 +552,43 @@ func TestGetAccount(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "12345", acct.ID)
 	assert.Equal(t, "Test Account", acct.Name)
+}
+
+// TestGetAccountByID covers the path used by interactive account selection
+// (config init / first-use account discovery). Differs from GetAccount in
+// that it queries an arbitrary account ID, not the client's configured one.
+func TestGetAccountByID(t *testing.T) {
+	t.Run("happy path returns account", func(t *testing.T) {
+		var receivedAccountID string
+		_, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+			var body struct {
+				Variables map[string]interface{} `json:"variables"`
+			}
+			json.NewDecoder(r.Body).Decode(&body)
+			receivedAccountID, _ = body.Variables["accountId"].(string)
+			json.NewEncoder(w).Encode(gqlResponse(map[string]interface{}{
+				"account": map[string]interface{}{
+					"id":   "67890",
+					"name": "Other Account",
+				},
+			}))
+		})
+
+		acct, err := c.GetAccountByID(context.Background(), "67890")
+		require.NoError(t, err)
+		assert.Equal(t, "67890", receivedAccountID, "must query the requested account, not the client's configured one")
+		assert.Equal(t, "67890", acct.ID)
+		assert.Equal(t, "Other Account", acct.Name)
+	})
+
+	t.Run("API error propagated", func(t *testing.T) {
+		_, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusForbidden)
+		})
+
+		_, err := c.GetAccountByID(context.Background(), "no-access")
+		require.Error(t, err)
+	})
 }
 
 func TestListPropertiesWithFilters(t *testing.T) {
@@ -1239,11 +1277,16 @@ func TestNewClientRejectsMalformedEndpoint(t *testing.T) {
 	assert.Contains(t, err.Error(), "https://")
 }
 
-func TestNewClientRejectsEmptyEndpoint(t *testing.T) {
-	_, err := NewClient("test@example.com", "password", "12345",
+// TestNewClientWithEmptyEndpointKeepsDefault verifies the round-3 P2 fix:
+// WithEndpoint("") is a no-op that preserves the default endpoint, rather
+// than overwriting it to "" and triggering NewClient's HTTPS-prefix check.
+// This lets callers safely pass cfg.Endpoint without checking for empty.
+func TestNewClientWithEmptyEndpointKeepsDefault(t *testing.T) {
+	c, err := NewClient("test@example.com", "password", "12345",
 		WithEndpoint(""),
 	)
-	require.Error(t, err)
+	require.NoError(t, err, "WithEndpoint(\"\") must be a no-op, not overwrite to empty")
+	assert.Equal(t, DefaultEndpoint, c.endpoint)
 }
 
 func TestNewClientAcceptsHTTPSEndpoint(t *testing.T) {
@@ -1885,7 +1928,7 @@ func TestDoMutationNoRetryOnTransient500(t *testing.T) {
 
 	var ae *apiError
 	require.True(t, errors.As(err, &ae))
-	assert.Equal(t, "api_error", ae.Category)
+	assert.Equal(t, CategoryAPIError, ae.Category)
 	// Should NOT have retried — only 1 request
 	assert.Equal(t, int32(1), atomic.LoadInt32(&requestCount))
 }
@@ -3314,4 +3357,15 @@ func TestErrAlreadyAppliedIsImmutable(t *testing.T) {
 	if _, ok := ErrAlreadyApplied.(*apiError); ok {
 		t.Fatal("ErrAlreadyApplied must not be a *apiError — that exposes mutable fields")
 	}
+
+	// Lock the zero-field shape: adding ANY field to alreadyAppliedError
+	// would fail this assertion. Without it, a future maintainer could add
+	// `type alreadyAppliedError struct { Retryable bool }` and the value
+	// would still copy-compare equal (zero-value), but a reflective caller
+	// could mutate copies. Pin the structural promise.
+	typ := reflect.TypeOf(alreadyAppliedError{})
+	assert.Equal(t, 0, typ.NumField(),
+		"alreadyAppliedError must remain a zero-field struct — adding fields reintroduces the mutability surface")
+	assert.Equal(t, uintptr(0), typ.Size(),
+		"alreadyAppliedError must remain zero-sized")
 }

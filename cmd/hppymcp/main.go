@@ -11,6 +11,7 @@ import (
 	"github.com/findingsimple/hppy-connect/internal/api"
 	"github.com/findingsimple/hppy-connect/internal/config"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"golang.org/x/term"
 )
 
 var (
@@ -91,6 +92,20 @@ func main() {
 	registerTools(server, client, cfg.Debug)
 	registerResources(server, client)
 	registerPrompts(server)
+
+	// If stdin is a terminal, the user is running this binary directly rather
+	// than through an MCP client. The server will read JSON-RPC from stdin,
+	// get nothing useful, and eventually exit with a confusing message. Print
+	// a banner so they know this isn't a standalone CLI.
+	if term.IsTerminal(int(os.Stdin.Fd())) {
+		fmt.Fprintln(os.Stderr, "hppymcp is an MCP stdio server — it's not meant to be run directly.")
+		fmt.Fprintln(os.Stderr, "Register it with your MCP client first:")
+		fmt.Fprintln(os.Stderr, "    hppycli mcp setup --client claude         # Claude Code")
+		fmt.Fprintln(os.Stderr, "    hppycli mcp setup --client claude-desktop # Claude Desktop")
+		fmt.Fprintln(os.Stderr, "    hppycli mcp setup --client cursor         # Cursor")
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "Waiting for MCP messages on stdin (ctrl-D to exit)...")
+	}
 
 	if err := server.Run(ctx, &mcp.StdioTransport{}); err != nil {
 		fmt.Fprintf(os.Stderr, "Server error: %v\n", err)

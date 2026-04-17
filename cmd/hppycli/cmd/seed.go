@@ -499,7 +499,13 @@ func printSeedSummary(stdout io.Writer, stderr io.Writer, results []seedResult) 
 		}
 		enc := json.NewEncoder(stdout)
 		enc.SetIndent("", "  ")
-		enc.Encode(wrapper)
+		if err := enc.Encode(wrapper); err != nil {
+			// stdout is closed or piped to a broken pipe — log to stderr so
+			// the user knows the JSON summary didn't reach them. The seed
+			// itself already ran; we're past the point where a return-error
+			// could undo work.
+			fmt.Fprintf(stderr, "warning: failed to encode JSON summary: %v\n", err)
+		}
 
 	default:
 		w := tabwriter.NewWriter(stdout, 0, 0, 2, ' ', 0)

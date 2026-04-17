@@ -41,9 +41,25 @@ type tokenState struct {
 	expiresAt time.Time
 }
 
+// ErrorCategory is the public name for an apiError's classification. Both
+// the API client (when constructing errors) and the MCP server (when
+// sanitising them for the LLM) reference these constants — having them as
+// a typed enum prevents typo-drift between emitter and consumer.
+type ErrorCategory string
+
+const (
+	CategoryAuthFailed        ErrorCategory = "auth_failed"
+	CategoryNotFound          ErrorCategory = "not_found"
+	CategoryInvalidInput      ErrorCategory = "invalid_input"
+	CategoryRateLimited       ErrorCategory = "rate_limited"
+	CategoryAPIError          ErrorCategory = "api_error"
+	CategoryAlreadyApplied    ErrorCategory = "already_applied"
+	CategoryPaginationAborted ErrorCategory = "pagination_aborted"
+)
+
 // apiError carries an error category to distinguish retryable from terminal errors.
 type apiError struct {
-	Category   string // auth_failed, not_found, invalid_input, rate_limited, api_error
+	Category   ErrorCategory
 	Message    string
 	Retryable  bool
 	RetryAfter time.Duration // from Retry-After header on 429 responses
@@ -53,17 +69,19 @@ func (e *apiError) Error() string {
 	return fmt.Sprintf("%s: %s", e.Category, e.Message)
 }
 
-func errAuth(msg string) error     { return &apiError{Category: "auth_failed", Message: msg} }
-func errAPI(msg string) error      { return &apiError{Category: "api_error", Message: msg, Retryable: true} }
-func errAPIFatal(msg string) error { return &apiError{Category: "api_error", Message: msg} }
+func errAuth(msg string) error { return &apiError{Category: CategoryAuthFailed, Message: msg} }
+func errAPI(msg string) error {
+	return &apiError{Category: CategoryAPIError, Message: msg, Retryable: true}
+}
+func errAPIFatal(msg string) error { return &apiError{Category: CategoryAPIError, Message: msg} }
 func errPaginationAborted(msg string) error {
-	return &apiError{Category: "pagination_aborted", Message: msg}
+	return &apiError{Category: CategoryPaginationAborted, Message: msg}
 }
 func errRateLimited(msg string) error {
-	return &apiError{Category: "rate_limited", Message: msg, Retryable: true}
+	return &apiError{Category: CategoryRateLimited, Message: msg, Retryable: true}
 }
 func errRateLimitedWithRetryAfter(msg, retryAfterHeader string) error {
-	e := &apiError{Category: "rate_limited", Message: msg, Retryable: true}
+	e := &apiError{Category: CategoryRateLimited, Message: msg, Retryable: true}
 	if retryAfterHeader != "" {
 		if secs, err := strconv.Atoi(strings.TrimSpace(retryAfterHeader)); err == nil && secs > 0 {
 			e.RetryAfter = time.Duration(secs) * time.Second
@@ -101,8 +119,18 @@ func WithDebug(debug bool) Option {
 
 // WithEndpoint overrides the default GraphQL endpoint.
 // Validation (HTTPS requirement) is deferred to NewClient.
+//
+// Empty input is a no-op so callers can safely pass `cfg.Endpoint`
+// without checking — config-loading code that leaves Endpoint blank
+// (e.g. for a future-default-rotation flow) won't break NewClient's
+// HTTPS check by overwriting the default with "".
 func WithEndpoint(endpoint string) Option {
-	return func(c *Client) { c.endpoint = endpoint }
+	return func(c *Client) {
+		if endpoint == "" {
+			return
+		}
+		c.endpoint = endpoint
+	}
 }
 
 // WithStatusFunc registers a callback for user-visible status messages
@@ -432,7 +460,7 @@ func (c *Client) doMutation(ctx context.Context, query string, variables map[str
 		return nil
 	}
 	var ae *apiError
-	if errors.As(err, &ae) && ae.Category == "auth_failed" {
+	if errors.As(err, &ae) && ae.Category == CategoryAuthFailed {
 		if _, authErr := c.ensureAuth(ctx); authErr != nil {
 			return err
 		}
@@ -455,7 +483,7 @@ func (c *Client) doMutationIdempotent(ctx context.Context, query string, variabl
 type alreadyAppliedError struct{}
 
 func (alreadyAppliedError) Error() string {
-	return "already_applied: operation likely succeeded on a prior attempt — server returned 'not found' on retry; verify resource state before retrying"
+	return string(CategoryAlreadyApplied) + ": operation likely succeeded on a prior attempt — server returned 'not found' on retry; verify resource state before retrying"
 }
 
 // Is reports whether target is the already-applied sentinel — by type, not by
@@ -507,7 +535,7 @@ func (c *Client) doMutationDestructiveIdempotent(ctx context.Context, query stri
 
 		var ae *apiError
 		if errors.As(err, &ae) {
-			if ae.Category == "auth_failed" && !authRetried {
+			if ae.Category == CategoryAuthFailed && !authRetried {
 				authRetried = true
 				if _, authErr := c.ensureAuth(ctx); authErr != nil {
 					return err
@@ -541,7 +569,7 @@ func (c *Client) doMutationDestructiveIdempotent(ctx context.Context, query stri
 		}
 	}
 	return &apiError{
-		Category: "api_error",
+		Category: CategoryAPIError,
 		Message:  fmt.Sprintf("query failed after %d retries: %v", maxRetries, lastErr),
 	}
 }
@@ -664,7 +692,7 @@ func (c *Client) doQueryWithRetry(ctx context.Context, query string, variables m
 
 		var ae *apiError
 		if errors.As(err, &ae) {
-			if ae.Category == "auth_failed" && !authRetried {
+			if ae.Category == CategoryAuthFailed && !authRetried {
 				authRetried = true
 				if _, authErr := c.ensureAuth(ctx); authErr != nil {
 					return err
@@ -693,7 +721,7 @@ func (c *Client) doQueryWithRetry(ctx context.Context, query string, variables m
 		}
 	}
 	return &apiError{
-		Category: "api_error",
+		Category: CategoryAPIError,
 		Message:  fmt.Sprintf("query failed after %d retries: %v", maxRetries, lastErr),
 	}
 }
@@ -1724,7 +1752,7 @@ func fetchPageWithRetry[T any](
 		if errors.As(err, &ae) {
 			// On auth failure, attempt a single re-auth before giving up.
 			// This handles mid-pagination token expiry gracefully.
-			if ae.Category == "auth_failed" && !authRetried {
+			if ae.Category == CategoryAuthFailed && !authRetried {
 				authRetried = true
 				if c.debug {
 					log.Printf("[debug] page %d: auth failed, attempting re-authentication", page)
@@ -1764,7 +1792,7 @@ func fetchPageWithRetry[T any](
 		}
 	}
 	return nil, &apiError{
-		Category:  "api_error",
+		Category:  CategoryAPIError,
 		Message:   fmt.Sprintf("page %d failed after %d retries: %v", page, maxRetries, lastErr),
 		Retryable: false,
 	}
