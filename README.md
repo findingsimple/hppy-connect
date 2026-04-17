@@ -30,7 +30,7 @@ A full-featured CLI for managing your HappyCo account. Query properties and insp
 
 ### `hppymcp` — AI Assistant
 
-An MCP server that exposes the same capabilities to Claude Code, Cursor, and other AI clients. One command to connect, 77 tools across 8 domains. Your AI can read, create, and manage HappyCo data with built-in safety guards on destructive operations.
+An MCP server that exposes the same capabilities to Claude Code, Cursor, and other AI clients. One command to connect, dozens of tools across 8 domains (full inventory below). Your AI can read, create, and manage HappyCo data with built-in safety guards on destructive operations.
 
 ```bash
 hppycli mcp setup --client claude
@@ -424,11 +424,11 @@ All mutation commands output JSON (formatted with indentation). If `--output tex
 
 ### Examples
 
-> Examples below use `$PROPERTY_ID` and `$ACCOUNT_ID` as placeholders. Substitute real IDs from `hppycli properties list` and `hppycli account`, or run `hppycli seed --yes` to populate test data first.
+> Examples below use `<PROPERTY_ID>` and `<ACCOUNT_ID>` as **literal placeholders** — the angle brackets are not shell syntax. Substitute real IDs from `hppycli properties list` and `hppycli account`, or run `hppycli seed --yes` to populate test data first. (The CLI will reject the literal `<PROPERTY_ID>` string with "invalid characters" — a deliberate guard so copy-paste fails loudly.)
 
 ```bash
 # List open work orders for a property
-hppycli workorders list --property-id $PROPERTY_ID --status OPEN
+hppycli workorders list --property-id <PROPERTY_ID> --status OPEN
 
 # Export inspections to CSV
 hppycli inspections list --output csv > inspections.csv
@@ -443,15 +443,15 @@ hppycli inspections list --created-after 2026-01-01 --created-before 2026-04-01
 hppycli workorders list --output raw
 
 # Create a work order and then assign it (chaining with jq)
-ID=$(hppycli workorders create --location-id=$PROPERTY_ID --description="Fix leak in unit 4B" | jq -r '.id')
+ID=$(hppycli workorders create --location-id=<PROPERTY_ID> --description="Fix leak in unit 4B" | jq -r '.id')
 hppycli workorders set-assignee --id=$ID --assignee-id=U123 --assignee-type=USER
 hppycli workorders set-priority --id=$ID --priority=URGENT
 
 # Create an inspection from a template
-hppycli inspections create --location-id=$PROPERTY_ID --template-id=c71sn3-a-0-928286 --scheduled-for=2026-05-01T00:00:00Z
+hppycli inspections create --location-id=<PROPERTY_ID> --template-id=c71sn3-a-0-928286 --scheduled-for=2026-05-01T00:00:00Z
 
 # Create a project and set it on hold
-ID=$(hppycli projects create --template-id=TPL1 --location-id=$PROPERTY_ID --start-at=2026-05-01T00:00:00Z | jq -r '.id')
+ID=$(hppycli projects create --template-id=TPL1 --location-id=<PROPERTY_ID> --start-at=2026-05-01T00:00:00Z | jq -r '.id')
 hppycli projects set-on-hold --id=$ID --on-hold=true
 
 # User management
@@ -459,7 +459,7 @@ hppycli users create --email=new@example.com --name="New User" --role-id=ROLE1
 hppycli roles create --name="Inspector" --grant=inspection:inspection.create,inspection:inspection.view
 
 # Webhook setup
-hppycli webhooks create --subscriber-id=$ACCOUNT_ID --subscriber-type=ACCOUNT --url=https://hooks.example.com/happyco --subjects=INSPECTIONS,WORK_ORDERS
+hppycli webhooks create --subscriber-id=<ACCOUNT_ID> --subscriber-type=ACCOUNT --url=https://hooks.example.com/happyco --subjects=INSPECTIONS,WORK_ORDERS
 
 # Seed test data (preview first, then create)
 hppycli seed --dry-run
@@ -531,7 +531,7 @@ Date parameters use ISO 8601 format (e.g. `2026-01-15T00:00:00Z`). Status values
 
 > **PII disclosure on `list_members`:** by default, user emails AND phone numbers are stripped from the response (and email-shaped substrings inside `name`, `shortName`, and `account.name` are scrubbed) to keep PII out of LLM conversation logs. To allow `include_emails: true` to actually return both, set `HPPYMCP_ALLOW_EMAIL_DISCLOSURE=1` in the **server's** environment (Claude Desktop / Claude Code config — not just your shell). The env var prevents prompt-injection from flipping the flag via attacker-controlled text in property names, descriptions, etc. (Env var name retains "EMAIL" for back-compat; the gate covers phone too.)
 
-#### Mutation Tools (71 total)
+#### Mutation Tools
 
 Mutation tools follow the naming pattern `{domain}_{action}` in snake_case. All ID parameters are validated against a safe character set.
 
@@ -626,6 +626,8 @@ hppycli workorders list --output csv
 - **Account login only** — requires non-SSO admin credentials (no OAuth/SSO support)
 - **No plugin auth** — single auth mechanism (email/password); Plugin domain mutations are excluded (see CLAUDE.md for rationale)
 - **No offline mode** — requires network access to the HappyCo API
+- **Non-idempotent mutations may produce duplicates on auth-retry** — `WorkOrderCreate`, `InspectionCreate`, `ProjectCreate`, `UserCreate`, `WebhookCreate`, `RoleCreate`, comment/time/attachment additions, and email-sending operations all retry once on a 401 after re-authentication. The HappyCo gateway rejects auth failures before executing the mutation (verified at runtime), so duplicates aren't expected — but if the gateway behaviour ever changes, a retry could create a duplicate. See CLAUDE.md "Known Limitations" section C for the full rationale.
+- **Network timeouts on mutations leave the outcome ambiguous** — if a mutation times out, the client returns an error but the server may have committed the change anyway. This is inherent to non-idempotent HTTP. **For email-sending mutations specifically (`inspections send-to-guest`, `users create`)**, a timeout means you may not know whether the email was sent. Verify before retrying — call the corresponding `list_*`/`get_*` tool to check resource state. CLAUDE.md "Known Limitations" section D documents this in more detail.
 
 ## Troubleshooting
 
