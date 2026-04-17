@@ -22,16 +22,53 @@ const toolTimeout = 5 * time.Minute
 // sem limits concurrent pagination loops to 3.
 var sem = make(chan struct{}, 3)
 
-// emailLikePattern matches anything that looks like an email address embedded
-// in a free-text field. Conservative: requires `@` followed by a domain-shaped
-// trailer. Matches inside surrounding text so "Jane Doe (jane@acme.com)" is
-// scrubbed.
+// emailLikePattern matches anything that looks like a standard ASCII email
+// address embedded in a free-text field. Requires `@` followed by a
+// domain-shaped trailer with a 2+ letter TLD. Matches inside surrounding
+// text so "Jane Doe (jane@acme.com)" is scrubbed.
+//
+// # Threat model
+//
+// This is best-effort hint-detection layered BEHIND the
+// HPPYMCP_ALLOW_EMAIL_DISCLOSURE env-var gate, NOT the security boundary
+// itself. The gate decides whether emails may be returned at all; this
+// regex catches the most common case where a user has typed their email
+// into a non-email field (display name, short name, account name).
+//
+// # Known bypasses (intentionally accepted)
+//
+// The following ARE NOT scrubbed by this pattern; they reach the LLM if the
+// upstream API returns them in Name / ShortName / Account.Name:
+//
+//   - Fullwidth `＠` (U+FF20) and similar look-alikes (`﹫` U+FE6B) —
+//     `jane＠acme.com` passes through. An LLM normalises look-alikes
+//     when reasoning about the value.
+//   - Internationalised domains (IDN) — `jane@acmé.com`, `jane@münchen.de`
+//     — Unicode letters in the domain are outside the ASCII charset.
+//   - No-TLD addresses — `admin@localhost`, `root@mailserver`,
+//     `ops@internal-corp` — valid intranet addresses with no `.tld`.
+//   - IPv4-literal domains — `jane@192.168.1.1` — digits-only TLD.
+//   - Zero-width characters mid-address — `jane\u200B@acme.com`.
+//
+// Closing these bypasses would require NFKC normalisation
+// (golang.org/x/text/unicode/norm) and a Unicode-aware pattern. Both add
+// dependency surface for a marginal win against this threat model: the
+// attacker would need to (a) write the bypassed string into a HappyCo
+// account/user/property field they control, (b) get the operator to call
+// list_members, (c) rely on an LLM to surface the value in a way the
+// operator finds useful. The env-var gate already covers the case where
+// emails are legitimately disclosed; this regex covers accidental drift
+// when the gate is closed.
+//
+// If the threat model changes (e.g. emails become a primary attack target),
+// revisit and add Unicode normalisation. Until then, this comment is the
+// honest documentation of what the regex does and does not catch.
 var emailLikePattern = regexp.MustCompile(`[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}`)
 
-// scrubEmailLike replaces email-shaped substrings inside a free-text field with
-// a redaction sentinel. Used to defend against users putting their email in
-// fields like ShortName or Account.Name. Returns the input unchanged if nothing
-// matches.
+// scrubEmailLike replaces email-shaped substrings inside a free-text field
+// with a redaction sentinel. Best-effort defence; see emailLikePattern's
+// docstring for the threat model and known bypasses. Returns the input
+// unchanged if nothing matches.
 func scrubEmailLike(s string) string {
 	if !strings.Contains(s, "@") {
 		return s
