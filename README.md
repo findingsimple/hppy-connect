@@ -12,9 +12,9 @@ Built during the 2-day HappyCo AI Hackathon (April 2026).
 
 [Installation](#installation) | [Getting Started](#quick-start) | [CLI Commands](#cli-commands) | [MCP Server](#mcp-server-setup) | [Architecture](#architecture)
 
----
-
 </div>
+
+---
 
 ### `hppycli` — Command Line
 
@@ -31,6 +31,8 @@ hppycli mcp setup --client claude
 ```
 
 Both binaries share the same internal Go API client and configuration — one codebase, two interfaces.
+
+---
 
 ## Possible Use Cases
 
