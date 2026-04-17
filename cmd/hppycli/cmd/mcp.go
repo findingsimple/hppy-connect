@@ -146,10 +146,17 @@ func printClaudeDesktopConfig(w io.Writer, binaryPath, configPath string) error 
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, string(out))
 	fmt.Fprintln(w)
+	fmt.Fprintln(w, "To allow the list_members tool to return user email addresses, add an `env`")
+	fmt.Fprintln(w, "block to the hppymcp entry above (JSON doesn't allow comments — paste the")
+	fmt.Fprintln(w, "snippet below into the same hppymcp object):")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, `      "env": { "HPPYMCP_ALLOW_EMAIL_DISCLOSURE": "1" }`)
+	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Then restart Claude Desktop. The hppymcp tools will appear in the MCP picker.")
 	fmt.Fprintln(w, "Note: Claude Desktop launches MCP servers outside your shell, so the config")
 	fmt.Fprintln(w, "file must contain email, password, and account_id directly — environment")
-	fmt.Fprintln(w, "variables won't be visible to the spawned process.")
+	fmt.Fprintln(w, "variables (including HPPYMCP_ALLOW_EMAIL_DISCLOSURE) must be in the env")
+	fmt.Fprintln(w, "block above, not in your shell.")
 	return nil
 }
 

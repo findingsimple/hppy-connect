@@ -128,6 +128,19 @@ func parseListFlags(cmd *cobra.Command, validStatuses map[string]bool) (models.L
 		return models.ListOptions{}, err
 	}
 
+	// ID parity with MCP's buildListOpts — both --property-id and --unit-id
+	// must be safe-character validated before being sent in a GraphQL filter.
+	if propertyID != "" {
+		if err := models.ValidateID("property-id", propertyID); err != nil {
+			return models.ListOptions{}, err
+		}
+	}
+	if unitID != "" {
+		if err := models.ValidateID("unit-id", unitID); err != nil {
+			return models.ListOptions{}, err
+		}
+	}
+
 	opts := models.ListOptions{Limit: limit}
 
 	if unitID != "" {

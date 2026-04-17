@@ -221,10 +221,10 @@ go install github.com/findingsimple/hppy-connect/cmd/hppymcp@latest
    hppycli account
    ```
 
-   You should see something like:
+   You should see a two-column table like:
    ```
-   Account ID:    12345
-   Account Name:  Sunset Property Management
+   ID     NAME
+   12345  Sunset Property Management
    ```
 
    If you see an `auth_failed` error, re-run `hppycli config init` to re-enter credentials.

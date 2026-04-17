@@ -297,7 +297,7 @@ var inspectionsSetDueByCmd = &cobra.Command{
 		insp, err := apiClient.InspectionSetDueBy(cmd.Context(), models.InspectionSetDueByInput{
 			InspectionID: id,
 			DueBy:        dueBy,
-			Expires:      expires,
+			Expires:      &expires,
 		})
 		if err != nil {
 			return fmt.Errorf("setting inspection due date: %w", err)

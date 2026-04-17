@@ -1250,7 +1250,7 @@ func registerInspectionMutationTools(server *mcp.Server, client apiClient, debug
 			insp, err := client.InspectionSetDueBy(ctx, models.InspectionSetDueByInput{
 				InspectionID: input.InspectionID,
 				DueBy:        input.DueBy,
-				Expires:      *input.Expires,
+				Expires:      input.Expires,
 			})
 			if err != nil {
 				return toolError(err), nil, nil

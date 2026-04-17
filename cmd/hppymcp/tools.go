@@ -509,7 +509,7 @@ func sanitiseErrorCategory(msg string) string {
 		"rate_limited":       "rate_limited: API rate limit exceeded — try again later",
 		"api_error":          "api_error: An API error occurred — try again later",
 		"already_applied":    "already_applied: The destructive operation likely succeeded on a prior attempt — verify resource state before retrying",
-		"pagination_aborted": "pagination_aborted: Server returned more pages than the safety ceiling allows; retrying will not help — narrow the query or contact support",
+		"pagination_aborted": "pagination_aborted: Server returned more pages than the safety ceiling allows; retrying will not help — narrow the query (filter by property_id, unit_id, or a date range) or file an issue at github.com/findingsimple/hppy-connect",
 	}
 	for prefix, friendly := range categories {
 		if strings.HasPrefix(msg, prefix) {

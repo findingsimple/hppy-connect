@@ -1734,8 +1734,9 @@ func TestHardMaxItems(t *testing.T) {
 	assert.Equal(t, 50000, hardMaxItems, "hard ceiling should be 50000")
 }
 
-// TestHardMaxItemsBehavioural verifies that pagination actually stops at the hard ceiling
-// even when hasNextPage is true and no cap is set.
+// TestHardMaxItemsBehavioural verifies that pagination actually stops at the
+// hard ceiling AND surfaces the pagination_aborted category — partial silent
+// truncation was the round-3 P0 (item-ceiling didn't emit an error).
 func TestHardMaxItemsBehavioural(t *testing.T) {
 	// Use a large page size to hit the ceiling faster in the test.
 	// The server always says hasNextPage=true with 100 items per page.
@@ -1745,10 +1746,12 @@ func TestHardMaxItemsBehavioural(t *testing.T) {
 		json.NewEncoder(w).Encode(propertiesPage(999999, pageSize, true, fmt.Sprintf("cursor-%d", pagesFetched)))
 	})
 
-	// limit < 0 means "fetch all" — only hardMaxItems should stop it
+	// limit < 0 means "fetch all" — only hardMaxItems should stop it.
 	items, _, err := c.ListProperties(context.Background(), models.ListOptions{Limit: -1})
-	require.NoError(t, err)
-	assert.Equal(t, hardMaxItems, len(items), "should stop at hardMaxItems")
+	require.Error(t, err, "item ceiling must surface as error so callers know data is truncated")
+	assert.Contains(t, err.Error(), "pagination_aborted", "category must be pagination_aborted (non-retryable)")
+	assert.Contains(t, err.Error(), "item ceiling")
+	assert.Equal(t, hardMaxItems, len(items), "partial slice still returned alongside the error")
 }
 
 // --- Stuck Cursor Detection ---
@@ -1761,7 +1764,8 @@ func TestPaginationStuckCursorDetected(t *testing.T) {
 
 	_, _, err := c.ListProperties(context.Background(), models.ListOptions{Limit: -1})
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "pagination stuck")
+	assert.Contains(t, err.Error(), "pagination_aborted", "stuck-cursor must use the non-retryable category — was previously errAPIFatal")
+	assert.Contains(t, err.Error(), "same cursor")
 }
 
 // TestPaginationPageCeilingTrips verifies that pagination stops when the page
@@ -3249,22 +3253,38 @@ func TestIsLikelyAlreadyAppliedError(t *testing.T) {
 		{"work order does not exist", "work order does not exist", true},
 		{"no such inspection", "no such inspection", true},
 
-		// Generic "missing" but ALSO names another subject — do NOT match
-		// (this is the false-positive class the matcher tightening defends).
-		{"role not found in account", "role 'admin' not found in account", false},
+		// Auth/schema errors that include a "missing" phrase — DO NOT match.
 		{"permission + not found", "permission denied: not found", false},
-		{"user lookup not found", "user 'jane' not found", false},
 		{"validation + does not exist", "validation: input does not exist", false},
 		{"field not found schema", "Field 'invalidField' not found", false},
 		{"required field missing", "required field 'id' does not exist", false},
 		{"unauthorized + not found", "unauthorized: token not found", false},
 		{"forbidden + no such", "forbidden: no such permission", false},
 
+		// Layer-1 bypass guard — auth/schema words must veto "already X" too.
+		// (Round 3 P1: previously "permission denied: role 'already deleted' …"
+		// was classified as already-applied, suppressing real perm errors.)
+		{"permission + already deleted", "permission denied: role 'already deleted' cannot perform action", false},
+		{"forbidden + already archived", "forbidden: cannot edit, already archived", false},
+		{"validation + already expired", "validation failed: status already expired field invalid", false},
+
+		// Legitimate Revoke/Remove already-applied responses MUST match —
+		// these naturally include subject words ("user", "role", "property")
+		// that earlier versions of the exclusion list incorrectly suppressed.
+		{"user revoke already-applied", "user 'foo' has no access to property 'bar' — does not exist", true},
+		{"role lookup already-applied", "role 'admin' not found on this account", true},
+		{"membership already-applied", "user already removed from account", true},
+
 		// Pure non-matches.
 		{"validation error", "Validation failed: name is required", false},
 		{"permission denied alone", "Permission denied", false},
 		{"unauthorized alone", "unauthorized", false},
 		{"empty", "", false},
+
+		// Orthogonal cases (round 3 test-skeptic SUGG).
+		{"mixed casing already X", "Already Archived", true},
+		{"multiple already X phrases", "already archived; already deleted", true},
+		{"already X plus a non-suppressed subject", "inspection already removed by user 'foo'", true},
 	}
 	for _, c := range cases {
 		c := c

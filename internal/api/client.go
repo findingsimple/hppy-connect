@@ -136,7 +136,7 @@ func withInsecureHTTP() Option {
 func NewClient(email, password, accountID string, opts ...Option) (*Client, error) {
 	c := &Client{
 		endpoint:     DefaultEndpoint,
-		httpClient:   &http.Client{Timeout: 30 * time.Second},
+		httpClient:   newAPIHTTPClient(),
 		email:        email,
 		password:     password,
 		accountID:    accountID,
@@ -252,7 +252,23 @@ func Login(ctx context.Context, email, password, endpoint string) (*LoginResult,
 		return nil, errAuth(fmt.Sprintf("endpoint %q must be a valid https:// URL (credentials are transmitted)", endpoint))
 	}
 
-	return doLogin(ctx, &http.Client{Timeout: 30 * time.Second}, endpoint, email, password, false)
+	return doLogin(ctx, newAPIHTTPClient(), endpoint, email, password, false)
+}
+
+// newAPIHTTPClient builds the HTTP client used for all API calls. Disables
+// auto-redirect: the HappyCo API never legitimately returns a 3xx for the
+// POST /graphql or /authenticate endpoints, and a hijacked DNS response
+// could otherwise direct the request body (containing credentials, mutation
+// inputs, or signing secrets) to an attacker-controlled host. Returning the
+// 3xx as the caller's "response" lets the existing error path surface it
+// loudly instead.
+func newAPIHTTPClient() *http.Client {
+	return &http.Client{
+		Timeout: 30 * time.Second,
+		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
 }
 
 // doLogin is the shared login implementation used by both Client.login and the
@@ -471,7 +487,7 @@ var ErrAlreadyApplied error = alreadyAppliedError{}
 // transient failure, returns ErrAlreadyApplied (the previous attempt likely
 // committed before the transient failure was reported).
 //
-// Use for destructive idempotents — Archive, Delete, Expire — where the
+// Use for destructive idempotents — Archive, Delete, Expire, Revoke, Remove — where the
 // post-condition is "the resource is gone". For these operations a not-found
 // response on retry is indistinguishable from "the previous attempt succeeded".
 func (c *Client) doMutationDestructiveIdempotent(ctx context.Context, query string, variables map[string]interface{}, result interface{}) error {
@@ -530,24 +546,54 @@ func (c *Client) doMutationDestructiveIdempotent(ctx context.Context, query stri
 	}
 }
 
+// authOrSchemaErrorWords are tokens that strongly indicate an error is about
+// authorisation or input schema rather than the target resource being gone.
+// Used by isLikelyAlreadyAppliedError to suppress false-positive synthesis.
+//
+// We deliberately do NOT list operation subjects ("user", "role", "property")
+// here — those appear in legitimate already-applied responses for Revoke
+// mutations like "user 'foo' has no access to property 'bar'". Excluding
+// them would hide the very signal we're trying to detect.
+var authOrSchemaErrorWords = []string{
+	"permission",
+	"unauthorized",
+	"forbidden",
+	"validation",
+	"field",
+	"required",
+}
+
+func containsAuthOrSchemaWord(lower string) bool {
+	for _, w := range authOrSchemaErrorWords {
+		if strings.Contains(lower, w) {
+			return true
+		}
+	}
+	return false
+}
+
 // isLikelyAlreadyAppliedError matches GraphQL error messages that suggest the
 // target resource is gone. Used by doMutationDestructiveIdempotent to absorb
 // "not found" responses that follow a transient failure.
 //
-// Two layers of conservatism:
-//  1. The "already X" phrases match unconditionally — they're unambiguous.
-//  2. The generic "not found" / "does not exist" / "no such" phrases only
-//     match if the message does NOT also mention an unrelated subject like
-//     a permission, role, user, field, or validation error. This guards
-//     against false positives like "role 'admin' not found in account"
-//     after a transient — the role lookup failed, not the target resource.
+// Both pattern groups (unambiguous "already X" and generic "not found") run
+// the auth/schema exclusion check first. Earlier the "already X" branch was
+// unconditional; that was bypassable by crafted messages like
+// "permission denied: role 'already deleted' cannot perform action".
 //
-// False positives here silently drop real errors on a destructive retry, so
-// the bar is intentionally high.
+// False positives silently drop real errors on a destructive retry; false
+// negatives surface confusing errors after a successful destructive op. The
+// matcher errs toward false negatives — a confused user can re-read the
+// message, but silently swallowed errors hide bugs.
 func isLikelyAlreadyAppliedError(msg string) bool {
 	lower := strings.ToLower(msg)
 
-	// Unambiguous "already applied" phrases — match anywhere.
+	// Auth/schema errors are never already-applied successes — bail early.
+	if containsAuthOrSchemaWord(lower) {
+		return false
+	}
+
+	// Unambiguous "already applied" phrases.
 	for _, p := range []string{
 		"already archived",
 		"already deleted",
@@ -561,37 +607,17 @@ func isLikelyAlreadyAppliedError(msg string) bool {
 		}
 	}
 
-	// Generic "missing" phrases — match only if no other subject is named.
-	// "permission denied + not found" → likely a permission/auth error, not the target.
-	hasMissingPhrase := false
+	// Generic "missing" phrases.
 	for _, p := range []string{
 		"not found",
 		"does not exist",
 		"no such",
 	} {
 		if strings.Contains(lower, p) {
-			hasMissingPhrase = true
-			break
+			return true
 		}
 	}
-	if !hasMissingPhrase {
-		return false
-	}
-	for _, exclude := range []string{
-		"permission",
-		"role",
-		"user",
-		"field",
-		"validation",
-		"unauthorized",
-		"forbidden",
-		"required",
-	} {
-		if strings.Contains(lower, exclude) {
-			return false
-		}
-	}
-	return true
+	return false
 }
 
 // GetAccount returns the account details with retry for transient errors.
@@ -1581,10 +1607,13 @@ func paginate[T any](
 	prepareVars func(map[string]interface{}),
 	fetchPage func(map[string]interface{}) (*connection[T], error),
 ) ([]T, int, error) {
-	cap := effectiveCap(opts.Limit)
+	// limitCap names the effective per-call cap. Avoid `cap` to keep the Go
+	// builtin available inside this function — it's easy to write
+	// `cap(allItems)` accidentally otherwise.
+	limitCap := effectiveCap(opts.Limit)
 	initialCap := pageSize
-	if cap > 0 && cap < initialCap {
-		initialCap = cap
+	if limitCap > 0 && limitCap < initialCap {
+		initialCap = limitCap
 	}
 	allItems := make([]T, 0, initialCap)
 	var totalCount int
@@ -1618,22 +1647,28 @@ func paginate[T any](
 			log.Printf("[debug] %s page %d: fetched %d, total so far %d/%d", resource, page, len(conn.Edges), len(allItems), totalCount)
 		}
 
-		if cap > 0 && len(allItems) >= cap {
-			if c.debug && totalCount > cap {
-				log.Printf("[debug] %s: returning %d of %d total items (cap applied)", resource, cap, totalCount)
+		// User-supplied cap reached cleanly — return the requested slice.
+		// (No error: the caller asked for at most N items and got N.)
+		if limitCap > 0 && len(allItems) >= limitCap {
+			if c.debug && totalCount > limitCap {
+				log.Printf("[debug] %s: returning %d of %d total items (cap applied)", resource, limitCap, totalCount)
 			}
 			// Copy to a fresh slice to release the over-sized backing array
 			// (allocated by append's growth, may hold up to 50,000 elements).
-			return append([]T(nil), allItems[:cap]...), totalCount, nil
+			return append([]T(nil), allItems[:limitCap]...), totalCount, nil
 		}
 
-		// Defence-in-depth: hard ceiling prevents unbounded memory growth
-		// for direct API callers that pass no cap (limit < 0).
+		// Defence-in-depth: hard item ceiling prevents unbounded memory growth
+		// for direct API callers that pass no cap (limit < 0). This is NOT a
+		// "you got everything" success — the server has more rows than we'll
+		// fetch, and the caller needs to know to narrow their query. Surface
+		// errPaginationAborted (non-retryable) and let callers see the partial
+		// slice if they introspect.
 		if len(allItems) >= hardMaxItems {
 			if c.debug {
-				log.Printf("[debug] %s: hard ceiling reached (%d items), stopping pagination", resource, hardMaxItems)
+				log.Printf("[debug] %s: hard ceiling reached (%d items), aborting pagination", resource, hardMaxItems)
 			}
-			return append([]T(nil), allItems[:hardMaxItems]...), totalCount, nil
+			return append([]T(nil), allItems[:hardMaxItems]...), totalCount, errPaginationAborted(fmt.Sprintf("item ceiling reached after %d items — narrow the query (e.g. property_id, unit_id, date range); retrying will not help", hardMaxItems))
 		}
 
 		// Defence-in-depth: page count ceiling. hardMaxItems alone does not
@@ -1652,9 +1687,11 @@ func paginate[T any](
 		}
 
 		// Detect stuck cursor: if the server returns the same endCursor twice,
-		// pagination is not advancing and would loop until hardMaxItems.
+		// pagination is not advancing and would loop until hardMaxItems. Use
+		// pagination_aborted (not api_error) so the LLM doesn't retry a
+		// hopeless request — same defence-in-depth class as the page ceiling.
 		if conn.PageInfo.EndCursor == cursor {
-			return allItems, totalCount, errAPIFatal("pagination stuck: server returned same cursor")
+			return allItems, totalCount, errPaginationAborted("server returned the same cursor twice — pagination cannot advance; retrying will not help")
 		}
 		cursor = conn.PageInfo.EndCursor
 	}

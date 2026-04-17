@@ -40,11 +40,15 @@ type WorkOrderSetStatusAndSubStatusInput struct {
 }
 
 // WorkOrderStatusInput is the nested status input for setStatusAndSubStatus.
+//
+// Note: the GraphQL schema also accepts updateCompletedAt and other fields,
+// but neither CLI nor MCP currently expose them. Re-add when a handler grows
+// support — keeping unused fields here just creates silent zero-value risk
+// (the same pattern as the dead webhook input fields removed in round 2).
 type WorkOrderStatusInput struct {
-	Status            string `json:"status"`
-	Comment           string `json:"comment,omitempty"`
-	PhotoID           string `json:"photoId,omitempty"`
-	UpdateCompletedAt *bool  `json:"updateCompletedAt,omitempty"`
+	Status  string `json:"status"`
+	Comment string `json:"comment,omitempty"`
+	PhotoID string `json:"photoId,omitempty"`
 }
 
 // WorkOrderSubStatusInput is the nested sub-status input for setStatusAndSubStatus.
@@ -91,10 +95,15 @@ type InspectionSetAssigneeInput struct {
 }
 
 // InspectionSetDueByInput sets the due date for an inspection.
+//
+// Expires is *bool (not bool) so a future caller bypassing the CLI/MCP
+// handler cannot silently send `expires:false` by zero-initialising the
+// struct. Both surfaces require explicit value (round-1 P1-C); this
+// matches the wire shape to that contract.
 type InspectionSetDueByInput struct {
 	InspectionID string `json:"inspectionId"`
 	DueBy        string `json:"dueBy"`
-	Expires      bool   `json:"expires"`
+	Expires      *bool  `json:"expires"`
 }
 
 // InspectionSetHeaderFieldInput updates a header field on an inspection.

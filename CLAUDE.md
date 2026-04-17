@@ -71,7 +71,8 @@ Both binaries are thin frontends over shared logic in `internal/`.
 - Login cooldown (30s) only triggers on **permanent** failures (bad credentials). Transient errors (network failures, 500s) do not set the cooldown, so retries can proceed immediately. This distinction is made via `apiError.Retryable`.
 
 ### Pagination
-- Relay-style cursor pagination with configurable limits. Default cap is 1000 items; hard ceiling is 50,000 (`hardMaxItems`) as defence-in-depth against runaway loops.
+- Relay-style cursor pagination with configurable limits. Default cap is 1000 items; hard ceilings are 50,000 items (`hardMaxItems`) and 1,000 pages (`hardMaxPages`) as defence-in-depth against runaway loops.
+- All three "abnormal end" paths emit `errPaginationAborted` (non-retryable category `pagination_aborted`): item-ceiling hit, page-ceiling hit, stuck cursor (server returned the same `endCursor` twice). The partial slice is still returned alongside the error — callers that idiomatically `if err != nil { return err }` will drop it, which is the desired default (truncated data treated as no data).
 - Page size is fixed at 100 (server-enforced maximum).
 - The MCP server uses a channel-based semaphore (`sem`) to limit concurrent pagination loops to 3.
 - **Limit caps differ by binary**:
@@ -88,7 +89,7 @@ Both binaries are thin frontends over shared logic in `internal/`.
 - `doMutationDestructiveIdempotent` is used for destructive idempotents whose post-condition is "the resource is gone": Archive, Delete, Expire, Revoke, and Remove (e.g. `WorkOrderRemoveAttachment`, `InspectionRemoveItemPhoto`). It behaves like `doMutationIdempotent` but, on a retried attempt that lands on a "not found"-style error after a prior transient failure, it returns the immutable `api.ErrAlreadyApplied` sentinel. The previous attempt likely committed before the transient failure was reported.
 - Use `errors.Is(err, api.ErrAlreadyApplied)` to detect; do not unwrap to `*apiError` (the sentinel is a value type with no mutable fields, intentionally).
 - MCP routes the sentinel through the `already_applied` sanitiser category so the LLM sees a clear, non-retryable message.
-- The matched error patterns are conservative — "already X" matches unconditionally; "not found" / "does not exist" / "no such" only match when the error message doesn't ALSO mention an unrelated subject (permission, role, user, field, validation, etc.). See `isLikelyAlreadyAppliedError` for the full list and exclusion guards.
+- The matched error patterns are conservative. Both pattern groups (unambiguous "already X" — `already archived/deleted/expired/removed/destroyed`, `no longer exists` — and generic "not found" / "does not exist" / "no such") run an auth/schema-error veto first. The veto words are `permission`, `unauthorized`, `forbidden`, `validation`, `field`, `required` — these strongly suggest the error is about authorisation or input shape rather than the target resource being gone. Notably absent from the veto: subject words like `user`, `role`, `property` — those appear in legitimate Revoke/Remove already-applied responses (`"user 'foo' has no access to property 'bar'"`) and excluding them would hide the very signal we want to detect. See `isLikelyAlreadyAppliedError`.
 
 ### Shared Validation
 - `models.ValidateStatus()` and `models.ValidateDateRange()` are the single source of truth, called by both CLI (`parseListFlags`) and MCP (`buildListOpts`).

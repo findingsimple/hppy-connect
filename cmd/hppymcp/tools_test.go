@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -105,6 +107,14 @@ type mockClient struct {
 	lastInspRemovePhotoInput   models.InspectionRemoveItemPhotoInput
 	lastInspMovePhotoInput     models.InspectionMoveItemPhotoInput
 	lastInspSendToGuestInput   models.InspectionSendToGuestInput
+
+	// concurrency-test fields. When mutationDelay > 0, every mutation method
+	// that opts in (currently only InspectionSendToGuest + UserCreate, used
+	// for emailSem testing) sleeps mutationDelay and tracks max in-flight
+	// count via inflightCount/inflightMax. Zero value = no instrumentation.
+	mutationDelay time.Duration
+	inflightCount *atomic.Int32
+	inflightMax   *atomic.Int32
 }
 
 func (m *mockClient) GetAccount(_ context.Context) (*models.Account, error) {
@@ -546,8 +556,13 @@ func (m *mockClient) InspectionMoveItemPhoto(_ context.Context, input models.Ins
 }
 
 func (m *mockClient) InspectionSendToGuest(_ context.Context, input models.InspectionSendToGuestInput) (*models.InspectionGuestLink, error) {
-	m.lastMutationID = input.InspectionID
-	m.lastInspSendToGuestInput = input
+	// Concurrency-test mode skips the "last X" capture fields — they're
+	// not goroutine-safe and the concurrency test doesn't assert on them.
+	if m.inflightCount == nil {
+		m.lastMutationID = input.InspectionID
+		m.lastInspSendToGuestInput = input
+	}
+	defer m.observeInflight()()
 	if m.err != nil {
 		return nil, m.err
 	}
@@ -558,6 +573,29 @@ func (m *mockClient) InspectionSendToGuest(_ context.Context, input models.Inspe
 		InspectionID: input.InspectionID,
 		Link:         "https://app.happyco.com/inspect/guest/abc123",
 	}, nil
+}
+
+// observeInflight records concurrency overlap when the test has wired up
+// inflightCount/inflightMax. Returns a release function; intended use:
+//
+//	defer m.observeInflight()()
+//
+// No-op (returns no-op release) when inflightCount is nil.
+func (m *mockClient) observeInflight() func() {
+	if m.inflightCount == nil {
+		return func() {}
+	}
+	cur := m.inflightCount.Add(1)
+	for {
+		max := m.inflightMax.Load()
+		if cur <= max || m.inflightMax.CompareAndSwap(max, cur) {
+			break
+		}
+	}
+	if m.mutationDelay > 0 {
+		time.Sleep(m.mutationDelay)
+	}
+	return func() { m.inflightCount.Add(-1) }
 }
 
 // --- Project mutation mock methods ---
@@ -645,7 +683,10 @@ func (m *mockClient) userResult() *models.User {
 }
 
 func (m *mockClient) UserCreate(_ context.Context, input models.UserCreateInput) (*models.User, error) {
-	m.lastUserCreateInput = input
+	if m.inflightCount == nil {
+		m.lastUserCreateInput = input
+	}
+	defer m.observeInflight()()
 	if m.err != nil {
 		return nil, m.err
 	}
@@ -2622,7 +2663,8 @@ func TestToolInspectionSetDueBy(t *testing.T) {
 		assert.False(t, result.IsError)
 		assert.Equal(t, "insp-123", mock.lastInspDueByInput.InspectionID)
 		assert.Equal(t, "2026-06-01T00:00:00Z", mock.lastInspDueByInput.DueBy)
-		assert.True(t, mock.lastInspDueByInput.Expires)
+		require.NotNil(t, mock.lastInspDueByInput.Expires)
+		assert.True(t, *mock.lastInspDueByInput.Expires)
 	})
 
 	t.Run("missing due_by rejected", func(t *testing.T) {
@@ -2661,7 +2703,8 @@ func TestToolInspectionSetDueBy(t *testing.T) {
 			"expires":       false,
 		})
 		assert.False(t, result.IsError, "unexpected error: %s", toolText(t, result))
-		assert.False(t, mock.lastInspDueByInput.Expires)
+		require.NotNil(t, mock.lastInspDueByInput.Expires)
+		assert.False(t, *mock.lastInspDueByInput.Expires)
 	})
 }
 
@@ -3742,6 +3785,8 @@ func TestSanitiseErrorCategory(t *testing.T) {
 		{"invalid input", "invalid_input: missing field", "invalid_input: Invalid input parameters"},
 		{"rate limited", "rate_limited: too many requests", "rate_limited: API rate limit exceeded — try again later"},
 		{"api error", "api_error: HTTP 500", "api_error: An API error occurred — try again later"},
+		{"already applied", "already_applied: operation likely succeeded", "already_applied: The destructive operation likely succeeded on a prior attempt — verify resource state before retrying"},
+		{"pagination aborted", "pagination_aborted: item ceiling reached", "pagination_aborted: Server returned more pages than the safety ceiling allows; retrying will not help — narrow the query (filter by property_id, unit_id, or a date range) or file an issue at github.com/findingsimple/hppy-connect"},
 		{"unknown error", "something unexpected", "api_error: An unexpected error occurred"},
 		{"empty string", "", "api_error: An unexpected error occurred"},
 		{"graphql error leaks nothing", "api_error: parsing response: invalid JSON at position 42", "api_error: An API error occurred — try again later"},
@@ -3848,6 +3893,44 @@ func TestAcquireSem(t *testing.T) {
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "cancelled")
 	})
+}
+
+// TestEmailSemEnforcesCapacity verifies the email-sending semaphore actually
+// caps concurrent inspection_send_to_guest + user_create calls at 2. Without
+// this test, swapping the semaphore from `make(chan struct{}, 2)` to a larger
+// (or unbounded) channel would ship green — defeating the round-2 fan-out
+// defence.
+func TestEmailSemEnforcesCapacity(t *testing.T) {
+	mock := &mockClient{
+		mutationDelay: 80 * time.Millisecond,
+		inflightCount: &atomic.Int32{},
+		inflightMax:   &atomic.Int32{},
+	}
+	cs := newTestServer(t, mock)
+
+	// Fire N concurrent send-to-guest calls. With cap=2 and 80ms each,
+	// the wall time will be ~N/2 * 80ms; we don't assert that, only the
+	// observed max in-flight.
+	const concurrent = 5
+	var wg sync.WaitGroup
+	wg.Add(concurrent)
+	for i := 0; i < concurrent; i++ {
+		go func(i int) {
+			defer wg.Done()
+			result := callTool(t, cs, "inspection_send_to_guest", map[string]any{
+				"inspection_id": fmt.Sprintf("insp-%d", i),
+				"email":         fmt.Sprintf("guest%d@example.com", i),
+			})
+			assert.False(t, result.IsError, "concurrent call %d errored: %s", i, toolText(t, result))
+		}(i)
+	}
+	wg.Wait()
+
+	max := mock.inflightMax.Load()
+	assert.LessOrEqual(t, int(max), 2,
+		"emailSem allowed %d concurrent calls — capacity must be 2", max)
+	assert.GreaterOrEqual(t, int(max), 2,
+		"observed only %d concurrent — test setup likely failed to overlap (delay too short or scheduler quirk)", max)
 }
 
 func TestToolInputError(t *testing.T) {
