@@ -19,7 +19,38 @@ const toolTimeout = 5 * time.Minute
 // sem limits concurrent pagination loops to 3.
 var sem = make(chan struct{}, 3)
 
+// redactMembershipEmails strips the email field from each membership's nested
+// user before returning to the LLM. Bulk membership listings can contain
+// hundreds of email addresses; persisting them to LLM context/transcripts is
+// PII over-exposure. Set list_members.include_emails=true to opt back in.
+func redactMembershipEmails(members []models.AccountMembership) {
+	for i := range members {
+		if members[i].User != nil {
+			members[i].User.Email = ""
+		}
+	}
+}
+
+// emailSem limits concurrent calls to mutations that send external emails
+// (inspection_send_to_guest, user_create). A misbehaving LLM iterating over
+// a batch could otherwise fan out to many parallel emails. Capacity 2 keeps
+// throughput high enough for normal use while preventing the fan-out case.
+//
+// Note: this gate is in-process only. The upstream HappyCo API has its own
+// rate limiting, but rapid concurrent calls within the gate window can still
+// cause user-visible duplicate emails. See CLAUDE.md "Known Limitations" item E.
+var emailSem = make(chan struct{}, 2)
+
 // maxLimit caps the maximum number of items a single tool call can return.
+//
+// Why this is tighter than the CLI: the MCP server returns results into an
+// LLM's context window. Capping at 10,000 (vs the API client's hard ceiling
+// of 50,000) trades a smaller maximum for predictable token usage. CLI users
+// asking for tens of thousands of items know what they want and can see the
+// raw output; an LLM cannot.
+//
+// To raise this for a specific use case, change the value here — do not
+// bypass clampLimit.
 const maxLimit = 10000
 
 // Input structs for typed tool handlers.
@@ -43,8 +74,9 @@ type ListWorkOrdersInput struct {
 }
 
 type ListMembersInput struct {
-	Search          string `json:"search,omitempty" jsonschema:"Search by user name or email."`
+	Search          string `json:"search,omitempty" jsonschema:"Search by user name or email. Email match works regardless of include_emails."`
 	IncludeInactive bool   `json:"include_inactive,omitempty" jsonschema:"Include deactivated memberships. Default false (active only)."`
+	IncludeEmails   bool   `json:"include_emails,omitempty" jsonschema:"Include user email addresses in the response. Default false — emails are PII and persist in conversation logs. Set true only when the user has explicitly asked for them."`
 	Limit           int    `json:"limit,omitempty" jsonschema:"Maximum number of members to return."`
 }
 
@@ -63,7 +95,6 @@ type ListInspectionsInput struct {
 
 type accountReader interface {
 	GetAccount(ctx context.Context) (*models.Account, error)
-	EnsureAuth(ctx context.Context) error
 }
 
 type propertyReader interface {
@@ -354,6 +385,9 @@ func registerTools(server *mcp.Server, client apiClient, debug bool) {
 			if err != nil {
 				return toolError(err), nil, nil
 			}
+			if !input.IncludeEmails {
+				redactMembershipEmails(members)
+			}
 			return toolJSON(map[string]any{
 				"total":   total,
 				"count":   len(members),
@@ -414,11 +448,12 @@ func toolError(err error) *mcp.CallToolResult {
 // avoiding leaking internal details (URLs, HTTP codes) to the MCP client.
 func sanitiseErrorCategory(msg string) string {
 	categories := map[string]string{
-		"auth_failed":   "auth_failed: Authentication failed — check credentials",
-		"not_found":     "not_found: The requested resource was not found",
-		"invalid_input": "invalid_input: Invalid input parameters",
-		"rate_limited":  "rate_limited: API rate limit exceeded — try again later",
-		"api_error":     "api_error: An API error occurred — try again later",
+		"auth_failed":     "auth_failed: Authentication failed — check credentials",
+		"not_found":       "not_found: The requested resource was not found",
+		"invalid_input":   "invalid_input: Invalid input parameters",
+		"rate_limited":    "rate_limited: API rate limit exceeded — try again later",
+		"api_error":       "api_error: An API error occurred — try again later",
+		"already_applied": "already_applied: The destructive operation likely succeeded on a prior attempt — verify resource state before retrying",
 	}
 	for prefix, friendly := range categories {
 		if strings.HasPrefix(msg, prefix) {

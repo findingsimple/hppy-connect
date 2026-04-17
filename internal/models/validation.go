@@ -83,6 +83,51 @@ func ValidateFreeText(name, value string) error {
 	return nil
 }
 
+// ParseIDList splits a comma-separated string into validated IDs. Used by both
+// CLI and MCP for multi-ID flag/parameter parsing. Returns an error if the input
+// contains no valid IDs after trimming/splitting, or if any segment fails ID
+// validation. Empty segments (from "id1,,id2") are silently skipped.
+//
+// The "name" parameter is used in error messages; pass the user-facing flag or
+// field name (e.g. "role-id" for CLI, "role_id" for MCP).
+func ParseIDList(name, csv string) ([]string, error) {
+	if csv == "" {
+		return nil, fmt.Errorf("%s is required", name)
+	}
+	parts := strings.Split(csv, ",")
+	ids := make([]string, 0, len(parts))
+	for _, p := range parts {
+		id := strings.TrimSpace(p)
+		if id == "" {
+			continue
+		}
+		if err := ValidateID(name, id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	if len(ids) == 0 {
+		return nil, fmt.Errorf("%s is required", name)
+	}
+	return ids, nil
+}
+
+// MaxPhoneLength bounds phone numbers at 50 bytes — generous enough for
+// international format with country code, extension, and separators
+// (e.g. "+1 (555) 123-4567 ext. 12345"), tight enough to prevent abuse.
+const MaxPhoneLength = 50
+
+// ValidatePhone checks that a phone value is within MaxPhoneLength.
+// The format itself is not validated — phone formats vary too much across
+// regions to enforce a single pattern client-side. The HappyCo API performs
+// its own format validation server-side.
+func ValidatePhone(value string) error {
+	if len(value) > MaxPhoneLength {
+		return fmt.Errorf("phone exceeds maximum length of %d bytes", MaxPhoneLength)
+	}
+	return nil
+}
+
 // ValidateRatingScore checks that a rating score is a finite, non-negative number.
 func ValidateRatingScore(score *float64) error {
 	if score == nil {

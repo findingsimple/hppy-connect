@@ -59,6 +59,9 @@ var usersCreateCmd = &cobra.Command{
 			input.ShortName = v
 		}
 		if v, _ := cmd.Flags().GetString("phone"); v != "" {
+			if err := models.ValidatePhone(v); err != nil {
+				return err
+			}
 			input.Phone = v
 		}
 		if v, _ := cmd.Flags().GetString("message"); v != "" {
@@ -66,6 +69,12 @@ var usersCreateCmd = &cobra.Command{
 				return err
 			}
 			input.Message = v
+		}
+
+		// Creating a user sends an invitation email — destructive side-effect
+		// outside the local environment. Match the MCP tool's DestructiveHint:true.
+		if err := confirmAction(cmd, fmt.Sprintf("create user %q and send invitation email to %s", name, email), os.Stdin, os.Stderr); err != nil {
+			return err
 		}
 
 		user, err := apiClient.UserCreate(cmd.Context(), input)
@@ -81,11 +90,8 @@ var usersSetEmailCmd = &cobra.Command{
 	Short:   "Update a user's email address",
 	Example: `  hppycli users set-email --id=user123 --email=new@example.com`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id, _ := cmd.Flags().GetString("id")
-		if id == "" {
-			return fmt.Errorf("--id is required")
-		}
-		if err := models.ValidateID("id", id); err != nil {
+		id, err := requireFlagID(cmd, "id")
+		if err != nil {
 			return err
 		}
 		email, _ := cmd.Flags().GetString("email")
@@ -109,11 +115,8 @@ var usersSetNameCmd = &cobra.Command{
 	Short:   "Update a user's full name",
 	Example: `  hppycli users set-name --id=user123 --name="Jane Smith"`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id, _ := cmd.Flags().GetString("id")
-		if id == "" {
-			return fmt.Errorf("--id is required")
-		}
-		if err := models.ValidateID("id", id); err != nil {
+		id, err := requireFlagID(cmd, "id")
+		if err != nil {
 			return err
 		}
 		name, _ := cmd.Flags().GetString("name")
@@ -137,11 +140,8 @@ var usersSetShortNameCmd = &cobra.Command{
 	Short:   "Set or clear a user's short name",
 	Example: `  hppycli users set-short-name --id=user123 --short-name=Jane`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id, _ := cmd.Flags().GetString("id")
-		if id == "" {
-			return fmt.Errorf("--id is required")
-		}
-		if err := models.ValidateID("id", id); err != nil {
+		id, err := requireFlagID(cmd, "id")
+		if err != nil {
 			return err
 		}
 
@@ -169,17 +169,17 @@ var usersSetPhoneCmd = &cobra.Command{
 	Short:   "Set or clear a user's phone number",
 	Example: `  hppycli users set-phone --id=user123 --phone="+1-555-0100"`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id, _ := cmd.Flags().GetString("id")
-		if id == "" {
-			return fmt.Errorf("--id is required")
-		}
-		if err := models.ValidateID("id", id); err != nil {
+		id, err := requireFlagID(cmd, "id")
+		if err != nil {
 			return err
 		}
 
 		var phone *string
 		if cmd.Flags().Changed("phone") {
 			v, _ := cmd.Flags().GetString("phone")
+			if err := models.ValidatePhone(v); err != nil {
+				return err
+			}
 			phone = &v
 		}
 
@@ -196,11 +196,8 @@ var usersGrantPropertyAccessCmd = &cobra.Command{
 	Short:   "Grant a user access to one or more properties",
 	Example: `  hppycli users grant-property-access --id=user123 --property-id=prop1,prop2`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id, _ := cmd.Flags().GetString("id")
-		if id == "" {
-			return fmt.Errorf("--id is required")
-		}
-		if err := models.ValidateID("id", id); err != nil {
+		id, err := requireFlagID(cmd, "id")
+		if err != nil {
 			return err
 		}
 		propIDsRaw, _ := cmd.Flags().GetString("property-id")
@@ -228,11 +225,8 @@ var usersRevokePropertyAccessCmd = &cobra.Command{
 	Short:   "Revoke a user's access to one or more properties",
 	Example: `  hppycli users revoke-property-access --id=user123 --property-id=prop1,prop2`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id, _ := cmd.Flags().GetString("id")
-		if id == "" {
-			return fmt.Errorf("--id is required")
-		}
-		if err := models.ValidateID("id", id); err != nil {
+		id, err := requireFlagID(cmd, "id")
+		if err != nil {
 			return err
 		}
 		propIDsRaw, _ := cmd.Flags().GetString("property-id")
@@ -268,6 +262,7 @@ func init() {
 	usersCreateCmd.Flags().String("short-name", "", "informal/given name")
 	usersCreateCmd.Flags().String("phone", "", "phone number")
 	usersCreateCmd.Flags().String("message", "", "personalised invitation email greeting")
+	usersCreateCmd.Flags().Bool("yes", false, "skip confirmation prompt")
 	usersCmd.AddCommand(usersCreateCmd)
 
 	// Set Email

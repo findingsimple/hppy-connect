@@ -161,11 +161,8 @@ var workordersSetStatusCmd = &cobra.Command{
 	Short:   "Set the status and sub-status of a work order",
 	Example: `  hppycli workorders set-status --id=abc123 --status=COMPLETED --sub-status=UNKNOWN`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id, _ := cmd.Flags().GetString("id")
-		if id == "" {
-			return fmt.Errorf("--id is required")
-		}
-		if err := models.ValidateID("id", id); err != nil {
+		id, err := requireFlagID(cmd, "id")
+		if err != nil {
 			return err
 		}
 		status, _ := cmd.Flags().GetString("status")
@@ -197,6 +194,9 @@ var workordersSetStatusCmd = &cobra.Command{
 		}
 
 		if v, _ := cmd.Flags().GetString("comment"); v != "" {
+			if err := models.ValidateFreeText("comment", v); err != nil {
+				return err
+			}
 			input.Status.Comment = v
 		}
 
@@ -213,11 +213,8 @@ var workordersSetAssigneeCmd = &cobra.Command{
 	Short:   "Set the assignee of a work order",
 	Example: `  hppycli workorders set-assignee --id=abc123 --assignee-id=user456 --assignee-type=USER`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id, _ := cmd.Flags().GetString("id")
-		if id == "" {
-			return fmt.Errorf("--id is required")
-		}
-		if err := models.ValidateID("id", id); err != nil {
+		id, err := requireFlagID(cmd, "id")
+		if err != nil {
 			return err
 		}
 		assigneeID, _ := cmd.Flags().GetString("assignee-id")
@@ -257,11 +254,8 @@ var workordersSetDescriptionCmd = &cobra.Command{
 	Short:   "Set the description of a work order",
 	Example: `  hppycli workorders set-description --id=abc123 --description="Updated description"`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id, _ := cmd.Flags().GetString("id")
-		if id == "" {
-			return fmt.Errorf("--id is required")
-		}
-		if err := models.ValidateID("id", id); err != nil {
+		id, err := requireFlagID(cmd, "id")
+		if err != nil {
 			return err
 		}
 		desc, _ := cmd.Flags().GetString("description")
@@ -285,11 +279,8 @@ var workordersSetPriorityCmd = &cobra.Command{
 	Short:   "Set the priority of a work order",
 	Example: `  hppycli workorders set-priority --id=abc123 --priority=URGENT`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id, _ := cmd.Flags().GetString("id")
-		if id == "" {
-			return fmt.Errorf("--id is required")
-		}
-		if err := models.ValidateID("id", id); err != nil {
+		id, err := requireFlagID(cmd, "id")
+		if err != nil {
 			return err
 		}
 		priority, _ := cmd.Flags().GetString("priority")
@@ -314,11 +305,8 @@ var workordersSetScheduledForCmd = &cobra.Command{
 	Short:   "Set the scheduled date for a work order",
 	Example: `  hppycli workorders set-scheduled-for --id=abc123 --scheduled-for=2026-05-01T09:00:00Z`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id, _ := cmd.Flags().GetString("id")
-		if id == "" {
-			return fmt.Errorf("--id is required")
-		}
-		if err := models.ValidateID("id", id); err != nil {
+		id, err := requireFlagID(cmd, "id")
+		if err != nil {
 			return err
 		}
 		scheduledFor, _ := cmd.Flags().GetString("scheduled-for")
@@ -342,11 +330,8 @@ var workordersSetLocationCmd = &cobra.Command{
 	Short:   "Set the location of a work order",
 	Example: `  hppycli workorders set-location --id=abc123 --location-id=prop456`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id, _ := cmd.Flags().GetString("id")
-		if id == "" {
-			return fmt.Errorf("--id is required")
-		}
-		if err := models.ValidateID("id", id); err != nil {
+		id, err := requireFlagID(cmd, "id")
+		if err != nil {
 			return err
 		}
 		locationID, _ := cmd.Flags().GetString("location-id")
@@ -370,11 +355,8 @@ var workordersSetTypeCmd = &cobra.Command{
 	Short:   "Set the type of a work order",
 	Example: `  hppycli workorders set-type --id=abc123 --type=SERVICE_REQUEST`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id, _ := cmd.Flags().GetString("id")
-		if id == "" {
-			return fmt.Errorf("--id is required")
-		}
-		if err := models.ValidateID("id", id); err != nil {
+		id, err := requireFlagID(cmd, "id")
+		if err != nil {
 			return err
 		}
 		woType, _ := cmd.Flags().GetString("type")
@@ -399,11 +381,8 @@ var workordersSetEntryNotesCmd = &cobra.Command{
 	Short:   "Set the entry notes of a work order",
 	Example: `  hppycli workorders set-entry-notes --id=abc123 --entry-notes="Ring doorbell twice"`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id, _ := cmd.Flags().GetString("id")
-		if id == "" {
-			return fmt.Errorf("--id is required")
-		}
-		if err := models.ValidateID("id", id); err != nil {
+		id, err := requireFlagID(cmd, "id")
+		if err != nil {
 			return err
 		}
 		notes, _ := cmd.Flags().GetString("entry-notes")
@@ -427,11 +406,8 @@ var workordersSetPermissionToEnterCmd = &cobra.Command{
 	Short:   "Set the permission to enter flag on a work order",
 	Example: `  hppycli workorders set-permission-to-enter --id=abc123 --permission-to-enter=true`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id, _ := cmd.Flags().GetString("id")
-		if id == "" {
-			return fmt.Errorf("--id is required")
-		}
-		if err := models.ValidateID("id", id); err != nil {
+		id, err := requireFlagID(cmd, "id")
+		if err != nil {
 			return err
 		}
 		if !cmd.Flags().Changed("permission-to-enter") {
@@ -452,11 +428,8 @@ var workordersSetResidentApprovedEntryCmd = &cobra.Command{
 	Short:   "Set the resident approved entry flag on a work order",
 	Example: `  hppycli workorders set-resident-approved-entry --id=abc123 --resident-approved-entry=true`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id, _ := cmd.Flags().GetString("id")
-		if id == "" {
-			return fmt.Errorf("--id is required")
-		}
-		if err := models.ValidateID("id", id); err != nil {
+		id, err := requireFlagID(cmd, "id")
+		if err != nil {
 			return err
 		}
 		if !cmd.Flags().Changed("resident-approved-entry") {
@@ -477,11 +450,8 @@ var workordersSetUnitEnteredCmd = &cobra.Command{
 	Short:   "Set the unit entered flag on a work order",
 	Example: `  hppycli workorders set-unit-entered --id=abc123 --unit-entered=true`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id, _ := cmd.Flags().GetString("id")
-		if id == "" {
-			return fmt.Errorf("--id is required")
-		}
-		if err := models.ValidateID("id", id); err != nil {
+		id, err := requireFlagID(cmd, "id")
+		if err != nil {
 			return err
 		}
 		if !cmd.Flags().Changed("unit-entered") {
@@ -502,11 +472,8 @@ var workordersArchiveCmd = &cobra.Command{
 	Short:   "Archive a work order",
 	Example: `  hppycli workorders archive --id=abc123`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id, _ := cmd.Flags().GetString("id")
-		if id == "" {
-			return fmt.Errorf("--id is required")
-		}
-		if err := models.ValidateID("id", id); err != nil {
+		id, err := requireFlagID(cmd, "id")
+		if err != nil {
 			return err
 		}
 		if err := confirmAction(cmd, "archive work order "+id, os.Stdin, os.Stderr); err != nil {
@@ -526,11 +493,8 @@ var workordersAddCommentCmd = &cobra.Command{
 	Short:   "Add a comment to a work order",
 	Example: `  hppycli workorders add-comment --id=abc123 --comment="Parts ordered"`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id, _ := cmd.Flags().GetString("id")
-		if id == "" {
-			return fmt.Errorf("--id is required")
-		}
-		if err := models.ValidateID("id", id); err != nil {
+		id, err := requireFlagID(cmd, "id")
+		if err != nil {
 			return err
 		}
 		comment, _ := cmd.Flags().GetString("comment")
@@ -554,11 +518,8 @@ var workordersAddTimeCmd = &cobra.Command{
 	Short:   "Add time spent on a work order",
 	Example: `  hppycli workorders add-time --id=abc123 --duration=PT1H30M`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id, _ := cmd.Flags().GetString("id")
-		if id == "" {
-			return fmt.Errorf("--id is required")
-		}
-		if err := models.ValidateID("id", id); err != nil {
+		id, err := requireFlagID(cmd, "id")
+		if err != nil {
 			return err
 		}
 		duration, _ := cmd.Flags().GetString("duration")
@@ -582,11 +543,8 @@ var workordersAddAttachmentCmd = &cobra.Command{
 	Short:   "Add an attachment to a work order (returns signed upload URL)",
 	Example: `  hppycli workorders add-attachment --id=abc123 --file-name=photo.jpg --mime-type=image/jpeg`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id, _ := cmd.Flags().GetString("id")
-		if id == "" {
-			return fmt.Errorf("--id is required")
-		}
-		if err := models.ValidateID("id", id); err != nil {
+		id, err := requireFlagID(cmd, "id")
+		if err != nil {
 			return err
 		}
 		fileName, _ := cmd.Flags().GetString("file-name")
@@ -627,11 +585,8 @@ var workordersRemoveAttachmentCmd = &cobra.Command{
 	Short:   "Remove an attachment from a work order",
 	Example: `  hppycli workorders remove-attachment --id=abc123 --attachment-id=att456`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id, _ := cmd.Flags().GetString("id")
-		if id == "" {
-			return fmt.Errorf("--id is required")
-		}
-		if err := models.ValidateID("id", id); err != nil {
+		id, err := requireFlagID(cmd, "id")
+		if err != nil {
 			return err
 		}
 		attachmentID, _ := cmd.Flags().GetString("attachment-id")
@@ -658,11 +613,8 @@ var workordersStartTimerCmd = &cobra.Command{
 	Short:   "Start the timer for a work order",
 	Example: `  hppycli workorders start-timer --id=abc123 --started-at=2026-05-01T09:00:00Z`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id, _ := cmd.Flags().GetString("id")
-		if id == "" {
-			return fmt.Errorf("--id is required")
-		}
-		if err := models.ValidateID("id", id); err != nil {
+		id, err := requireFlagID(cmd, "id")
+		if err != nil {
 			return err
 		}
 		startedAt, _ := cmd.Flags().GetString("started-at")
@@ -686,11 +638,8 @@ var workordersStopTimerCmd = &cobra.Command{
 	Short:   "Stop the timer for a work order",
 	Example: `  hppycli workorders stop-timer --id=abc123 --stopped-at=2026-05-01T10:30:00Z`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id, _ := cmd.Flags().GetString("id")
-		if id == "" {
-			return fmt.Errorf("--id is required")
-		}
-		if err := models.ValidateID("id", id); err != nil {
+		id, err := requireFlagID(cmd, "id")
+		if err != nil {
 			return err
 		}
 		stoppedAt, _ := cmd.Flags().GetString("stopped-at")

@@ -28,7 +28,8 @@ const DefaultEndpoint = "https://externalgraph.happyco.com"
 const (
 	pageSize        = 100
 	defaultCap      = 1000
-	hardMaxItems    = 50000 // defence-in-depth ceiling for unbounded pagination
+	hardMaxItems    = 50000 // defence-in-depth ceiling for unbounded pagination (item count)
+	hardMaxPages    = 1000  // defence-in-depth ceiling for pages fetched (handles zero-edge runaway cursor)
 	expiryBuffer    = 5 * time.Minute
 	maxRetries      = 3
 	maxResponseSize = 10 * 1024 * 1024 // 10 MB
@@ -153,7 +154,9 @@ func NewClient(email, password, accountID string, opts ...Option) (*Client, erro
 	return c, nil
 }
 
-// EnsureAuth is a public wrapper around ensureAuth for health checks.
+// EnsureAuth is a public wrapper around ensureAuth used by tests to probe the
+// auth/cooldown/refresh state machine in isolation. Production code paths
+// authenticate lazily on first request — they don't call this directly.
 func (c *Client) EnsureAuth(ctx context.Context) error {
 	_, err := c.ensureAuth(ctx)
 	return err
@@ -424,6 +427,109 @@ func (c *Client) doMutation(ctx context.Context, query string, variables map[str
 // Use for set*, archive, delete, remove, start, complete, reopen, etc.
 func (c *Client) doMutationIdempotent(ctx context.Context, query string, variables map[string]interface{}, result interface{}) error {
 	return c.doQueryWithRetry(ctx, query, variables, result)
+}
+
+// ErrAlreadyApplied signals that a destructive idempotent mutation
+// (Archive/Delete/Expire/Revoke) likely succeeded on a prior attempt but the
+// retry that landed lookup-style "not found" cannot be distinguished from
+// a true "no such resource" error.
+//
+// Callers receive this error in place of nil so they don't accidentally
+// surface a zero-value entity to users. CLI surfaces the message verbatim;
+// MCP routes it through the "already_applied" sanitiser category.
+var ErrAlreadyApplied = &apiError{
+	Category: "already_applied",
+	Message:  "operation likely succeeded on a prior attempt — server returned 'not found' on retry; verify resource state before retrying",
+}
+
+// doMutationDestructiveIdempotent retries like doMutationIdempotent, but on a
+// retried attempt that lands on a "not found"-style error after a prior
+// transient failure, returns ErrAlreadyApplied (the previous attempt likely
+// committed before the transient failure was reported).
+//
+// Use for destructive idempotents — Archive, Delete, Expire — where the
+// post-condition is "the resource is gone". For these operations a not-found
+// response on retry is indistinguishable from "the previous attempt succeeded".
+func (c *Client) doMutationDestructiveIdempotent(ctx context.Context, query string, variables map[string]interface{}, result interface{}) error {
+	var lastErr error
+	authRetried := false
+	sawTransient := false
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		if err := ctx.Err(); err != nil {
+			return errAPIFatal(fmt.Sprintf("context cancelled: %v", err))
+		}
+
+		err := c.doQuery(ctx, query, variables, result)
+		if err == nil {
+			return nil
+		}
+		lastErr = err
+
+		var ae *apiError
+		if errors.As(err, &ae) {
+			if ae.Category == "auth_failed" && !authRetried {
+				authRetried = true
+				if _, authErr := c.ensureAuth(ctx); authErr != nil {
+					return err
+				}
+				attempt--
+				continue
+			}
+			if !ae.Retryable {
+				if sawTransient && isLikelyAlreadyAppliedError(ae.Message) {
+					c.emitStatus("Resource not found on retry — treating as already-applied success.")
+					return ErrAlreadyApplied
+				}
+				return err
+			}
+			sawTransient = true
+		}
+
+		if attempt < maxRetries-1 {
+			idx := min(attempt, len(c.retryBackoff)-1)
+			backoff := c.retryBackoff[idx]
+			if ae != nil && ae.RetryAfter > backoff {
+				backoff = ae.RetryAfter
+			}
+			jitter := time.Duration(rand.Int64N(int64(backoff/2))) - backoff/4
+			c.emitStatus(fmt.Sprintf("Retrying (%d/%d)...", attempt+1, maxRetries-1))
+			select {
+			case <-ctx.Done():
+				return errAPIFatal(fmt.Sprintf("context cancelled: %v", ctx.Err()))
+			case <-time.After(backoff + jitter):
+			}
+		}
+	}
+	return &apiError{
+		Category: "api_error",
+		Message:  fmt.Sprintf("query failed after %d retries: %v", maxRetries, lastErr),
+	}
+}
+
+// isLikelyAlreadyAppliedError matches GraphQL error messages that suggest the
+// target resource is gone. Used by doMutationDestructiveIdempotent to absorb
+// "not found" responses that follow a transient failure.
+//
+// This is intentionally conservative — only match phrases that unambiguously
+// indicate the destructive operation has already taken effect. False positives
+// here would silently drop real "no such resource" errors on a first attempt.
+func isLikelyAlreadyAppliedError(msg string) bool {
+	lower := strings.ToLower(msg)
+	patterns := []string{
+		"not found",
+		"does not exist",
+		"no such",
+		"already archived",
+		"already deleted",
+		"already expired",
+		"already removed",
+	}
+	for _, p := range patterns {
+		if strings.Contains(lower, p) {
+			return true
+		}
+	}
+	return false
 }
 
 // GetAccount returns the account details with retry for transient errors.
@@ -739,7 +845,7 @@ func (c *Client) WorkOrderArchive(ctx context.Context, workOrderID string) (*mod
 		"workOrderId": workOrderID,
 	}}
 	var resp workOrderArchiveResponse
-	if err := c.doMutationIdempotent(ctx, workOrderArchiveMutation, vars, &resp); err != nil {
+	if err := c.doMutationDestructiveIdempotent(ctx, workOrderArchiveMutation, vars, &resp); err != nil {
 		return nil, err
 	}
 	return &resp.WorkOrderArchive, nil
@@ -789,7 +895,7 @@ func (c *Client) WorkOrderRemoveAttachment(ctx context.Context, workOrderID, att
 		"attachmentId": attachmentID,
 	}}
 	var resp workOrderRemoveAttachmentResponse
-	if err := c.doMutationIdempotent(ctx, workOrderRemoveAttachmentMutation, vars, &resp); err != nil {
+	if err := c.doMutationDestructiveIdempotent(ctx, workOrderRemoveAttachmentMutation, vars, &resp); err != nil {
 		return nil, err
 	}
 	return &resp.WorkOrderRemoveAttachment, nil
@@ -875,7 +981,7 @@ func (c *Client) InspectionArchive(ctx context.Context, inspectionID string) (*m
 		"inspectionId": inspectionID,
 	}}
 	var resp inspectionArchiveResponse
-	if err := c.doMutationIdempotent(ctx, inspectionArchiveMutation, vars, &resp); err != nil {
+	if err := c.doMutationDestructiveIdempotent(ctx, inspectionArchiveMutation, vars, &resp); err != nil {
 		return nil, err
 	}
 	return &resp.InspectionArchive, nil
@@ -887,7 +993,7 @@ func (c *Client) InspectionExpire(ctx context.Context, inspectionID string) (*mo
 		"inspectionId": inspectionID,
 	}}
 	var resp inspectionExpireResponse
-	if err := c.doMutationIdempotent(ctx, inspectionExpireMutation, vars, &resp); err != nil {
+	if err := c.doMutationDestructiveIdempotent(ctx, inspectionExpireMutation, vars, &resp); err != nil {
 		return nil, err
 	}
 	return &resp.InspectionExpire, nil
@@ -992,7 +1098,7 @@ func (c *Client) InspectionAddSection(ctx context.Context, input models.Inspecti
 func (c *Client) InspectionDeleteSection(ctx context.Context, input models.InspectionDeleteSectionInput) (*models.Inspection, error) {
 	vars := map[string]interface{}{"input": input}
 	var resp inspectionDeleteSectionResponse
-	if err := c.doMutationIdempotent(ctx, inspectionDeleteSectionMutation, vars, &resp); err != nil {
+	if err := c.doMutationDestructiveIdempotent(ctx, inspectionDeleteSectionMutation, vars, &resp); err != nil {
 		return nil, err
 	}
 	return &resp.InspectionDeleteSection, nil
@@ -1032,7 +1138,7 @@ func (c *Client) InspectionAddItem(ctx context.Context, input models.InspectionA
 func (c *Client) InspectionDeleteItem(ctx context.Context, input models.InspectionDeleteItemInput) (*models.Inspection, error) {
 	vars := map[string]interface{}{"input": input}
 	var resp inspectionDeleteItemResponse
-	if err := c.doMutationIdempotent(ctx, inspectionDeleteItemMutation, vars, &resp); err != nil {
+	if err := c.doMutationDestructiveIdempotent(ctx, inspectionDeleteItemMutation, vars, &resp); err != nil {
 		return nil, err
 	}
 	return &resp.InspectionDeleteItem, nil
@@ -1053,7 +1159,7 @@ func (c *Client) InspectionAddItemPhoto(ctx context.Context, input models.Inspec
 func (c *Client) InspectionRemoveItemPhoto(ctx context.Context, input models.InspectionRemoveItemPhotoInput) (*models.Inspection, error) {
 	vars := map[string]interface{}{"input": input}
 	var resp inspectionRemoveItemPhotoResponse
-	if err := c.doMutationIdempotent(ctx, inspectionRemoveItemPhotoMutation, vars, &resp); err != nil {
+	if err := c.doMutationDestructiveIdempotent(ctx, inspectionRemoveItemPhotoMutation, vars, &resp); err != nil {
 		return nil, err
 	}
 	return &resp.InspectionRemoveItemPhoto, nil
@@ -1302,7 +1408,7 @@ func (c *Client) PropertyGrantUserAccess(ctx context.Context, input models.Prope
 func (c *Client) PropertyRevokeUserAccess(ctx context.Context, input models.PropertyRevokeUserAccessInput) (*models.PropertyAccess, error) {
 	vars := map[string]interface{}{"input": input}
 	var resp propertyRevokeUserAccessResponse
-	if err := c.doMutationIdempotent(ctx, propertyRevokeUserAccessMutation, vars, &resp); err != nil {
+	if err := c.doMutationDestructiveIdempotent(ctx, propertyRevokeUserAccessMutation, vars, &resp); err != nil {
 		return nil, err
 	}
 	return &resp.PropertyRevokeUserAccess, nil
@@ -1334,7 +1440,7 @@ func (c *Client) UserGrantPropertyAccess(ctx context.Context, input models.UserG
 func (c *Client) UserRevokePropertyAccess(ctx context.Context, input models.UserRevokePropertyAccessInput) (*models.User, error) {
 	vars := map[string]interface{}{"input": input}
 	var resp userRevokePropertyAccessResponse
-	if err := c.doMutationIdempotent(ctx, userRevokePropertyAccessMutation, vars, &resp); err != nil {
+	if err := c.doMutationDestructiveIdempotent(ctx, userRevokePropertyAccessMutation, vars, &resp); err != nil {
 		return nil, err
 	}
 	return &resp.UserRevokePropertyAccess, nil
@@ -1451,11 +1557,12 @@ func paginate[T any](
 		}
 
 		if cap > 0 && len(allItems) >= cap {
-			allItems = allItems[:cap]
 			if c.debug && totalCount > cap {
 				log.Printf("[debug] %s: returning %d of %d total items (cap applied)", resource, cap, totalCount)
 			}
-			return allItems, totalCount, nil
+			// Copy to a fresh slice to release the over-sized backing array
+			// (allocated by append's growth, may hold up to 50,000 elements).
+			return append([]T(nil), allItems[:cap]...), totalCount, nil
 		}
 
 		// Defence-in-depth: hard ceiling prevents unbounded memory growth
@@ -1464,7 +1571,18 @@ func paginate[T any](
 			if c.debug {
 				log.Printf("[debug] %s: hard ceiling reached (%d items), stopping pagination", resource, hardMaxItems)
 			}
-			return allItems[:hardMaxItems], totalCount, nil
+			return append([]T(nil), allItems[:hardMaxItems]...), totalCount, nil
+		}
+
+		// Defence-in-depth: page count ceiling. hardMaxItems alone does not
+		// defend against the case where the server returns HasNextPage=true
+		// with 0 edges and a different cursor each page — len(allItems) never
+		// grows so the item ceiling never trips. hardMaxPages bounds wall time.
+		if page >= hardMaxPages {
+			if c.debug {
+				log.Printf("[debug] %s: hard page ceiling reached (%d pages, %d items), stopping pagination", resource, hardMaxPages, len(allItems))
+			}
+			return allItems, totalCount, errAPIFatal(fmt.Sprintf("pagination ceiling reached after %d pages — server may be returning empty pages with advancing cursors", hardMaxPages))
 		}
 
 		if !conn.PageInfo.HasNextPage {

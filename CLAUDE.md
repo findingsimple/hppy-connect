@@ -74,6 +74,19 @@ Both binaries are thin frontends over shared logic in `internal/`.
 - Relay-style cursor pagination with configurable limits. Default cap is 1000 items; hard ceiling is 50,000 (`hardMaxItems`) as defence-in-depth against runaway loops.
 - Page size is fixed at 100 (server-enforced maximum).
 - The MCP server uses a channel-based semaphore (`sem`) to limit concurrent pagination loops to 3.
+- **Limit caps differ by binary**:
+  - **CLI** (`validateLimit`) only rejects negative values; the API client's `hardMaxItems` (50,000) is the effective ceiling.
+  - **MCP** (`clampLimit`) silently clamps anything over `maxLimit` (10,000) before sending. Tighter cap exists because results land in an LLM context window where unbounded tokens are costly.
+  - This divergence is intentional. To raise the MCP cap, change `maxLimit` in `cmd/hppymcp/tools.go`.
+
+### Email-sending mutations
+- `inspection_send_to_guest` and `user_create` (which sends an invitation email) both go through `emailSem` (capacity 2) in addition to the upstream API rate limit. Without this gate, a misbehaving LLM could fan out parallel calls and trigger duplicate emails.
+- Other MCP mutations bypass the semaphore (acknowledged trade-off E in Known Limitations).
+- CLI `users create` requires `confirmAction` because it sends an invitation email; the MCP equivalent uses `DestructiveHint:true`.
+
+### Destructive idempotent retries
+- `doMutationDestructiveIdempotent` is used for Archive/Delete/Expire/Revoke mutations. It behaves like `doMutationIdempotent` but, on a retried attempt that lands on a "not found"-style error after a prior transient failure, it treats the error as success. The previous attempt likely committed before the transient failure was reported.
+- The matched error patterns are conservative ("not found", "does not exist", "already archived", etc.). See `isLikelyAlreadyAppliedError` for the full list.
 
 ### Shared Validation
 - `models.ValidateStatus()` and `models.ValidateDateRange()` are the single source of truth, called by both CLI (`parseListFlags`) and MCP (`buildListOpts`).
@@ -132,7 +145,7 @@ These were identified during security and resilience review and consciously acce
 Hostnames like `0x7f000001` (hex 127.0.0.1) or `2130706433` (decimal) bypass `net.ParseIP` (returns nil), skipping private IP checks. **Accepted because:** same as (A) — server-side concern. The HappyCo API performs its own validation on webhook delivery.
 
 ### C. Non-Idempotent Mutation Auth-Retry Assumption
-`doMutation` retries once on 401 after re-authentication. If the federated gateway returns 401 *after* the downstream service has already committed the mutation, a duplicate could be created. **Accepted because:** the HappyCo gateway rejects auth failures before executing mutations (verified at runtime). The assumption is documented in the `doMutation` comment at `client.go:373-377`. `InspectionSendToGuest` is the highest-risk case since it triggers an email — noted here for awareness.
+`doMutation` retries once on 401 after re-authentication. If the federated gateway returns 401 *after* the downstream service has already committed the mutation, a duplicate could be created. **Accepted because:** the HappyCo gateway rejects auth failures before executing mutations (verified at runtime). The assumption is documented in the `doMutation` comment block (search `client.go` for `func (c *Client) doMutation`). `InspectionSendToGuest` is the highest-risk case since it triggers an email — partially mitigated by the `emailSem` semaphore in the MCP server, but still subject to this assumption.
 
 ### D. Ambiguous State on Network Timeout for Non-Idempotent Mutations
 If a non-idempotent mutation times out, the client returns an error but the server may have committed the change. The error message does not indicate possible partial success. **Accepted because:** this is inherent to non-idempotent HTTP operations. The correct behaviour is to fail and let the user check, which is what happens. Improving the error message ("operation may have been executed — check before retrying") is a nice-to-have.

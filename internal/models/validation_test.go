@@ -7,6 +7,47 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func TestParseIDList(t *testing.T) {
+	t.Run("happy path single ID", func(t *testing.T) {
+		ids, err := ParseIDList("role-id", "abc123")
+		assert.NoError(t, err)
+		assert.Equal(t, []string{"abc123"}, ids)
+	})
+
+	t.Run("multiple IDs trimmed", func(t *testing.T) {
+		ids, err := ParseIDList("role-id", " abc , def, ghi ")
+		assert.NoError(t, err)
+		assert.Equal(t, []string{"abc", "def", "ghi"}, ids)
+	})
+
+	t.Run("empty input is required error", func(t *testing.T) {
+		ids, err := ParseIDList("role-id", "")
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "role-id is required")
+		assert.Nil(t, ids)
+	})
+
+	t.Run("only commas is required error", func(t *testing.T) {
+		ids, err := ParseIDList("role-id", ",,,")
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "role-id is required")
+		assert.Nil(t, ids)
+	})
+
+	t.Run("invalid character rejected", func(t *testing.T) {
+		ids, err := ParseIDList("role-id", "abc,bad id,def")
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "role-id")
+		assert.Nil(t, ids)
+	})
+
+	t.Run("empty segments skipped", func(t *testing.T) {
+		ids, err := ParseIDList("role-id", "abc,,def,")
+		assert.NoError(t, err)
+		assert.Equal(t, []string{"abc", "def"}, ids)
+	})
+}
+
 func TestValidateID(t *testing.T) {
 	tests := []struct {
 		name    string

@@ -136,11 +136,8 @@ var inspectionsStartCmd = &cobra.Command{
 	Short:   "Start an inspection",
 	Example: `  hppycli inspections start --id=insp123`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id, _ := cmd.Flags().GetString("id")
-		if id == "" {
-			return fmt.Errorf("--id is required")
-		}
-		if err := models.ValidateID("id", id); err != nil {
+		id, err := requireFlagID(cmd, "id")
+		if err != nil {
 			return err
 		}
 
@@ -157,11 +154,8 @@ var inspectionsCompleteCmd = &cobra.Command{
 	Short:   "Mark an inspection as complete",
 	Example: `  hppycli inspections complete --id=insp123`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id, _ := cmd.Flags().GetString("id")
-		if id == "" {
-			return fmt.Errorf("--id is required")
-		}
-		if err := models.ValidateID("id", id); err != nil {
+		id, err := requireFlagID(cmd, "id")
+		if err != nil {
 			return err
 		}
 
@@ -178,11 +172,8 @@ var inspectionsReopenCmd = &cobra.Command{
 	Short:   "Reopen a completed inspection",
 	Example: `  hppycli inspections reopen --id=insp123`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id, _ := cmd.Flags().GetString("id")
-		if id == "" {
-			return fmt.Errorf("--id is required")
-		}
-		if err := models.ValidateID("id", id); err != nil {
+		id, err := requireFlagID(cmd, "id")
+		if err != nil {
 			return err
 		}
 
@@ -199,11 +190,8 @@ var inspectionsArchiveCmd = &cobra.Command{
 	Short:   "Archive an inspection",
 	Example: `  hppycli inspections archive --id=insp123`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id, _ := cmd.Flags().GetString("id")
-		if id == "" {
-			return fmt.Errorf("--id is required")
-		}
-		if err := models.ValidateID("id", id); err != nil {
+		id, err := requireFlagID(cmd, "id")
+		if err != nil {
 			return err
 		}
 		if err := confirmAction(cmd, "archive inspection "+id, os.Stdin, os.Stderr); err != nil {
@@ -223,11 +211,8 @@ var inspectionsExpireCmd = &cobra.Command{
 	Short:   "Expire an inspection",
 	Example: `  hppycli inspections expire --id=insp123`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id, _ := cmd.Flags().GetString("id")
-		if id == "" {
-			return fmt.Errorf("--id is required")
-		}
-		if err := models.ValidateID("id", id); err != nil {
+		id, err := requireFlagID(cmd, "id")
+		if err != nil {
 			return err
 		}
 		if err := confirmAction(cmd, "expire inspection "+id, os.Stdin, os.Stderr); err != nil {
@@ -247,11 +232,8 @@ var inspectionsUnexpireCmd = &cobra.Command{
 	Short:   "Unexpire an inspection",
 	Example: `  hppycli inspections unexpire --id=insp123`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id, _ := cmd.Flags().GetString("id")
-		if id == "" {
-			return fmt.Errorf("--id is required")
-		}
-		if err := models.ValidateID("id", id); err != nil {
+		id, err := requireFlagID(cmd, "id")
+		if err != nil {
 			return err
 		}
 
@@ -268,11 +250,8 @@ var inspectionsSetAssigneeCmd = &cobra.Command{
 	Short:   "Assign a user to an inspection",
 	Example: `  hppycli inspections set-assignee --id=insp123 --assignee-id=user456`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id, _ := cmd.Flags().GetString("id")
-		if id == "" {
-			return fmt.Errorf("--id is required")
-		}
-		if err := models.ValidateID("id", id); err != nil {
+		id, err := requireFlagID(cmd, "id")
+		if err != nil {
 			return err
 		}
 		assigneeID, _ := cmd.Flags().GetString("assignee-id")
@@ -299,11 +278,8 @@ var inspectionsSetDueByCmd = &cobra.Command{
 	Short:   "Set the due date for an inspection",
 	Example: `  hppycli inspections set-due-by --id=insp123 --due-by=2026-06-01T00:00:00Z --expires=true`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id, _ := cmd.Flags().GetString("id")
-		if id == "" {
-			return fmt.Errorf("--id is required")
-		}
-		if err := models.ValidateID("id", id); err != nil {
+		id, err := requireFlagID(cmd, "id")
+		if err != nil {
 			return err
 		}
 		dueBy, _ := cmd.Flags().GetString("due-by")
@@ -335,11 +311,8 @@ var inspectionsSetScheduledForCmd = &cobra.Command{
 	Short:   "Set the scheduled date for an inspection",
 	Example: `  hppycli inspections set-scheduled-for --id=insp123 --scheduled-for=2026-05-01T09:00:00Z`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id, _ := cmd.Flags().GetString("id")
-		if id == "" {
-			return fmt.Errorf("--id is required")
-		}
-		if err := models.ValidateID("id", id); err != nil {
+		id, err := requireFlagID(cmd, "id")
+		if err != nil {
 			return err
 		}
 		scheduledFor, _ := cmd.Flags().GetString("scheduled-for")
@@ -363,18 +336,21 @@ var inspectionsSetHeaderFieldCmd = &cobra.Command{
 	Short:   "Update a header field on an inspection",
 	Example: `  hppycli inspections set-header-field --id=insp123 --label="Inspector" --value="John Smith"`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id, _ := cmd.Flags().GetString("id")
-		if id == "" {
-			return fmt.Errorf("--id is required")
-		}
-		if err := models.ValidateID("id", id); err != nil {
+		id, err := requireFlagID(cmd, "id")
+		if err != nil {
 			return err
 		}
 		label, _ := cmd.Flags().GetString("label")
 		if label == "" {
 			return fmt.Errorf("--label is required")
 		}
+		if err := models.ValidateFreeText("label", label); err != nil {
+			return err
+		}
 		value, _ := cmd.Flags().GetString("value")
+		if err := models.ValidateFreeText("value", value); err != nil {
+			return err
+		}
 
 		insp, err := apiClient.InspectionSetHeaderField(cmd.Context(), models.InspectionSetHeaderFieldInput{
 			InspectionID: id,
@@ -393,18 +369,21 @@ var inspectionsSetFooterFieldCmd = &cobra.Command{
 	Short:   "Update a footer field on an inspection",
 	Example: `  hppycli inspections set-footer-field --id=insp123 --label="Notes" --value="All clear"`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id, _ := cmd.Flags().GetString("id")
-		if id == "" {
-			return fmt.Errorf("--id is required")
-		}
-		if err := models.ValidateID("id", id); err != nil {
+		id, err := requireFlagID(cmd, "id")
+		if err != nil {
 			return err
 		}
 		label, _ := cmd.Flags().GetString("label")
 		if label == "" {
 			return fmt.Errorf("--label is required")
 		}
+		if err := models.ValidateFreeText("label", label); err != nil {
+			return err
+		}
 		value, _ := cmd.Flags().GetString("value")
+		if err := models.ValidateFreeText("value", value); err != nil {
+			return err
+		}
 
 		insp, err := apiClient.InspectionSetFooterField(cmd.Context(), models.InspectionSetFooterFieldInput{
 			InspectionID: id,
@@ -423,11 +402,8 @@ var inspectionsSetItemNotesCmd = &cobra.Command{
 	Short:   "Set notes on an inspection item",
 	Example: `  hppycli inspections set-item-notes --id=insp123 --section="Kitchen" --item="Sink" --notes="Needs repair"`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id, _ := cmd.Flags().GetString("id")
-		if id == "" {
-			return fmt.Errorf("--id is required")
-		}
-		if err := models.ValidateID("id", id); err != nil {
+		id, err := requireFlagID(cmd, "id")
+		if err != nil {
 			return err
 		}
 		section, _ := cmd.Flags().GetString("section")
@@ -439,6 +415,9 @@ var inspectionsSetItemNotesCmd = &cobra.Command{
 			return fmt.Errorf("--item is required")
 		}
 		notes, _ := cmd.Flags().GetString("notes")
+		if err := models.ValidateFreeText("notes", notes); err != nil {
+			return err
+		}
 
 		insp, err := apiClient.InspectionSetItemNotes(cmd.Context(), models.InspectionSetItemNotesInput{
 			InspectionID: id,
@@ -458,11 +437,8 @@ var inspectionsRateItemCmd = &cobra.Command{
 	Short:   "Rate an item in an inspection",
 	Example: `  hppycli inspections rate-item --id=insp123 --section="Kitchen" --item="Sink" --rating-key=condition --rating-score=3`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id, _ := cmd.Flags().GetString("id")
-		if id == "" {
-			return fmt.Errorf("--id is required")
-		}
-		if err := models.ValidateID("id", id); err != nil {
+		id, err := requireFlagID(cmd, "id")
+		if err != nil {
 			return err
 		}
 		section, _ := cmd.Flags().GetString("section")
@@ -482,6 +458,9 @@ var inspectionsRateItemCmd = &cobra.Command{
 		if cmd.Flags().Changed("rating-score") {
 			score, _ := cmd.Flags().GetFloat64("rating-score")
 			rating.Score = &score
+		}
+		if err := models.ValidateRatingScore(rating.Score); err != nil {
+			return err
 		}
 		if v, _ := cmd.Flags().GetString("rating-value"); v != "" {
 			rating.Value = v
@@ -505,16 +484,16 @@ var inspectionsAddSectionCmd = &cobra.Command{
 	Short:   "Add a new section to an inspection",
 	Example: `  hppycli inspections add-section --id=insp123 --name="Living Room"`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id, _ := cmd.Flags().GetString("id")
-		if id == "" {
-			return fmt.Errorf("--id is required")
-		}
-		if err := models.ValidateID("id", id); err != nil {
+		id, err := requireFlagID(cmd, "id")
+		if err != nil {
 			return err
 		}
 		name, _ := cmd.Flags().GetString("name")
 		if name == "" {
 			return fmt.Errorf("--name is required")
+		}
+		if err := models.ValidateFreeText("name", name); err != nil {
+			return err
 		}
 
 		insp, err := apiClient.InspectionAddSection(cmd.Context(), models.InspectionAddSectionInput{
@@ -533,11 +512,8 @@ var inspectionsDeleteSectionCmd = &cobra.Command{
 	Short:   "Delete a section from an inspection",
 	Example: `  hppycli inspections delete-section --id=insp123 --section="Living Room"`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id, _ := cmd.Flags().GetString("id")
-		if id == "" {
-			return fmt.Errorf("--id is required")
-		}
-		if err := models.ValidateID("id", id); err != nil {
+		id, err := requireFlagID(cmd, "id")
+		if err != nil {
 			return err
 		}
 		section, _ := cmd.Flags().GetString("section")
@@ -564,11 +540,8 @@ var inspectionsDuplicateSectionCmd = &cobra.Command{
 	Short:   "Duplicate a section in an inspection",
 	Example: `  hppycli inspections duplicate-section --id=insp123 --section="Bedroom 1"`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id, _ := cmd.Flags().GetString("id")
-		if id == "" {
-			return fmt.Errorf("--id is required")
-		}
-		if err := models.ValidateID("id", id); err != nil {
+		id, err := requireFlagID(cmd, "id")
+		if err != nil {
 			return err
 		}
 		section, _ := cmd.Flags().GetString("section")
@@ -592,11 +565,8 @@ var inspectionsRenameSectionCmd = &cobra.Command{
 	Short:   "Rename a section in an inspection",
 	Example: `  hppycli inspections rename-section --id=insp123 --section="Bedroom 1" --new-name="Master Bedroom"`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id, _ := cmd.Flags().GetString("id")
-		if id == "" {
-			return fmt.Errorf("--id is required")
-		}
-		if err := models.ValidateID("id", id); err != nil {
+		id, err := requireFlagID(cmd, "id")
+		if err != nil {
 			return err
 		}
 		section, _ := cmd.Flags().GetString("section")
@@ -606,6 +576,9 @@ var inspectionsRenameSectionCmd = &cobra.Command{
 		newName, _ := cmd.Flags().GetString("new-name")
 		if newName == "" {
 			return fmt.Errorf("--new-name is required")
+		}
+		if err := models.ValidateFreeText("new-name", newName); err != nil {
+			return err
 		}
 
 		insp, err := apiClient.InspectionRenameSection(cmd.Context(), models.InspectionRenameSectionInput{
@@ -625,11 +598,8 @@ var inspectionsAddItemCmd = &cobra.Command{
 	Short:   "Add an item to a section in an inspection",
 	Example: `  hppycli inspections add-item --id=insp123 --section="Kitchen" --name="Dishwasher" --rating-group-id=rg456`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id, _ := cmd.Flags().GetString("id")
-		if id == "" {
-			return fmt.Errorf("--id is required")
-		}
-		if err := models.ValidateID("id", id); err != nil {
+		id, err := requireFlagID(cmd, "id")
+		if err != nil {
 			return err
 		}
 		section, _ := cmd.Flags().GetString("section")
@@ -639,6 +609,9 @@ var inspectionsAddItemCmd = &cobra.Command{
 		name, _ := cmd.Flags().GetString("name")
 		if name == "" {
 			return fmt.Errorf("--name is required")
+		}
+		if err := models.ValidateFreeText("name", name); err != nil {
+			return err
 		}
 		ratingGroupID, _ := cmd.Flags().GetString("rating-group-id")
 		if ratingGroupID == "" {
@@ -655,6 +628,9 @@ var inspectionsAddItemCmd = &cobra.Command{
 			RatingGroupID: ratingGroupID,
 		}
 		if v, _ := cmd.Flags().GetString("info"); v != "" {
+			if err := models.ValidateFreeText("info", v); err != nil {
+				return err
+			}
 			input.Info = v
 		}
 
@@ -671,11 +647,8 @@ var inspectionsDeleteItemCmd = &cobra.Command{
 	Short:   "Delete an item from a section in an inspection",
 	Example: `  hppycli inspections delete-item --id=insp123 --section="Kitchen" --item="Dishwasher"`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id, _ := cmd.Flags().GetString("id")
-		if id == "" {
-			return fmt.Errorf("--id is required")
-		}
-		if err := models.ValidateID("id", id); err != nil {
+		id, err := requireFlagID(cmd, "id")
+		if err != nil {
 			return err
 		}
 		section, _ := cmd.Flags().GetString("section")
@@ -707,11 +680,8 @@ var inspectionsAddItemPhotoCmd = &cobra.Command{
 	Short:   "Add a photo to an inspection item (returns signed upload URL)",
 	Example: `  hppycli inspections add-item-photo --id=insp123 --section="Kitchen" --item="Sink" --mime-type=image/jpeg`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id, _ := cmd.Flags().GetString("id")
-		if id == "" {
-			return fmt.Errorf("--id is required")
-		}
-		if err := models.ValidateID("id", id); err != nil {
+		id, err := requireFlagID(cmd, "id")
+		if err != nil {
 			return err
 		}
 		section, _ := cmd.Flags().GetString("section")
@@ -754,11 +724,8 @@ var inspectionsRemoveItemPhotoCmd = &cobra.Command{
 	Short:   "Remove a photo from an inspection item",
 	Example: `  hppycli inspections remove-item-photo --id=insp123 --photo-id=ph456 --section="Kitchen" --item="Sink"`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id, _ := cmd.Flags().GetString("id")
-		if id == "" {
-			return fmt.Errorf("--id is required")
-		}
-		if err := models.ValidateID("id", id); err != nil {
+		id, err := requireFlagID(cmd, "id")
+		if err != nil {
 			return err
 		}
 		photoID, _ := cmd.Flags().GetString("photo-id")
@@ -798,11 +765,8 @@ var inspectionsMoveItemPhotoCmd = &cobra.Command{
 	Short:   "Move a photo between items in an inspection",
 	Example: `  hppycli inspections move-item-photo --id=insp123 --photo-id=ph456 --from-section="Kitchen" --from-item="Sink" --to-section="Bathroom" --to-item="Faucet"`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id, _ := cmd.Flags().GetString("id")
-		if id == "" {
-			return fmt.Errorf("--id is required")
-		}
-		if err := models.ValidateID("id", id); err != nil {
+		id, err := requireFlagID(cmd, "id")
+		if err != nil {
 			return err
 		}
 		photoID, _ := cmd.Flags().GetString("photo-id")
@@ -849,11 +813,8 @@ var inspectionsSendToGuestCmd = &cobra.Command{
 	Short:   "Send an inspection to a guest via email",
 	Example: `  hppycli inspections send-to-guest --id=insp123 --email=guest@example.com --name="Jane Doe"`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id, _ := cmd.Flags().GetString("id")
-		if id == "" {
-			return fmt.Errorf("--id is required")
-		}
-		if err := models.ValidateID("id", id); err != nil {
+		id, err := requireFlagID(cmd, "id")
+		if err != nil {
 			return err
 		}
 		email, _ := cmd.Flags().GetString("email")

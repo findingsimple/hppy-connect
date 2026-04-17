@@ -27,6 +27,12 @@ type AssignableInput struct {
 }
 
 // WorkOrderSetStatusAndSubStatusInput sets both status and sub-status.
+//
+// Wire-key casing: "Status" and "SubStatus" are capitalised by design — the
+// HappyCo GraphQL schema declares these as PascalCase fields on this specific
+// input type (verified at runtime; see .scratch/API Runtime Findings.md).
+// Do not "fix" to lowercase — the API will silently reject the mutation.
+// Covered by TestModelInputJSONWireKeyAnomalies.
 type WorkOrderSetStatusAndSubStatusInput struct {
 	WorkOrderID string                  `json:"workOrderId"`
 	Status      WorkOrderStatusInput    `json:"Status"`
@@ -65,6 +71,10 @@ type WorkOrderAddAttachmentInput struct {
 // --- Inspection Inputs ---
 
 // InspectionCreateInput is the input for creating a new inspection.
+//
+// Wire-key casing: "assignedToID" uses capital ID by design — the HappyCo
+// GraphQL schema is inconsistent across input types (most use "assigneeId"
+// with lowercase d). Do not normalise. Covered by TestModelInputJSONWireKeyAnomalies.
 type InspectionCreateInput struct {
 	LocationID   string `json:"locationId"`
 	TemplateID   string `json:"templateId"`
@@ -166,6 +176,12 @@ type InspectionDeleteItemInput struct {
 }
 
 // InspectionAddItemPhotoInput adds a photo to an inspection item.
+//
+// Wire-key casing: "inspectionID" uses capital ID by design — the HappyCo
+// GraphQL schema declares this field with capital ID on this specific input
+// type, while sibling photo inputs (Remove, Move) use lowercase "inspectionId".
+// Verified at runtime. Do not normalise — the API silently drops the variable
+// and fails the mutation. Covered by TestModelInputJSONWireKeyAnomalies.
 type InspectionAddItemPhotoInput struct {
 	InspectionID string `json:"inspectionID"`
 	SectionName  string `json:"sectionName"`

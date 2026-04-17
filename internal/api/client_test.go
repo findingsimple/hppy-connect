@@ -1764,6 +1764,26 @@ func TestPaginationStuckCursorDetected(t *testing.T) {
 	assert.Contains(t, err.Error(), "pagination stuck")
 }
 
+// TestPaginationPageCeilingTrips verifies that pagination stops when the page
+// count ceiling is reached, even if the per-page edge count is zero (so the
+// item ceiling never trips). Defends against the malicious-server case where
+// hasNextPage=true and the cursor advances on every page but no items arrive.
+func TestPaginationPageCeilingTrips(t *testing.T) {
+	var pagesFetched int32
+	_, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		n := atomic.AddInt32(&pagesFetched, 1)
+		// Zero edges, hasNextPage=true, advancing cursor each page.
+		json.NewEncoder(w).Encode(propertiesPage(0, 0, true, fmt.Sprintf("cursor-%d", n)))
+	})
+
+	items, _, err := c.ListProperties(context.Background(), models.ListOptions{Limit: -1})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "pagination ceiling")
+	assert.Empty(t, items, "no items expected when ceiling trips with zero-edge pages")
+	assert.Equal(t, int32(hardMaxPages), atomic.LoadInt32(&pagesFetched),
+		"should fetch exactly hardMaxPages before tripping the ceiling")
+}
+
 // --- Null Data Guard ---
 
 func TestNullDataReturnsError(t *testing.T) {
@@ -3098,4 +3118,117 @@ func TestDoMutationIdempotentRetriesOnTransient500(t *testing.T) {
 	assert.Contains(t, string(result), "456")
 	// Should have retried: 2 failures + 1 success = 3
 	assert.Equal(t, int32(3), atomic.LoadInt32(&requestCount))
+}
+
+// TestDoMutationDestructiveIdempotent_NotFoundAfterTransientReturnsAlreadyApplied
+// verifies that destructive mutations (Archive/Delete/Expire/Revoke) return
+// ErrAlreadyApplied (rather than nil) when a "not found" error follows a
+// transient failure. The previous attempt likely committed before the
+// transient error was reported. Returning a sentinel error (not nil) prevents
+// callers from surfacing the zero-value result struct as if it were real data.
+func TestDoMutationDestructiveIdempotent_NotFoundAfterTransientReturnsAlreadyApplied(t *testing.T) {
+	var requestCount int32
+	srv, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		count := atomic.AddInt32(&requestCount, 1)
+		if count == 1 {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		// Second attempt: server says "not found" because the first attempt
+		// already committed.
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"errors": []map[string]interface{}{{"message": "Resource not found"}},
+		})
+	})
+	_ = srv
+
+	var result json.RawMessage
+	err := c.doMutationDestructiveIdempotent(context.Background(), "mutation { archive { id } }", nil, &result)
+	require.Error(t, err, "not-found after transient must surface as ErrAlreadyApplied so callers don't return zero-value entities")
+	require.ErrorIs(t, err, ErrAlreadyApplied)
+	assert.Equal(t, int32(2), atomic.LoadInt32(&requestCount))
+}
+
+// TestDoMutationDestructiveIdempotent_AlreadyAppliedSurvivesMultipleTransients
+// covers the chain 5xx → 5xx → not-found, exercising the multi-transient
+// retry path with synthesis at the end.
+func TestDoMutationDestructiveIdempotent_AlreadyAppliedSurvivesMultipleTransients(t *testing.T) {
+	var requestCount int32
+	srv, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		count := atomic.AddInt32(&requestCount, 1)
+		if count <= 2 {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"errors": []map[string]interface{}{{"message": "already archived"}},
+		})
+	})
+	_ = srv
+
+	var result json.RawMessage
+	err := c.doMutationDestructiveIdempotent(context.Background(), "mutation { archive { id } }", nil, &result)
+	require.ErrorIs(t, err, ErrAlreadyApplied)
+	assert.Equal(t, int32(3), atomic.LoadInt32(&requestCount))
+}
+
+// TestDoMutationDestructiveIdempotent_NotFoundOnFirstAttemptIsError verifies
+// the synthesised-success path does NOT fire for a true "not found" — the
+// transient flag is required.
+func TestDoMutationDestructiveIdempotent_NotFoundOnFirstAttemptIsError(t *testing.T) {
+	var requestCount int32
+	srv, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&requestCount, 1)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"errors": []map[string]interface{}{{"message": "Resource not found"}},
+		})
+	})
+	_ = srv
+
+	var result json.RawMessage
+	err := c.doMutationDestructiveIdempotent(context.Background(), "mutation { archive { id } }", nil, &result)
+	require.Error(t, err, "not-found on first attempt must surface — there was no prior transient failure")
+	assert.Equal(t, int32(1), atomic.LoadInt32(&requestCount))
+}
+
+// TestDoMutationDestructiveIdempotent_HappyPath verifies normal success
+// path is unchanged.
+func TestDoMutationDestructiveIdempotent_HappyPath(t *testing.T) {
+	var requestCount int32
+	srv, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&requestCount, 1)
+		json.NewEncoder(w).Encode(gqlResponse(map[string]interface{}{
+			"archive": map[string]interface{}{"id": "wo-1"},
+		}))
+	})
+	_ = srv
+
+	var result json.RawMessage
+	err := c.doMutationDestructiveIdempotent(context.Background(), "mutation { archive { id } }", nil, &result)
+	require.NoError(t, err)
+	assert.Equal(t, int32(1), atomic.LoadInt32(&requestCount))
+}
+
+func TestIsLikelyAlreadyAppliedError(t *testing.T) {
+	cases := []struct {
+		msg  string
+		want bool
+	}{
+		{"Resource not found", true},
+		{"resource NOT FOUND", true},
+		{"work order does not exist", true},
+		{"no such inspection", true},
+		{"already archived", true},
+		{"already deleted", true},
+		{"already expired", true},
+		{"already removed", true},
+		{"Validation failed: name is required", false},
+		{"Permission denied", false},
+		{"unauthorized", false},
+		{"", false},
+	}
+	for _, c := range cases {
+		got := isLikelyAlreadyAppliedError(c.msg)
+		assert.Equal(t, c.want, got, "msg=%q", c.msg)
+	}
 }

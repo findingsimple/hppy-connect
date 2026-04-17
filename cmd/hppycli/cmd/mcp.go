@@ -22,19 +22,46 @@ var mcpSetupCmd = &cobra.Command{
 	Short: "Generate MCP server configuration for AI clients",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		client, _ := cmd.Flags().GetString("client")
+		apply, _ := cmd.Flags().GetBool("apply")
 
 		binaryPath := detectMcpBinary()
 		configPath := resolveConfigPath()
 
 		switch client {
 		case "claude":
+			if apply {
+				return applyClaudeConfig(cmd, binaryPath, configPath)
+			}
 			return printClaudeConfig(os.Stdout, binaryPath, configPath)
+		case "claude-desktop":
+			if apply {
+				return fmt.Errorf("--apply is not supported for claude-desktop (config is JSON, not a CLI command); paste the printed JSON manually")
+			}
+			return printClaudeDesktopConfig(os.Stdout, binaryPath, configPath)
 		case "cursor":
+			if apply {
+				return fmt.Errorf("--apply is not supported for cursor (config is JSON, not a CLI command); paste the printed JSON manually")
+			}
 			return printCursorConfig(os.Stdout, binaryPath, configPath)
 		default:
-			return fmt.Errorf("unsupported --client %q: valid options are claude, cursor", client)
+			return fmt.Errorf("unsupported --client %q: valid options are claude, claude-desktop, cursor", client)
 		}
 	},
+}
+
+// applyClaudeConfig executes the `claude mcp add` command directly so the user
+// doesn't have to copy-paste. Requires the `claude` CLI to be on PATH.
+func applyClaudeConfig(cmd *cobra.Command, binaryPath, configPath string) error {
+	claudePath, err := exec.LookPath("claude")
+	if err != nil {
+		return fmt.Errorf("--apply requires the `claude` CLI on your PATH (https://docs.claude.com/en/docs/claude-code): %w", err)
+	}
+	args := []string{"mcp", "add", "--transport", "stdio", "--scope", "user", "hppymcp", "--", binaryPath, "--config", configPath}
+	c := exec.CommandContext(cmd.Context(), claudePath, args...)
+	c.Stdout = os.Stdout
+	c.Stderr = os.Stderr
+	fmt.Fprintf(os.Stdout, "Running: %s %s\n\n", claudePath, strings.Join(args, " "))
+	return c.Run()
 }
 
 func detectMcpBinary() string {
@@ -84,7 +111,38 @@ func printClaudeConfig(w io.Writer, binaryPath, configPath string) error {
 	fmt.Fprintln(w)
 	fmt.Fprintf(w, "  claude mcp add --transport stdio --scope user hppymcp -- %s --config %s\n", shellQuote(binaryPath), shellQuote(configPath))
 	fmt.Fprintln(w)
-	fmt.Fprintln(w, "Then restart Claude Code and ask \"What HappyCo account am I connected to?\" to verify.")
+	fmt.Fprintln(w, "Or re-run with --apply to execute it for you:")
+	fmt.Fprintln(w, "  hppycli mcp setup --client claude --apply")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Then restart Claude Code and ask Claude to call the `get_account` tool to verify.")
+	return nil
+}
+
+func printClaudeDesktopConfig(w io.Writer, binaryPath, configPath string) error {
+	cfg := map[string]interface{}{
+		"mcpServers": map[string]interface{}{
+			"hppymcp": map[string]interface{}{
+				"command": binaryPath,
+				"args":    []string{"--config", configPath},
+			},
+		},
+	}
+
+	out, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshalling config JSON: %w", err)
+	}
+
+	fmt.Fprintln(w, "Add the following to your Claude Desktop config")
+	fmt.Fprintln(w, "(~/Library/Application Support/Claude/claude_desktop_config.json on macOS,")
+	fmt.Fprintln(w, " %APPDATA%\\Claude\\claude_desktop_config.json on Windows):")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, string(out))
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Then restart Claude Desktop. The hppymcp tools will appear in the MCP picker.")
+	fmt.Fprintln(w, "Note: Claude Desktop launches MCP servers outside your shell, so the config")
+	fmt.Fprintln(w, "file must contain email, password, and account_id directly — environment")
+	fmt.Fprintln(w, "variables won't be visible to the spawned process.")
 	return nil
 }
 
@@ -111,7 +169,8 @@ func printCursorConfig(w io.Writer, binaryPath, configPath string) error {
 }
 
 func init() {
-	mcpSetupCmd.Flags().String("client", "claude", "AI client: claude, cursor")
+	mcpSetupCmd.Flags().String("client", "claude", "AI client: claude (Claude Code CLI), claude-desktop, cursor")
+	mcpSetupCmd.Flags().Bool("apply", false, "for --client=claude only: actually run `claude mcp add` instead of printing it")
 	mcpCmd.AddCommand(mcpSetupCmd)
 	rootCmd.AddCommand(mcpCmd)
 }

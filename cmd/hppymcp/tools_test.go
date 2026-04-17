@@ -920,6 +920,25 @@ func toolText(t *testing.T, result *mcp.CallToolResult) string {
 // Tool Tests
 // ---------------------------------------------------------------------------
 
+// TestRegisteredToolCount pins the total number of MCP tools registered.
+// The README claims a specific count (currently 77 = 6 read + 71 mutation).
+// If you add or remove a tool, update this count AND the README claims at:
+//   - README.md headline ("77 tools across 8 domains")
+//   - README.md "MCP Tools (N total: ...)" section header
+//   - README.md "Mutation Tools (N total)" subsection header
+func TestRegisteredToolCount(t *testing.T) {
+	mock := &mockClient{}
+	cs := newTestServer(t, mock)
+
+	tools, err := cs.ListTools(context.Background(), nil)
+	require.NoError(t, err)
+
+	// Total registered tools. If this number changes, update README.
+	const expectedTotal = 77
+	assert.Equal(t, expectedTotal, len(tools.Tools),
+		"registered tool count drifted from README (%d). Update README.md headline AND section headers.", expectedTotal)
+}
+
 func TestToolGetAccount(t *testing.T) {
 	mock := &mockClient{
 		account: &models.Account{ID: "54522", Name: "Test Account"},
@@ -1265,6 +1284,39 @@ func TestToolListMembers(t *testing.T) {
 		result := callTool(t, cs, "list_members", nil)
 		assert.True(t, result.IsError)
 		assert.Contains(t, toolText(t, result), "api_error")
+	})
+
+	t.Run("emails redacted by default to avoid PII in LLM context", func(t *testing.T) {
+		mock := &mockClient{
+			members: []models.AccountMembership{
+				{IsActive: true, User: &models.User{ID: "u1", Name: "Alice", Email: "alice@example.com"}},
+				{IsActive: true, User: &models.User{ID: "u2", Name: "Bob", Email: "bob@example.com"}},
+			},
+			memberTotal: 2,
+		}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "list_members", nil)
+		require.False(t, result.IsError)
+
+		body := toolText(t, result)
+		assert.NotContains(t, body, "alice@example.com", "email leaked into LLM-visible response")
+		assert.NotContains(t, body, "bob@example.com", "email leaked into LLM-visible response")
+	})
+
+	t.Run("emails included when include_emails=true", func(t *testing.T) {
+		mock := &mockClient{
+			members: []models.AccountMembership{
+				{IsActive: true, User: &models.User{ID: "u1", Name: "Alice", Email: "alice@example.com"}},
+			},
+			memberTotal: 1,
+		}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "list_members", map[string]any{"include_emails": true})
+		require.False(t, result.IsError)
+
+		assert.Contains(t, toolText(t, result), "alice@example.com")
 	})
 }
 
@@ -2494,6 +2546,33 @@ func TestToolInspectionSetDueBy(t *testing.T) {
 		assert.True(t, result.IsError)
 		assert.Contains(t, toolText(t, result), "due_by")
 	})
+
+	t.Run("missing expires rejected", func(t *testing.T) {
+		// Parity with CLI: --expires is explicitly required (CLI fails when not
+		// passed). MCP must not silently default to false.
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "inspection_set_due_by", map[string]any{
+			"inspection_id": "insp-123",
+			"due_by":        "2026-06-01T00:00:00Z",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "expires")
+	})
+
+	t.Run("expires false explicitly", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "inspection_set_due_by", map[string]any{
+			"inspection_id": "insp-123",
+			"due_by":        "2026-06-01T00:00:00Z",
+			"expires":       false,
+		})
+		assert.False(t, result.IsError, "unexpected error: %s", toolText(t, result))
+		assert.False(t, mock.lastInspDueByInput.Expires)
+	})
 }
 
 func TestToolInspectionAddSection(t *testing.T) {
@@ -2911,6 +2990,33 @@ func TestToolInspectionSendToGuest(t *testing.T) {
 		assert.False(t, result.IsError)
 		assert.Equal(t, "John Doe", mock.lastInspSendToGuestInput.Name)
 		assert.Equal(t, "Please complete this inspection", mock.lastInspSendToGuestInput.Message)
+	})
+
+	// Guest link is a bearer-style capability token; must be redacted from
+	// MCP responses to avoid persisting in LLM conversation logs.
+	t.Run("guest link is redacted from MCP response", func(t *testing.T) {
+		const leakedURL = "https://app.happyco.com/inspect/guest/abc123"
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "inspection_send_to_guest", map[string]any{
+			"inspection_id": "insp-123",
+			"email":         "guest@example.com",
+		})
+		require.False(t, result.IsError, "unexpected error: %s", toolText(t, result))
+
+		body := toolText(t, result)
+		assert.NotContains(t, body, leakedURL, "guest URL leaked into MCP response — bearer-style capability must be redacted")
+		assert.Contains(t, body, "redacted", "response should mark guest link as redacted")
+
+		var link models.InspectionGuestLink
+		require.NoError(t, json.Unmarshal([]byte(body), &link))
+		assert.Equal(t, "insp-123", link.InspectionID)
+		assert.NotEqual(t, leakedURL, link.Link)
+	})
+
+	t.Run("redactGuestLink tolerates nil", func(t *testing.T) {
+		require.NotPanics(t, func() { redactGuestLink(nil) })
 	})
 }
 
@@ -4992,6 +5098,56 @@ func TestToolWebhookUpdate(t *testing.T) {
 		})
 		assert.True(t, result.IsError)
 		assert.Contains(t, toolText(t, result), "at least one")
+	})
+}
+
+// TestWebhookSigningSecretRedaction asserts that no MCP tool returning a
+// *models.Webhook ever exposes the SigningSecret to the LLM. The mock returns
+// "whsec_test123"; if any tool path ever leaks it, the test fails.
+func TestWebhookSigningSecretRedaction(t *testing.T) {
+	const leakedSecret = "whsec_test123"
+
+	t.Run("webhook_create response is redacted", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "webhook_create", map[string]any{
+			"subscriber_id":   "acct-1",
+			"subscriber_type": "ACCOUNT",
+			"url":             "https://example.com/webhook",
+		})
+		require.False(t, result.IsError, "unexpected error: %s", toolText(t, result))
+
+		body := toolText(t, result)
+		assert.NotContains(t, body, leakedSecret, "webhook_create leaked signing secret to MCP response")
+		assert.Contains(t, body, "redacted", "webhook_create response should mark signing secret as redacted")
+
+		var webhook models.Webhook
+		require.NoError(t, json.Unmarshal([]byte(body), &webhook))
+		assert.NotEqual(t, leakedSecret, webhook.SigningSecret)
+	})
+
+	t.Run("webhook_update response is redacted", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "webhook_update", map[string]any{
+			"id":     "wh-1",
+			"status": "ENABLED",
+		})
+		require.False(t, result.IsError, "unexpected error: %s", toolText(t, result))
+
+		body := toolText(t, result)
+		assert.NotContains(t, body, leakedSecret, "webhook_update leaked signing secret to MCP response")
+		assert.Contains(t, body, "redacted", "webhook_update response should mark signing secret as redacted")
+
+		var webhook models.Webhook
+		require.NoError(t, json.Unmarshal([]byte(body), &webhook))
+		assert.NotEqual(t, leakedSecret, webhook.SigningSecret)
+	})
+
+	t.Run("redactWebhookSecret tolerates nil", func(t *testing.T) {
+		require.NotPanics(t, func() { redactWebhookSecret(nil) })
 	})
 }
 

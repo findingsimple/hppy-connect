@@ -91,6 +91,12 @@ func parseDate(s string) (time.Time, error) {
 }
 
 // validateLimit checks that a limit value is non-negative.
+//
+// The CLI does not cap upper-bound limits: the API client's hardMaxItems
+// (50,000) is the effective ceiling. This differs from the MCP server's
+// stricter 10,000 cap (see cmd/hppymcp/tools.go maxLimit) because CLI users
+// asking for tens of thousands of items have full control over the output;
+// LLMs do not.
 func validateLimit(limit int) error {
 	if limit < 0 {
 		return fmt.Errorf("--limit must be a non-negative integer")
@@ -258,20 +264,25 @@ func resolveAccountID(cmd *cobra.Command) (string, error) {
 }
 
 // parseIDList splits a comma-separated string into validated IDs.
-// Returns an error if any ID fails validation. Empty segments are skipped.
+// Thin wrapper around models.ParseIDList — kept so existing call sites don't
+// need to import models in their files.
 func parseIDList(flagName, raw string) ([]string, error) {
-	var ids []string
-	for _, p := range strings.Split(raw, ",") {
-		id := strings.TrimSpace(p)
-		if id == "" {
-			continue
-		}
-		if err := models.ValidateID(flagName, id); err != nil {
-			return nil, err
-		}
-		ids = append(ids, id)
+	return models.ParseIDList(flagName, raw)
+}
+
+// requireFlagID reads a string flag, asserts it's non-empty, and validates it
+// as an ID. Returns the value and a "--<flag> is required" or validation error.
+// Mirrors the MCP server's requireID() helper to collapse the ~40 sites of
+// "id is required + validate" boilerplate across CLI command handlers.
+func requireFlagID(cmd *cobra.Command, flag string) (string, error) {
+	v, _ := cmd.Flags().GetString(flag)
+	if v == "" {
+		return "", fmt.Errorf("--%s is required", flag)
 	}
-	return ids, nil
+	if err := models.ValidateID(flag, v); err != nil {
+		return "", err
+	}
+	return v, nil
 }
 
 // printMutationResult outputs a mutation result as indented JSON to the given writer.

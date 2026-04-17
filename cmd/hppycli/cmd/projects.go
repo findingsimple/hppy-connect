@@ -92,11 +92,8 @@ var projectsSetAssigneeCmd = &cobra.Command{
 	Short:   "Set or clear the project assignee",
 	Example: `  hppycli projects set-assignee --id=proj123 --assignee-id=user456`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id, _ := cmd.Flags().GetString("id")
-		if id == "" {
-			return fmt.Errorf("--id is required")
-		}
-		if err := models.ValidateID("id", id); err != nil {
+		id, err := requireFlagID(cmd, "id")
+		if err != nil {
 			return err
 		}
 
@@ -124,11 +121,8 @@ var projectsSetNotesCmd = &cobra.Command{
 	Short:   "Set the project notes",
 	Example: `  hppycli projects set-notes --id=proj123 --notes="Updated project notes"`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id, _ := cmd.Flags().GetString("id")
-		if id == "" {
-			return fmt.Errorf("--id is required")
-		}
-		if err := models.ValidateID("id", id); err != nil {
+		id, err := requireFlagID(cmd, "id")
+		if err != nil {
 			return err
 		}
 		notes, _ := cmd.Flags().GetString("notes")
@@ -152,11 +146,8 @@ var projectsSetDueAtCmd = &cobra.Command{
 	Short:   "Set the project due date",
 	Example: `  hppycli projects set-due-at --id=proj123 --due-at=2026-06-01T00:00:00Z`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id, _ := cmd.Flags().GetString("id")
-		if id == "" {
-			return fmt.Errorf("--id is required")
-		}
-		if err := models.ValidateID("id", id); err != nil {
+		id, err := requireFlagID(cmd, "id")
+		if err != nil {
 			return err
 		}
 		dueAt, _ := cmd.Flags().GetString("due-at")
@@ -180,11 +171,8 @@ var projectsSetStartAtCmd = &cobra.Command{
 	Short:   "Set the project start date",
 	Example: `  hppycli projects set-start-at --id=proj123 --start-at=2026-05-01T00:00:00Z`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id, _ := cmd.Flags().GetString("id")
-		if id == "" {
-			return fmt.Errorf("--id is required")
-		}
-		if err := models.ValidateID("id", id); err != nil {
+		id, err := requireFlagID(cmd, "id")
+		if err != nil {
 			return err
 		}
 		startAt, _ := cmd.Flags().GetString("start-at")
@@ -208,11 +196,8 @@ var projectsSetPriorityCmd = &cobra.Command{
 	Short:   "Set the project priority",
 	Example: `  hppycli projects set-priority --id=proj123 --priority=URGENT`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id, _ := cmd.Flags().GetString("id")
-		if id == "" {
-			return fmt.Errorf("--id is required")
-		}
-		if err := models.ValidateID("id", id); err != nil {
+		id, err := requireFlagID(cmd, "id")
+		if err != nil {
 			return err
 		}
 		priority, _ := cmd.Flags().GetString("priority")
@@ -237,11 +222,8 @@ var projectsSetOnHoldCmd = &cobra.Command{
 	Short:   "Set the project on-hold status",
 	Example: `  hppycli projects set-on-hold --id=proj123 --on-hold=true`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id, _ := cmd.Flags().GetString("id")
-		if id == "" {
-			return fmt.Errorf("--id is required")
-		}
-		if err := models.ValidateID("id", id); err != nil {
+		id, err := requireFlagID(cmd, "id")
+		if err != nil {
 			return err
 		}
 		if !cmd.Flags().Changed("on-hold") {
@@ -262,11 +244,8 @@ var projectsSetAvailabilityTargetAtCmd = &cobra.Command{
 	Short:   "Set the project availability target date",
 	Example: `  hppycli projects set-availability-target-at --id=proj123 --availability-target-at=2026-05-15T00:00:00Z`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id, _ := cmd.Flags().GetString("id")
-		if id == "" {
-			return fmt.Errorf("--id is required")
-		}
-		if err := models.ValidateID("id", id); err != nil {
+		id, err := requireFlagID(cmd, "id")
+		if err != nil {
 			return err
 		}
 		v, _ := cmd.Flags().GetString("availability-target-at")

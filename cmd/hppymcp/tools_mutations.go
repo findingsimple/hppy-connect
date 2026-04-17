@@ -77,18 +77,20 @@ type AddWorkOrderTimeMCPInput struct {
 }
 
 type SetWorkOrderPermissionToEnterMCPInput struct {
-	WorkOrderID       string `json:"work_order_id" jsonschema:"required,The work order ID"`
-	PermissionToEnter bool   `json:"permission_to_enter" jsonschema:"required,Whether permission to enter has been granted"`
+	WorkOrderID string `json:"work_order_id" jsonschema:"required,The work order ID"`
+	// *bool (not bool) so omission is detectable. A plain bool defaults to false
+	// silently — for state-flip flags that's a security-meaningful default.
+	PermissionToEnter *bool `json:"permission_to_enter" jsonschema:"required,Whether permission to enter has been granted (true or false)"`
 }
 
 type SetWorkOrderResidentApprovedEntryMCPInput struct {
 	WorkOrderID           string `json:"work_order_id" jsonschema:"required,The work order ID"`
-	ResidentApprovedEntry bool   `json:"resident_approved_entry" jsonschema:"required,Whether the resident has approved entry"`
+	ResidentApprovedEntry *bool  `json:"resident_approved_entry" jsonschema:"required,Whether the resident has approved entry (true or false)"`
 }
 
 type SetWorkOrderUnitEnteredMCPInput struct {
 	WorkOrderID string `json:"work_order_id" jsonschema:"required,The work order ID"`
-	UnitEntered bool   `json:"unit_entered" jsonschema:"required,Whether the unit has been entered"`
+	UnitEntered *bool  `json:"unit_entered" jsonschema:"required,Whether the unit has been entered (true or false)"`
 }
 
 type WorkOrderIDOnlyInput struct {
@@ -216,6 +218,11 @@ func registerWorkOrderMutationTools(server *mcp.Server, client apiClient, debug 
 				subUpper = strings.ToUpper(input.SubStatus)
 				if !models.ValidWorkOrderSubStatuses[subUpper] {
 					return toolInputError("sub_status must be CANCELLED or UNKNOWN"), nil, nil
+				}
+			}
+			if input.Comment != "" {
+				if err := models.ValidateFreeText("comment", input.Comment); err != nil {
+					return toolInputError(err.Error()), nil, nil
 				}
 			}
 
@@ -450,11 +457,14 @@ func registerWorkOrderMutationTools(server *mcp.Server, client apiClient, debug 
 			if errResult := requireID("work_order_id", input.WorkOrderID); errResult != nil {
 				return errResult, nil, nil
 			}
+			if input.PermissionToEnter == nil {
+				return toolInputError("permission_to_enter is required (true or false)"), nil, nil
+			}
 
 			ctx, cancel := context.WithTimeout(ctx, toolTimeout)
 			defer cancel()
 
-			wo, err := client.WorkOrderSetPermissionToEnter(ctx, input.WorkOrderID, input.PermissionToEnter)
+			wo, err := client.WorkOrderSetPermissionToEnter(ctx, input.WorkOrderID, *input.PermissionToEnter)
 			if err != nil {
 				return toolError(err), nil, nil
 			}
@@ -472,11 +482,14 @@ func registerWorkOrderMutationTools(server *mcp.Server, client apiClient, debug 
 			if errResult := requireID("work_order_id", input.WorkOrderID); errResult != nil {
 				return errResult, nil, nil
 			}
+			if input.ResidentApprovedEntry == nil {
+				return toolInputError("resident_approved_entry is required (true or false)"), nil, nil
+			}
 
 			ctx, cancel := context.WithTimeout(ctx, toolTimeout)
 			defer cancel()
 
-			wo, err := client.WorkOrderSetResidentApprovedEntry(ctx, input.WorkOrderID, input.ResidentApprovedEntry)
+			wo, err := client.WorkOrderSetResidentApprovedEntry(ctx, input.WorkOrderID, *input.ResidentApprovedEntry)
 			if err != nil {
 				return toolError(err), nil, nil
 			}
@@ -494,11 +507,14 @@ func registerWorkOrderMutationTools(server *mcp.Server, client apiClient, debug 
 			if errResult := requireID("work_order_id", input.WorkOrderID); errResult != nil {
 				return errResult, nil, nil
 			}
+			if input.UnitEntered == nil {
+				return toolInputError("unit_entered is required (true or false)"), nil, nil
+			}
 
 			ctx, cancel := context.WithTimeout(ctx, toolTimeout)
 			defer cancel()
 
-			wo, err := client.WorkOrderSetUnitEntered(ctx, input.WorkOrderID, input.UnitEntered)
+			wo, err := client.WorkOrderSetUnitEntered(ctx, input.WorkOrderID, *input.UnitEntered)
 			if err != nil {
 				return toolError(err), nil, nil
 			}
@@ -739,7 +755,10 @@ type InspectionSetAssigneeMCPInput struct {
 type InspectionSetDueByMCPInput struct {
 	InspectionID string `json:"inspection_id" jsonschema:"required,The inspection ID"`
 	DueBy        string `json:"due_by" jsonschema:"required,Due date in ISO 8601 format"`
-	Expires      bool   `json:"expires" jsonschema:"required,Whether the inspection expires at the due date"`
+	// Expires is *bool (not bool) so we can detect omission. The default-false
+	// of a plain bool would silently set expires=false; the CLI requires the
+	// flag explicitly and the MCP must match.
+	Expires *bool `json:"expires" jsonschema:"required,Whether the inspection expires at the due date (true or false)"`
 }
 
 type InspectionSetScheduledForMCPInput struct {
@@ -867,7 +886,7 @@ type SetProjectPriorityMCPInput struct {
 
 type SetProjectOnHoldMCPInput struct {
 	ProjectID string `json:"project_id" jsonschema:"required,The project ID"`
-	OnHold    bool   `json:"on_hold" jsonschema:"required,Whether the project is on hold"`
+	OnHold    *bool  `json:"on_hold" jsonschema:"required,Whether the project is on hold (true or false)"`
 }
 
 type ProjectSetAvailabilityTargetAtMCPInput struct {
@@ -931,7 +950,7 @@ type PropertyUserAccessMCPInput struct {
 
 type PropertySetAccountWideAccessMCPInput struct {
 	PropertyID        string `json:"property_id" jsonschema:"required,The property ID"`
-	AccountWideAccess bool   `json:"account_wide_access" jsonschema:"required,Whether all users in the account can access this property"`
+	AccountWideAccess *bool  `json:"account_wide_access" jsonschema:"required,Whether all users in the account can access this property (true or false)"`
 }
 
 type UserPropertyAccessMCPInput struct {
@@ -1221,6 +1240,9 @@ func registerInspectionMutationTools(server *mcp.Server, client apiClient, debug
 			if err := models.ValidateTimestamp("due_by", input.DueBy); err != nil {
 				return toolInputError(err.Error()), nil, nil
 			}
+			if input.Expires == nil {
+				return toolInputError("expires is required (true or false)"), nil, nil
+			}
 
 			ctx, cancel := context.WithTimeout(ctx, toolTimeout)
 			defer cancel()
@@ -1228,7 +1250,7 @@ func registerInspectionMutationTools(server *mcp.Server, client apiClient, debug
 			insp, err := client.InspectionSetDueBy(ctx, models.InspectionSetDueByInput{
 				InspectionID: input.InspectionID,
 				DueBy:        input.DueBy,
-				Expires:      input.Expires,
+				Expires:      *input.Expires,
 			})
 			if err != nil {
 				return toolError(err), nil, nil
@@ -1780,10 +1802,18 @@ func registerInspectionMutationTools(server *mcp.Server, client apiClient, debug
 			ctx, cancel := context.WithTimeout(ctx, toolTimeout)
 			defer cancel()
 
+			// Gate concurrent email-sending mutations to prevent fan-out
+			// duplicate emails from a misbehaving LLM batch.
+			if err := acquireSem(ctx, emailSem); err != nil {
+				return toolError(err), nil, nil
+			}
+			defer releaseSem(emailSem)
+
 			result, err := client.InspectionSendToGuest(ctx, apiInput)
 			if err != nil {
 				return toolError(err), nil, nil
 			}
+			redactGuestLink(result)
 			return toolJSON(result)
 		}),
 	)
@@ -2012,11 +2042,14 @@ func registerProjectMutationTools(server *mcp.Server, client apiClient, debug bo
 			if errResult := requireID("project_id", input.ProjectID); errResult != nil {
 				return errResult, nil, nil
 			}
+			if input.OnHold == nil {
+				return toolInputError("on_hold is required (true or false)"), nil, nil
+			}
 
 			ctx, cancel := context.WithTimeout(ctx, toolTimeout)
 			defer cancel()
 
-			proj, err := client.ProjectSetOnHold(ctx, input.ProjectID, input.OnHold)
+			proj, err := client.ProjectSetOnHold(ctx, input.ProjectID, *input.OnHold)
 			if err != nil {
 				return toolError(err), nil, nil
 			}
@@ -2054,27 +2087,37 @@ func registerProjectMutationTools(server *mcp.Server, client apiClient, debug bo
 	)
 }
 
-// parseIDList splits a comma-separated ID string and validates each ID.
+// parseIDList wraps models.ParseIDList, converting the error into the MCP
+// tool-result shape.
 func parseIDList(fieldName, csv string) ([]string, *mcp.CallToolResult) {
-	if csv == "" {
-		return nil, toolInputError(fieldName + " is required")
-	}
-	parts := strings.Split(csv, ",")
-	ids := make([]string, 0, len(parts))
-	for _, p := range parts {
-		id := strings.TrimSpace(p)
-		if id == "" {
-			continue
-		}
-		if err := models.ValidateID(fieldName, id); err != nil {
-			return nil, toolInputError(err.Error())
-		}
-		ids = append(ids, id)
-	}
-	if len(ids) == 0 {
-		return nil, toolInputError(fieldName + " is required")
+	ids, err := models.ParseIDList(fieldName, csv)
+	if err != nil {
+		return nil, toolInputError(err.Error())
 	}
 	return ids, nil
+}
+
+// redactWebhookSecret overwrites the SigningSecret field on a webhook before it
+// is returned to the MCP client. Tool responses persist in the LLM context window
+// and conversation logs, so secrets must never appear there. All MCP paths that
+// return *models.Webhook must call this; the CLI path is unaffected.
+func redactWebhookSecret(w *models.Webhook) {
+	if w == nil {
+		return
+	}
+	w.SigningSecret = "[redacted — use CLI for signing secret]"
+}
+
+// redactGuestLink overwrites the bearer-style guest URL on an inspection guest
+// link before it is returned to the MCP client. The URL grants unauthenticated
+// access to the inspection and would otherwise persist in LLM conversation logs.
+// The guest already received the link via the email the API sent — the LLM
+// does not need it for any downstream tool call.
+func redactGuestLink(l *models.InspectionGuestLink) {
+	if l == nil {
+		return
+	}
+	l.Link = "[redacted — guest link sent via email; use CLI to retrieve]"
 }
 
 // registerAccountMutationTools registers all 14 account mutation tools (users, memberships, access).
@@ -2134,9 +2177,21 @@ func registerAccountMutationTools(server *mcp.Server, client apiClient, debug bo
 					return toolInputError(err.Error()), nil, nil
 				}
 			}
+			if input.Phone != "" {
+				if err := models.ValidatePhone(input.Phone); err != nil {
+					return toolInputError(err.Error()), nil, nil
+				}
+			}
 
 			ctx, cancel := context.WithTimeout(ctx, toolTimeout)
 			defer cancel()
+
+			// Gate concurrent email-sending mutations (user_create sends
+			// invitation emails) to prevent fan-out from a misbehaving LLM.
+			if err := acquireSem(ctx, emailSem); err != nil {
+				return toolError(err), nil, nil
+			}
+			defer releaseSem(emailSem)
 
 			user, err := client.UserCreate(ctx, apiInput)
 			if err != nil {
@@ -2238,6 +2293,11 @@ func registerAccountMutationTools(server *mcp.Server, client apiClient, debug bo
 		wrapTool(debug, "user_set_phone", func(ctx context.Context, _ *mcp.CallToolRequest, input SetUserPhoneMCPInput) (*mcp.CallToolResult, any, error) {
 			if errResult := requireID("user_id", input.UserID); errResult != nil {
 				return errResult, nil, nil
+			}
+			if input.Phone != nil {
+				if err := models.ValidatePhone(*input.Phone); err != nil {
+					return toolInputError(err.Error()), nil, nil
+				}
 			}
 
 			ctx, cancel := context.WithTimeout(ctx, toolTimeout)
@@ -2465,13 +2525,16 @@ func registerAccountMutationTools(server *mcp.Server, client apiClient, debug bo
 			if errResult := requireID("property_id", input.PropertyID); errResult != nil {
 				return errResult, nil, nil
 			}
+			if input.AccountWideAccess == nil {
+				return toolInputError("account_wide_access is required (true or false)"), nil, nil
+			}
 
 			ctx, cancel := context.WithTimeout(ctx, toolTimeout)
 			defer cancel()
 
 			result, err := client.PropertySetAccountWideAccess(ctx, models.PropertySetAccountWideAccessInput{
 				PropertyID:        input.PropertyID,
-				AccountWideAccess: input.AccountWideAccess,
+				AccountWideAccess: *input.AccountWideAccess,
 			})
 			if err != nil {
 				return toolError(err), nil, nil
@@ -2764,9 +2827,7 @@ func registerWebhookMutationTools(server *mcp.Server, client apiClient, debug bo
 			if err != nil {
 				return toolError(err), nil, nil
 			}
-			// Redact signing secret — it would otherwise persist in the LLM's
-			// context window and conversation logs.
-			webhook.SigningSecret = "[redacted — use CLI for signing secret]"
+			redactWebhookSecret(webhook)
 			return toolJSON(webhook)
 		}),
 	)
@@ -2823,6 +2884,9 @@ func registerWebhookMutationTools(server *mcp.Server, client apiClient, debug bo
 			if err != nil {
 				return toolError(err), nil, nil
 			}
+			// Defence in depth: webhookFields query selection currently omits
+			// signingSecret, but a future schema change could include it.
+			redactWebhookSecret(webhook)
 			return toolJSON(webhook)
 		}),
 	)

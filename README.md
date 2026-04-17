@@ -6,9 +6,15 @@
 
 **The HappyCo platform, from your terminal and your AI.**
 
-A CLI and MCP server that gives developers and AI assistants full access to the HappyCo External GraphQL API — properties, inspections, work orders, projects, users, roles, webhooks, and more.
+A CLI and [MCP](https://modelcontextprotocol.io) server that gives developers and AI assistants full access to the HappyCo External GraphQL API — properties, inspections, work orders, projects, users, roles, webhooks, and more.
+
+> **What's MCP?** The Model Context Protocol lets AI assistants (Claude Code, Claude Desktop, Cursor, etc.) call external tools. `hppymcp` is one such tool server — it speaks MCP over stdio and exposes HappyCo data and actions to your AI.
+
+> **What's HappyCo?** A property management platform for multifamily housing — operators use it to track properties, units, inspections, and maintenance work orders.
 
 Built during the 2-day HappyCo AI Hackathon (April 2026).
+
+> **Heads up:** You need a HappyCo account with non-SSO admin credentials to use this. SSO accounts can't authenticate via the External GraphQL API. If you don't have credentials, talk to your HappyCo administrator. There's no public sign-up.
 
 [Installation](#installation) | [Getting Started](#quick-start) | [CLI Commands](#cli-commands) | [MCP Server](#mcp-server-setup) | [Architecture](#architecture)
 
@@ -186,6 +192,8 @@ make install
 go install github.com/findingsimple/hppy-connect/cmd/hppycli@latest
 go install github.com/findingsimple/hppy-connect/cmd/hppymcp@latest
 ```
+
+> **Note:** This currently requires the repository to be publicly accessible at `github.com/findingsimple/hppy-connect`. If `go install` fails with "module lookup disabled" or 404, the repo may not be public yet — use the "From source" path above instead.
 
 ## Quick Start
 
@@ -460,22 +468,15 @@ hppycli seed --count=5 --output json --yes
    # Then run the command it outputs, e.g.:
    claude mcp add --transport stdio --scope user hppymcp -- hppymcp --config ~/.hppycli.yaml
    ```
-2. Restart Claude Code. Ask "What HappyCo account am I connected to?" to verify.
+2. Restart Claude Code. Ask Claude to **call the `get_account` tool** to verify (asking "What HappyCo account am I connected to?" might be answered from training data without invoking the tool — being explicit about the tool name forces a real round-trip).
 
 ### Claude Desktop
 
-1. Open your config file at `~/Library/Application Support/Claude/claude_desktop_config.json`
-2. Add the `mcpServers` block:
-   ```json
-   {
-     "mcpServers": {
-       "hppymcp": {
-         "command": "/path/to/hppymcp",
-         "args": ["--config", "/path/to/.hppycli.yaml"]
-       }
-     }
-   }
+1. Generate the config snippet (with your real binary and config paths filled in):
+   ```bash
+   hppycli mcp setup --client claude-desktop
    ```
+2. Paste the JSON it prints into `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or `%APPDATA%\Claude\claude_desktop_config.json` (Windows). If the file already has an `mcpServers` block, merge the `hppymcp` entry into it.
 3. Restart Claude Desktop. The hppymcp tools should appear in the MCP tool picker.
 
 > **Note:** Claude Desktop launches MCP servers outside your shell environment, so `~/.hppycli.yaml` must contain `email`, `password`, and `account_id` directly — environment variables won't be available.
@@ -496,8 +497,8 @@ The server binary (`hppymcp`) runs via stdio transport and reads the same `~/.hp
 Once connected, try asking your AI assistant:
 
 - "List all properties in my HappyCo account"
-- "Show me open work orders for property 225393"
-- "Create a work order for a leaking faucet in unit 4B"
+- "Show me open work orders for property &lt;property-id&gt;" (run `hppycli properties list` to find a real ID, or `hppycli seed --yes` to populate test data)
+- "Create a work order for a leaking faucet in one of my units"
 - "Generate a maintenance report for the last 30 days"
 - "Who are the users in my account and what roles do they have?"
 

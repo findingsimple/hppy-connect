@@ -67,11 +67,8 @@ var propertiesGrantAccessCmd = &cobra.Command{
 	Short:   "Grant one or more users access to a property",
 	Example: `  hppycli properties grant-access --id=prop123 --user-id=user1,user2`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id, _ := cmd.Flags().GetString("id")
-		if id == "" {
-			return fmt.Errorf("--id is required")
-		}
-		if err := models.ValidateID("id", id); err != nil {
+		id, err := requireFlagID(cmd, "id")
+		if err != nil {
 			return err
 		}
 		userIDsRaw, _ := cmd.Flags().GetString("user-id")
@@ -99,11 +96,8 @@ var propertiesRevokeAccessCmd = &cobra.Command{
 	Short:   "Revoke one or more users' access to a property",
 	Example: `  hppycli properties revoke-access --id=prop123 --user-id=user1,user2`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id, _ := cmd.Flags().GetString("id")
-		if id == "" {
-			return fmt.Errorf("--id is required")
-		}
-		if err := models.ValidateID("id", id); err != nil {
+		id, err := requireFlagID(cmd, "id")
+		if err != nil {
 			return err
 		}
 		userIDsRaw, _ := cmd.Flags().GetString("user-id")
@@ -135,11 +129,8 @@ var propertiesSetAccountWideAccessCmd = &cobra.Command{
 	Short:   "Set whether a property is accessible to all users in the account",
 	Example: `  hppycli properties set-account-wide-access --id=prop123 --account-wide-access=true`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id, _ := cmd.Flags().GetString("id")
-		if id == "" {
-			return fmt.Errorf("--id is required")
-		}
-		if err := models.ValidateID("id", id); err != nil {
+		id, err := requireFlagID(cmd, "id")
+		if err != nil {
 			return err
 		}
 		if !cmd.Flags().Changed("account-wide-access") {

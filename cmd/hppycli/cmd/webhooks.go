@@ -82,11 +82,8 @@ var webhooksUpdateCmd = &cobra.Command{
 	Short:   "Update an existing webhook",
 	Example: `  hppycli webhooks update --id=wh123 --url=https://example.com/new-webhook --status=ENABLED`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id, _ := cmd.Flags().GetString("id")
-		if id == "" {
-			return fmt.Errorf("--id is required")
-		}
-		if err := models.ValidateID("id", id); err != nil {
+		id, err := requireFlagID(cmd, "id")
+		if err != nil {
 			return err
 		}
 

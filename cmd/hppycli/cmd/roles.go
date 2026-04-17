@@ -77,11 +77,8 @@ var rolesSetNameCmd = &cobra.Command{
 			return err
 		}
 
-		id, _ := cmd.Flags().GetString("id")
-		if id == "" {
-			return fmt.Errorf("--id is required")
-		}
-		if err := models.ValidateID("id", id); err != nil {
+		id, err := requireFlagID(cmd, "id")
+		if err != nil {
 			return err
 		}
 
@@ -115,11 +112,8 @@ var rolesSetDescriptionCmd = &cobra.Command{
 			return err
 		}
 
-		id, _ := cmd.Flags().GetString("id")
-		if id == "" {
-			return fmt.Errorf("--id is required")
-		}
-		if err := models.ValidateID("id", id); err != nil {
+		id, err := requireFlagID(cmd, "id")
+		if err != nil {
 			return err
 		}
 
@@ -156,11 +150,8 @@ var rolesSetPermissionsCmd = &cobra.Command{
 			return err
 		}
 
-		id, _ := cmd.Flags().GetString("id")
-		if id == "" {
-			return fmt.Errorf("--id is required")
-		}
-		if err := models.ValidateID("id", id); err != nil {
+		id, err := requireFlagID(cmd, "id")
+		if err != nil {
 			return err
 		}
 

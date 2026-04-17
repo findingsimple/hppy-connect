@@ -233,8 +233,15 @@ func saveAccountToConfig(configPath, accountID string) error {
 		return err
 	}
 
-	// Atomic write: temp file in same directory + rename prevents partial writes
-	// and ensures 0600 permissions even if the existing file was loosened.
+	return atomicWriteConfig(configPath, out)
+}
+
+// atomicWriteConfig writes data to configPath atomically (temp file in the
+// same directory + rename) and enforces 0600 permissions. The temp+rename
+// pattern also defeats symlink-replacement TOCTOU attacks where an attacker
+// swaps configPath for a symlink between Stat and Write — os.CreateTemp
+// creates a fresh inode, and Rename replaces the symlink itself.
+func atomicWriteConfig(configPath string, data []byte) error {
 	dir := filepath.Dir(configPath)
 	tmp, err := os.CreateTemp(dir, ".hppycli-*.yaml")
 	if err != nil {
@@ -242,7 +249,7 @@ func saveAccountToConfig(configPath, accountID string) error {
 	}
 	tmpPath := tmp.Name()
 
-	if _, err := tmp.Write(out); err != nil {
+	if _, err := tmp.Write(data); err != nil {
 		tmp.Close()
 		os.Remove(tmpPath)
 		return err

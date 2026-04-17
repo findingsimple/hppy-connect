@@ -40,34 +40,66 @@ var configInitCmd = &cobra.Command{
 			}
 		}
 
-		// Prompt for email
-		fmt.Print("Email: ")
-		email, err := reader.ReadString('\n')
-		if err != nil {
-			return fmt.Errorf("reading email: %w", err)
-		}
-		email = strings.TrimSpace(email)
-		if email == "" {
-			return fmt.Errorf("email is required")
-		}
+		// Prompt and authenticate, with up to 3 attempts on auth failure.
+		// Avoids the failure mode where a typo in the password aborts the
+		// whole flow and forces the user to re-run the command.
+		const maxAttempts = 3
+		var email, password string
+		var result *api.LoginResult
 
-		// Prompt for password (no-echo)
-		fmt.Print("Password: ")
-		pwBytes, err := term.ReadPassword(int(syscall.Stdin))
-		fmt.Println() // newline after hidden input
-		if err != nil {
-			return fmt.Errorf("reading password: %w", err)
-		}
-		password := strings.TrimSpace(string(pwBytes))
-		if password == "" {
-			return fmt.Errorf("password is required")
-		}
+		for attempt := 1; ; attempt++ {
+			// Prompt for email (allow re-use of previous on retry).
+			if email == "" {
+				fmt.Print("Email: ")
+				v, err := reader.ReadString('\n')
+				if err != nil {
+					return fmt.Errorf("reading email: %w", err)
+				}
+				email = strings.TrimSpace(v)
+				if email == "" {
+					return fmt.Errorf("email is required")
+				}
+			} else {
+				fmt.Printf("Email [%s] (Enter to keep): ", email)
+				v, _ := reader.ReadString('\n')
+				v = strings.TrimSpace(v)
+				if v != "" {
+					email = v
+				}
+			}
 
-		// Authenticate
-		fmt.Println("Authenticating...")
-		result, err := api.Login(cmd.Context(), email, password, api.DefaultEndpoint)
-		if err != nil {
-			return fmt.Errorf("authentication failed: %w", err)
+			// Prompt for password (no-echo, always re-prompt — never reuse).
+			fmt.Print("Password: ")
+			pwBytes, err := term.ReadPassword(int(syscall.Stdin))
+			fmt.Println()
+			if err != nil {
+				return fmt.Errorf("reading password: %w", err)
+			}
+			// Do not TrimSpace — passwords may legitimately contain leading
+			// or trailing whitespace, and silently stripping causes confusing
+			// auth failures the user can't diagnose.
+			password = string(pwBytes)
+			if password == "" {
+				return fmt.Errorf("password is required")
+			}
+
+			fmt.Println("Authenticating...")
+			r, err := api.Login(cmd.Context(), email, password, api.DefaultEndpoint)
+			if err == nil {
+				result = r
+				break
+			}
+
+			fmt.Fprintf(os.Stderr, "Authentication failed: %v\n", err)
+			if attempt >= maxAttempts {
+				return fmt.Errorf("authentication failed after %d attempts", maxAttempts)
+			}
+			fmt.Print("Try again? [Y/n]: ")
+			ans, _ := reader.ReadString('\n')
+			ans = strings.TrimSpace(strings.ToLower(ans))
+			if ans == "n" || ans == "no" {
+				return fmt.Errorf("aborted")
+			}
 		}
 
 		if len(result.AccountIDs) == 0 {
@@ -98,7 +130,8 @@ var configInitCmd = &cobra.Command{
 			return fmt.Errorf("creating config directory: %w", err)
 		}
 
-		if err := os.WriteFile(configPath, data, 0600); err != nil {
+		// atomicWriteConfig defeats symlink-swap TOCTOU between Stat and Write.
+		if err := atomicWriteConfig(configPath, data); err != nil {
 			return fmt.Errorf("writing config file: %w", err)
 		}
 
