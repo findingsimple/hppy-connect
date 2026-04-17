@@ -56,6 +56,9 @@ func (e *apiError) Error() string {
 func errAuth(msg string) error     { return &apiError{Category: "auth_failed", Message: msg} }
 func errAPI(msg string) error      { return &apiError{Category: "api_error", Message: msg, Retryable: true} }
 func errAPIFatal(msg string) error { return &apiError{Category: "api_error", Message: msg} }
+func errPaginationAborted(msg string) error {
+	return &apiError{Category: "pagination_aborted", Message: msg}
+}
 func errRateLimited(msg string) error {
 	return &apiError{Category: "rate_limited", Message: msg, Retryable: true}
 }
@@ -429,6 +432,24 @@ func (c *Client) doMutationIdempotent(ctx context.Context, query string, variabl
 	return c.doQueryWithRetry(ctx, query, variables, result)
 }
 
+// alreadyAppliedError is the immutable sentinel type backing ErrAlreadyApplied.
+// It implements `error` and matches itself via `errors.Is` regardless of value
+// (zero-sized struct — copies are indistinguishable). The Category() / Error()
+// shape mirrors apiError so existing MCP/CLI surfacing keeps working.
+type alreadyAppliedError struct{}
+
+func (alreadyAppliedError) Error() string {
+	return "already_applied: operation likely succeeded on a prior attempt — server returned 'not found' on retry; verify resource state before retrying"
+}
+
+// Is reports whether target is the already-applied sentinel — by type, not by
+// pointer identity, so callers can safely use `errors.Is(err, ErrAlreadyApplied)`
+// even though the value-typed sentinel is copy-by-value.
+func (alreadyAppliedError) Is(target error) bool {
+	_, ok := target.(alreadyAppliedError)
+	return ok
+}
+
 // ErrAlreadyApplied signals that a destructive idempotent mutation
 // (Archive/Delete/Expire/Revoke) likely succeeded on a prior attempt but the
 // retry that landed lookup-style "not found" cannot be distinguished from
@@ -436,11 +457,14 @@ func (c *Client) doMutationIdempotent(ctx context.Context, query string, variabl
 //
 // Callers receive this error in place of nil so they don't accidentally
 // surface a zero-value entity to users. CLI surfaces the message verbatim;
-// MCP routes it through the "already_applied" sanitiser category.
-var ErrAlreadyApplied = &apiError{
-	Category: "already_applied",
-	Message:  "operation likely succeeded on a prior attempt — server returned 'not found' on retry; verify resource state before retrying",
-}
+// MCP routes it through the "already_applied" sanitiser category. Use
+// `errors.Is(err, api.ErrAlreadyApplied)` to detect.
+//
+// The sentinel is a zero-sized value type — it cannot be mutated. Earlier
+// versions used a `*apiError` whose exported fields were mutable; that was
+// fixed because any package could `api.ErrAlreadyApplied.Retryable = true`
+// and break global retry semantics.
+var ErrAlreadyApplied error = alreadyAppliedError{}
 
 // doMutationDestructiveIdempotent retries like doMutationIdempotent, but on a
 // retried attempt that lands on a "not found"-style error after a prior
@@ -510,26 +534,64 @@ func (c *Client) doMutationDestructiveIdempotent(ctx context.Context, query stri
 // target resource is gone. Used by doMutationDestructiveIdempotent to absorb
 // "not found" responses that follow a transient failure.
 //
-// This is intentionally conservative — only match phrases that unambiguously
-// indicate the destructive operation has already taken effect. False positives
-// here would silently drop real "no such resource" errors on a first attempt.
+// Two layers of conservatism:
+//  1. The "already X" phrases match unconditionally — they're unambiguous.
+//  2. The generic "not found" / "does not exist" / "no such" phrases only
+//     match if the message does NOT also mention an unrelated subject like
+//     a permission, role, user, field, or validation error. This guards
+//     against false positives like "role 'admin' not found in account"
+//     after a transient — the role lookup failed, not the target resource.
+//
+// False positives here silently drop real errors on a destructive retry, so
+// the bar is intentionally high.
 func isLikelyAlreadyAppliedError(msg string) bool {
 	lower := strings.ToLower(msg)
-	patterns := []string{
-		"not found",
-		"does not exist",
-		"no such",
+
+	// Unambiguous "already applied" phrases — match anywhere.
+	for _, p := range []string{
 		"already archived",
 		"already deleted",
 		"already expired",
 		"already removed",
-	}
-	for _, p := range patterns {
+		"already destroyed",
+		"no longer exists",
+	} {
 		if strings.Contains(lower, p) {
 			return true
 		}
 	}
-	return false
+
+	// Generic "missing" phrases — match only if no other subject is named.
+	// "permission denied + not found" → likely a permission/auth error, not the target.
+	hasMissingPhrase := false
+	for _, p := range []string{
+		"not found",
+		"does not exist",
+		"no such",
+	} {
+		if strings.Contains(lower, p) {
+			hasMissingPhrase = true
+			break
+		}
+	}
+	if !hasMissingPhrase {
+		return false
+	}
+	for _, exclude := range []string{
+		"permission",
+		"role",
+		"user",
+		"field",
+		"validation",
+		"unauthorized",
+		"forbidden",
+		"required",
+	} {
+		if strings.Contains(lower, exclude) {
+			return false
+		}
+	}
+	return true
 }
 
 // GetAccount returns the account details with retry for transient errors.
@@ -1582,7 +1644,7 @@ func paginate[T any](
 			if c.debug {
 				log.Printf("[debug] %s: hard page ceiling reached (%d pages, %d items), stopping pagination", resource, hardMaxPages, len(allItems))
 			}
-			return allItems, totalCount, errAPIFatal(fmt.Sprintf("pagination ceiling reached after %d pages — server may be returning empty pages with advancing cursors", hardMaxPages))
+			return allItems, totalCount, errPaginationAborted(fmt.Sprintf("pagination ceiling reached after %d pages — server may be returning empty pages with advancing cursors; retrying will not help", hardMaxPages))
 		}
 
 		if !conn.PageInfo.HasNextPage {

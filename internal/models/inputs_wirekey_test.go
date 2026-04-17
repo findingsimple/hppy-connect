@@ -56,6 +56,24 @@ func TestModelInputJSONWireKeyAnomalies(t *testing.T) {
 		assert.Equal(t, "tpl-1", got["templateId"])
 	})
 
+	t.Run("WorkOrderCreateInput uses lowercase 'type' for Type field", func(t *testing.T) {
+		// `Type` is a Go reserved-feeling field name and could plausibly be
+		// renamed/recased in a refactor. Pin the wire key.
+		input := WorkOrderCreateInput{
+			LocationID: "loc-1",
+			Type:       "SERVICE_REQUEST",
+			Status:     "OPEN",
+		}
+		got := marshalToMap(t, input)
+
+		_, hasLowerType := got["type"]
+		_, hasUpperType := got["Type"]
+		assert.True(t, hasLowerType, "WorkOrderCreateInput must marshal Type as 'type' (lowercase); got keys: %v", keysOf(got))
+		assert.False(t, hasUpperType, "WorkOrderCreateInput must NOT marshal as 'Type' (capital); got keys: %v", keysOf(got))
+		assert.Equal(t, "SERVICE_REQUEST", got["type"])
+		assert.Equal(t, "OPEN", got["status"])
+	})
+
 	t.Run("WorkOrderSetStatusAndSubStatusInput uses PascalCase Status and SubStatus", func(t *testing.T) {
 		input := WorkOrderSetStatusAndSubStatusInput{
 			WorkOrderID: "wo-1",

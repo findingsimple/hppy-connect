@@ -1779,6 +1779,8 @@ func TestPaginationPageCeilingTrips(t *testing.T) {
 	items, _, err := c.ListProperties(context.Background(), models.ListOptions{Limit: -1})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "pagination ceiling")
+	assert.Contains(t, err.Error(), "pagination_aborted",
+		"category must be pagination_aborted (not generic api_error) so MCP doesn't tell the LLM to retry")
 	assert.Empty(t, items, "no items expected when ceiling trips with zero-edge pages")
 	assert.Equal(t, int32(hardMaxPages), atomic.LoadInt32(&pagesFetched),
 		"should fetch exactly hardMaxPages before tripping the ceiling")
@@ -3126,6 +3128,24 @@ func TestDoMutationIdempotentRetriesOnTransient500(t *testing.T) {
 // transient failure. The previous attempt likely committed before the
 // transient error was reported. Returning a sentinel error (not nil) prevents
 // callers from surfacing the zero-value result struct as if it were real data.
+// TestWorkOrderCreate_DoesNotRetryOn422 verifies that non-idempotent mutations
+// (creates) do not retry on 4xx schema-rejection errors. Retrying a 422 would
+// risk creating duplicates if the rejection actually came after the entity was
+// half-created server-side.
+func TestWorkOrderCreate_DoesNotRetryOn422(t *testing.T) {
+	var requestCount int32
+	srv, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&requestCount, 1)
+		w.WriteHeader(422)
+	})
+	_ = srv
+
+	_, err := c.WorkOrderCreate(context.Background(), models.WorkOrderCreateInput{LocationID: "loc-1"})
+	require.Error(t, err)
+	assert.Equal(t, int32(1), atomic.LoadInt32(&requestCount),
+		"non-idempotent mutation must not retry on 4xx schema rejection")
+}
+
 func TestDoMutationDestructiveIdempotent_NotFoundAfterTransientReturnsAlreadyApplied(t *testing.T) {
 	var requestCount int32
 	srv, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
@@ -3211,24 +3231,67 @@ func TestDoMutationDestructiveIdempotent_HappyPath(t *testing.T) {
 
 func TestIsLikelyAlreadyAppliedError(t *testing.T) {
 	cases := []struct {
+		name string
 		msg  string
 		want bool
 	}{
-		{"Resource not found", true},
-		{"resource NOT FOUND", true},
-		{"work order does not exist", true},
-		{"no such inspection", true},
-		{"already archived", true},
-		{"already deleted", true},
-		{"already expired", true},
-		{"already removed", true},
-		{"Validation failed: name is required", false},
-		{"Permission denied", false},
-		{"unauthorized", false},
-		{"", false},
+		// Unambiguous "already X" — match.
+		{"already archived", "Inspection already archived", true},
+		{"already deleted", "already deleted", true},
+		{"already expired", "already expired", true},
+		{"already removed", "Attachment already removed", true},
+		{"already destroyed", "section already destroyed", true},
+		{"no longer exists", "this work order no longer exists", true},
+
+		// Generic "missing" with no other subject — match.
+		{"resource not found", "Resource not found", true},
+		{"NOT FOUND uppercase", "INSPECTION NOT FOUND", true},
+		{"work order does not exist", "work order does not exist", true},
+		{"no such inspection", "no such inspection", true},
+
+		// Generic "missing" but ALSO names another subject — do NOT match
+		// (this is the false-positive class the matcher tightening defends).
+		{"role not found in account", "role 'admin' not found in account", false},
+		{"permission + not found", "permission denied: not found", false},
+		{"user lookup not found", "user 'jane' not found", false},
+		{"validation + does not exist", "validation: input does not exist", false},
+		{"field not found schema", "Field 'invalidField' not found", false},
+		{"required field missing", "required field 'id' does not exist", false},
+		{"unauthorized + not found", "unauthorized: token not found", false},
+		{"forbidden + no such", "forbidden: no such permission", false},
+
+		// Pure non-matches.
+		{"validation error", "Validation failed: name is required", false},
+		{"permission denied alone", "Permission denied", false},
+		{"unauthorized alone", "unauthorized", false},
+		{"empty", "", false},
 	}
 	for _, c := range cases {
-		got := isLikelyAlreadyAppliedError(c.msg)
-		assert.Equal(t, c.want, got, "msg=%q", c.msg)
+		c := c
+		t.Run(c.name, func(t *testing.T) {
+			got := isLikelyAlreadyAppliedError(c.msg)
+			assert.Equal(t, c.want, got, "msg=%q", c.msg)
+		})
+	}
+}
+
+// TestErrAlreadyAppliedIsImmutable verifies the sentinel cannot be mutated by
+// callers. Earlier versions used a *apiError with exported mutable fields; any
+// caller could break global retry behaviour by writing to those fields.
+func TestErrAlreadyAppliedIsImmutable(t *testing.T) {
+	// errors.Is should match the singleton.
+	assert.True(t, errors.Is(ErrAlreadyApplied, ErrAlreadyApplied))
+
+	// A copy compares equal too (value type).
+	cp := ErrAlreadyApplied
+	assert.True(t, errors.Is(cp, ErrAlreadyApplied))
+	assert.True(t, errors.Is(ErrAlreadyApplied, cp))
+
+	// The error string is stable and starts with the MCP-recognised category.
+	assert.Contains(t, ErrAlreadyApplied.Error(), "already_applied:")
+
+	// Type assertion to *apiError must fail — that was the old leaky shape.
+	if _, ok := ErrAlreadyApplied.(*apiError); ok {
+		t.Fatal("ErrAlreadyApplied must not be a *apiError — that exposes mutable fields")
 	}
 }

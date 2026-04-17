@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/findingsimple/hppy-connect/internal/api"
 	"github.com/findingsimple/hppy-connect/internal/models"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/assert"
@@ -1304,7 +1305,45 @@ func TestToolListMembers(t *testing.T) {
 		assert.NotContains(t, body, "bob@example.com", "email leaked into LLM-visible response")
 	})
 
-	t.Run("emails included when include_emails=true", func(t *testing.T) {
+	t.Run("email-shaped substrings in shortName/Name/Account.Name are scrubbed", func(t *testing.T) {
+		// Defends against the "user puts email in ShortName" bypass — without
+		// this, an attacker could see emails by inspecting non-Email fields.
+		mock := &mockClient{
+			members: []models.AccountMembership{
+				{
+					IsActive: true,
+					User:     &models.User{ID: "u1", Name: "Alice (alice@acme.com)", ShortName: "alice@acme", Email: "alice@example.com"},
+					Account:  &models.Account{ID: "a1", Name: "Contact: ops@acme.com"},
+				},
+			},
+			memberTotal: 1,
+		}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "list_members", nil)
+		require.False(t, result.IsError)
+
+		body := toolText(t, result)
+		assert.NotContains(t, body, "alice@example.com")
+		assert.NotContains(t, body, "alice@acme.com", "email-shaped substring in Name leaked")
+		assert.NotContains(t, body, "ops@acme.com", "email-shaped substring in Account.Name leaked")
+		// shortName "alice@acme" lacks a TLD so passes through; document this.
+		// The full-form variants ARE caught. Confirm the redaction sentinel is present.
+		assert.Contains(t, body, "[email redacted]")
+	})
+
+	t.Run("include_emails=true rejected when env var unset", func(t *testing.T) {
+		t.Setenv("HPPYMCP_ALLOW_EMAIL_DISCLOSURE", "")
+		mock := &mockClient{members: []models.AccountMembership{}, memberTotal: 0}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "list_members", map[string]any{"include_emails": true})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "HPPYMCP_ALLOW_EMAIL_DISCLOSURE")
+	})
+
+	t.Run("include_emails=true accepted when env var set", func(t *testing.T) {
+		t.Setenv("HPPYMCP_ALLOW_EMAIL_DISCLOSURE", "1")
 		mock := &mockClient{
 			members: []models.AccountMembership{
 				{IsActive: true, User: &models.User{ID: "u1", Name: "Alice", Email: "alice@example.com"}},
@@ -1314,7 +1353,7 @@ func TestToolListMembers(t *testing.T) {
 		cs := newTestServer(t, mock)
 
 		result := callTool(t, cs, "list_members", map[string]any{"include_emails": true})
-		require.False(t, result.IsError)
+		require.False(t, result.IsError, "with env var set, include_emails=true should succeed")
 
 		assert.Contains(t, toolText(t, result), "alice@example.com")
 	})
@@ -1539,6 +1578,21 @@ func TestToolWorkOrderArchive(t *testing.T) {
 		})
 		assert.True(t, result.IsError)
 		assert.Contains(t, toolText(t, result), "invalid_input")
+	})
+
+	// Verifies the ErrAlreadyApplied sentinel from the api client surfaces
+	// through the MCP layer as the "already_applied" sanitised category.
+	// This locks the wiring from helper → caller → MCP error category.
+	t.Run("ErrAlreadyApplied surfaces as already_applied category", func(t *testing.T) {
+		mock := &mockClient{err: api.ErrAlreadyApplied}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "work_order_archive", map[string]any{
+			"work_order_id": "wo-123",
+		})
+		require.True(t, result.IsError, "expected error result for ErrAlreadyApplied")
+		body := toolText(t, result)
+		assert.Contains(t, body, "already_applied", "MCP must surface the already_applied category")
 	})
 }
 
@@ -1886,6 +1940,20 @@ func TestToolWorkOrderSetPermissionToEnter(t *testing.T) {
 		assert.True(t, result.IsError)
 		assert.Contains(t, toolText(t, result), "work_order_id")
 	})
+
+	t.Run("missing permission_to_enter rejected", func(t *testing.T) {
+		// Parity with set_due_by: *bool field must be explicitly provided.
+		// Reverting to plain bool would silently default to false — a
+		// security-meaningful default for a state-flip flag.
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "work_order_set_permission_to_enter", map[string]any{
+			"work_order_id": "wo-123",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "permission_to_enter")
+	})
 }
 
 func TestToolWorkOrderSetResidentApprovedEntry(t *testing.T) {
@@ -1923,6 +1991,17 @@ func TestToolWorkOrderSetResidentApprovedEntry(t *testing.T) {
 		assert.True(t, result.IsError)
 		assert.Contains(t, toolText(t, result), "work_order_id")
 	})
+
+	t.Run("missing resident_approved_entry rejected", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "work_order_set_resident_approved_entry", map[string]any{
+			"work_order_id": "wo-123",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "resident_approved_entry")
+	})
 }
 
 func TestToolWorkOrderSetUnitEntered(t *testing.T) {
@@ -1959,6 +2038,17 @@ func TestToolWorkOrderSetUnitEntered(t *testing.T) {
 		})
 		assert.True(t, result.IsError)
 		assert.Contains(t, toolText(t, result), "work_order_id")
+	})
+
+	t.Run("missing unit_entered rejected", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "work_order_set_unit_entered", map[string]any{
+			"work_order_id": "wo-123",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "unit_entered")
 	})
 }
 
@@ -3958,6 +4048,34 @@ func TestToolProjectSetAssignee(t *testing.T) {
 		assert.True(t, result.IsError)
 		assert.Contains(t, toolText(t, result), "project_id")
 	})
+
+	t.Run("empty assignee_id coerced to nil (unassign)", func(t *testing.T) {
+		// Without coercion, the empty string would bypass ValidateID and be
+		// sent to the API verbatim. We treat it as semantically equivalent
+		// to "unassign" — same as omitting the field.
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "project_set_assignee", map[string]any{
+			"project_id":  "proj-1",
+			"assignee_id": "",
+		})
+		assert.False(t, result.IsError, "empty assignee_id must be accepted as 'unassign'")
+		assert.Nil(t, mock.lastProjAssignInput.AssigneeID,
+			"empty string must be coerced to nil before reaching the API")
+	})
+
+	t.Run("invalid assignee_id rejected", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "project_set_assignee", map[string]any{
+			"project_id":  "proj-1",
+			"assignee_id": "../bad",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "assignee_id")
+	})
 }
 
 func TestToolProjectSetNotes(t *testing.T) {
@@ -4013,15 +4131,50 @@ func TestToolProjectSetPriority(t *testing.T) {
 }
 
 func TestToolProjectSetOnHold(t *testing.T) {
-	mock := &mockClient{}
-	cs := newTestServer(t, mock)
+	t.Run("happy path true", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
 
-	result := callTool(t, cs, "project_set_on_hold", map[string]any{
-		"project_id": "proj-1",
-		"on_hold":    true,
+		result := callTool(t, cs, "project_set_on_hold", map[string]any{
+			"project_id": "proj-1",
+			"on_hold":    true,
+		})
+		assert.False(t, result.IsError)
+		assert.Equal(t, "proj-1", mock.lastMutationID)
 	})
-	assert.False(t, result.IsError)
-	assert.Equal(t, "proj-1", mock.lastMutationID)
+
+	t.Run("happy path false", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "project_set_on_hold", map[string]any{
+			"project_id": "proj-1",
+			"on_hold":    false,
+		})
+		assert.False(t, result.IsError)
+	})
+
+	t.Run("missing on_hold rejected", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "project_set_on_hold", map[string]any{
+			"project_id": "proj-1",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "on_hold")
+	})
+
+	t.Run("missing project_id rejected", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "project_set_on_hold", map[string]any{
+			"on_hold": true,
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "project_id")
+	})
 }
 
 func TestToolProjectSetDueAt(t *testing.T) {
@@ -4444,15 +4597,53 @@ func TestToolPropertyRevokeAccess(t *testing.T) {
 }
 
 func TestToolPropertySetAccountWideAccess(t *testing.T) {
-	mock := &mockClient{}
-	cs := newTestServer(t, mock)
+	t.Run("happy path true", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
 
-	result := callTool(t, cs, "property_set_account_wide_access", map[string]any{
-		"property_id":         "prop-1",
-		"account_wide_access": true,
+		result := callTool(t, cs, "property_set_account_wide_access", map[string]any{
+			"property_id":         "prop-1",
+			"account_wide_access": true,
+		})
+		assert.False(t, result.IsError)
+		assert.Equal(t, "prop-1", mock.lastMutationID)
 	})
-	assert.False(t, result.IsError)
-	assert.Equal(t, "prop-1", mock.lastMutationID)
+
+	t.Run("happy path false", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "property_set_account_wide_access", map[string]any{
+			"property_id":         "prop-1",
+			"account_wide_access": false,
+		})
+		assert.False(t, result.IsError)
+	})
+
+	t.Run("missing account_wide_access rejected", func(t *testing.T) {
+		// Especially important: this is a privilege-widening flag. Silent
+		// default to false would deny access, but a future field rename
+		// could silently default to true and silently widen access.
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "property_set_account_wide_access", map[string]any{
+			"property_id": "prop-1",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "account_wide_access")
+	})
+
+	t.Run("missing property_id rejected", func(t *testing.T) {
+		mock := &mockClient{}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "property_set_account_wide_access", map[string]any{
+			"account_wide_access": true,
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "property_id")
+	})
 }
 
 func TestToolUserGrantPropertyAccess(t *testing.T) {

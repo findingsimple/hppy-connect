@@ -85,8 +85,10 @@ Both binaries are thin frontends over shared logic in `internal/`.
 - CLI `users create` requires `confirmAction` because it sends an invitation email; the MCP equivalent uses `DestructiveHint:true`.
 
 ### Destructive idempotent retries
-- `doMutationDestructiveIdempotent` is used for Archive/Delete/Expire/Revoke mutations. It behaves like `doMutationIdempotent` but, on a retried attempt that lands on a "not found"-style error after a prior transient failure, it treats the error as success. The previous attempt likely committed before the transient failure was reported.
-- The matched error patterns are conservative ("not found", "does not exist", "already archived", etc.). See `isLikelyAlreadyAppliedError` for the full list.
+- `doMutationDestructiveIdempotent` is used for destructive idempotents whose post-condition is "the resource is gone": Archive, Delete, Expire, Revoke, and Remove (e.g. `WorkOrderRemoveAttachment`, `InspectionRemoveItemPhoto`). It behaves like `doMutationIdempotent` but, on a retried attempt that lands on a "not found"-style error after a prior transient failure, it returns the immutable `api.ErrAlreadyApplied` sentinel. The previous attempt likely committed before the transient failure was reported.
+- Use `errors.Is(err, api.ErrAlreadyApplied)` to detect; do not unwrap to `*apiError` (the sentinel is a value type with no mutable fields, intentionally).
+- MCP routes the sentinel through the `already_applied` sanitiser category so the LLM sees a clear, non-retryable message.
+- The matched error patterns are conservative — "already X" matches unconditionally; "not found" / "does not exist" / "no such" only match when the error message doesn't ALSO mention an unrelated subject (permission, role, user, field, validation, etc.). See `isLikelyAlreadyAppliedError` for the full list and exclusion guards.
 
 ### Shared Validation
 - `models.ValidateStatus()` and `models.ValidateDateRange()` are the single source of truth, called by both CLI (`parseListFlags`) and MCP (`buildListOpts`).
@@ -98,7 +100,8 @@ Both binaries are thin frontends over shared logic in `internal/`.
 
 ### Mutation Retry Semantics
 - `doMutation` — single auth-retry on 401, no transient error retry. Used for non-idempotent operations (creates, adds) to prevent duplicates.
-- `doMutationIdempotent` — full retry with backoff (same as reads). Used for idempotent setters, archives, deletes, state transitions.
+- `doMutationIdempotent` — full retry with backoff (same as reads). Used for idempotent setters and state transitions where the post-condition is just "this field has this value".
+- `doMutationDestructiveIdempotent` — same retry shape as `doMutationIdempotent` plus synthesises success when a retry lands on "not found" after a prior transient. Used for destructive idempotents (Archive/Delete/Expire/Revoke/Remove). See "Destructive idempotent retries" above for the sentinel and matcher details.
 - Exception: `InspectionDuplicateSection` uses `doMutation` despite the "duplicate" name — it creates a new copy on each call.
 
 ### Composed API Client Interface

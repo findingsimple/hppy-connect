@@ -7,6 +7,37 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func TestValidatePhone(t *testing.T) {
+	cases := []struct {
+		name    string
+		value   string
+		wantErr bool
+	}{
+		{"empty allowed (clearing the field)", "", false},
+		{"simple US format", "555-0100", false},
+		{"international format with extension", "+1 (555) 123-4567 ext. 12345", false},
+		{"at exactly 50 bytes", "12345678901234567890123456789012345678901234567890", false},
+		{"51 bytes rejected", "123456789012345678901234567890123456789012345678901", true},
+		{"100 bytes rejected", "1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890", true},
+		// Multi-byte UTF-8: a single emoji is 4 bytes. 13 emoji = 52 bytes — over the cap.
+		// Phones don't legitimately contain emoji, but the byte vs rune distinction is worth pinning.
+		{"13 emoji = 52 bytes rejected", "📞📞📞📞📞📞📞📞📞📞📞📞📞", true},
+		{"12 emoji = 48 bytes accepted", "📞📞📞📞📞📞📞📞📞📞📞📞", false},
+	}
+	for _, c := range cases {
+		c := c
+		t.Run(c.name, func(t *testing.T) {
+			err := ValidatePhone(c.value)
+			if c.wantErr {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), "phone")
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
 func TestParseIDList(t *testing.T) {
 	t.Run("happy path single ID", func(t *testing.T) {
 		ids, err := ParseIDList("role-id", "abc123")

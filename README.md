@@ -221,6 +221,14 @@ go install github.com/findingsimple/hppy-connect/cmd/hppymcp@latest
    hppycli account
    ```
 
+   You should see something like:
+   ```
+   Account ID:    12345
+   Account Name:  Sunset Property Management
+   ```
+
+   If you see an `auth_failed` error, re-run `hppycli config init` to re-enter credentials.
+
 4. List properties:
 
    ```bash
@@ -408,7 +416,7 @@ hppycli workorders archive --id=abc123          # prompts: "About to archive wor
 hppycli workorders archive --id=abc123 --yes    # skips confirmation
 ```
 
-The `--yes` flag is available on: `seed`, `workorders archive`, `workorders remove-attachment`, `inspections archive`, `inspections expire`, `inspections delete-section`, `inspections delete-item`, `inspections remove-item-photo`, `memberships deactivate`, `memberships set-roles`, `properties revoke-access`, `properties set-account-wide-access`, `users revoke-property-access`, and `roles set-permissions`.
+The `--yes` flag is available on: `seed`, `workorders archive`, `workorders remove-attachment`, `inspections archive`, `inspections expire`, `inspections delete-section`, `inspections delete-item`, `inspections remove-item-photo`, `inspections send-to-guest`, `memberships deactivate`, `memberships set-roles`, `properties revoke-access`, `properties set-account-wide-access`, `users create`, `users revoke-property-access`, and `roles set-permissions`.
 
 ### Mutation Output
 
@@ -416,9 +424,11 @@ All mutation commands output JSON (formatted with indentation). If `--output tex
 
 ### Examples
 
+> Examples below use `$PROPERTY_ID` and `$ACCOUNT_ID` as placeholders. Substitute real IDs from `hppycli properties list` and `hppycli account`, or run `hppycli seed --yes` to populate test data first.
+
 ```bash
 # List open work orders for a property
-hppycli workorders list --property-id 225393 --status OPEN
+hppycli workorders list --property-id $PROPERTY_ID --status OPEN
 
 # Export inspections to CSV
 hppycli inspections list --output csv > inspections.csv
@@ -433,15 +443,15 @@ hppycli inspections list --created-after 2026-01-01 --created-before 2026-04-01
 hppycli workorders list --output raw
 
 # Create a work order and then assign it (chaining with jq)
-ID=$(hppycli workorders create --location-id=225393 --description="Fix leak in unit 4B" | jq -r '.id')
+ID=$(hppycli workorders create --location-id=$PROPERTY_ID --description="Fix leak in unit 4B" | jq -r '.id')
 hppycli workorders set-assignee --id=$ID --assignee-id=U123 --assignee-type=USER
 hppycli workorders set-priority --id=$ID --priority=URGENT
 
 # Create an inspection from a template
-hppycli inspections create --location-id=225393 --template-id=c71sn3-a-0-928286 --scheduled-for=2026-05-01T00:00:00Z
+hppycli inspections create --location-id=$PROPERTY_ID --template-id=c71sn3-a-0-928286 --scheduled-for=2026-05-01T00:00:00Z
 
 # Create a project and set it on hold
-ID=$(hppycli projects create --template-id=TPL1 --location-id=225393 --start-at=2026-05-01T00:00:00Z | jq -r '.id')
+ID=$(hppycli projects create --template-id=TPL1 --location-id=$PROPERTY_ID --start-at=2026-05-01T00:00:00Z | jq -r '.id')
 hppycli projects set-on-hold --id=$ID --on-hold=true
 
 # User management
@@ -449,7 +459,7 @@ hppycli users create --email=new@example.com --name="New User" --role-id=ROLE1
 hppycli roles create --name="Inspector" --grant=inspection:inspection.create,inspection:inspection.view
 
 # Webhook setup
-hppycli webhooks create --subscriber-id=54522 --subscriber-type=ACCOUNT --url=https://hooks.example.com/happyco --subjects=INSPECTIONS,WORK_ORDERS
+hppycli webhooks create --subscriber-id=$ACCOUNT_ID --subscriber-type=ACCOUNT --url=https://hooks.example.com/happyco --subjects=INSPECTIONS,WORK_ORDERS
 
 # Seed test data (preview first, then create)
 hppycli seed --dry-run
@@ -465,8 +475,10 @@ hppycli seed --count=5 --output json --yes
 1. Register the MCP server:
    ```bash
    hppycli mcp setup --client claude
-   # Then run the command it outputs, e.g.:
-   claude mcp add --transport stdio --scope user hppymcp -- hppymcp --config ~/.hppycli.yaml
+   # Prints a `claude mcp add` command with absolute paths to the resolved
+   # hppymcp binary and your config file. Either copy-paste the printed
+   # command, or skip the copy-paste with --apply:
+   hppycli mcp setup --client claude --apply
    ```
 2. Restart Claude Code. Ask Claude to **call the `get_account` tool** to verify (asking "What HappyCo account am I connected to?" might be answered from training data without invoking the tool — being explicit about the tool name forces a real round-trip).
 
@@ -511,11 +523,13 @@ Once connected, try asking your AI assistant:
 | `get_account` | Get authenticated account info (name, ID) | None |
 | `list_properties` | List all properties with name, address, creation date | `limit` |
 | `list_units` | List units within a property | `property_id` (required), `limit` |
-| `list_members` | List account members (users with memberships) | `search`, `include_inactive`, `limit` |
+| `list_members` | List account members (users with memberships). Emails are redacted from the response by default. | `search`, `include_inactive`, `include_emails`, `limit` |
 | `list_work_orders` | List work orders with optional filters | `property_id`, `unit_id`, `status`, `created_after`, `created_before`, `limit` |
 | `list_inspections` | List inspections with optional filters | `property_id`, `unit_id`, `status`, `created_after`, `created_before`, `limit` |
 
 Date parameters use ISO 8601 format (e.g. `2026-01-15T00:00:00Z`). Status values are the same as the CLI (see [Status Values](#status-values)).
+
+> **Email disclosure on `list_members`:** by default, user emails are stripped from the response (and email-shaped substrings inside `name`, `shortName`, and `account.name` are scrubbed) to keep PII out of LLM conversation logs. To allow `include_emails: true` to actually return emails, set `HPPYMCP_ALLOW_EMAIL_DISCLOSURE=1` in the **server's** environment (Claude Desktop / Claude Code config — not just your shell). The env var prevents prompt-injection from flipping the flag via attacker-controlled text in property names, descriptions, etc.
 
 #### Mutation Tools (71 total)
 

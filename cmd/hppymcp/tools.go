@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"os"
+	"regexp"
 	"strings"
 	"time"
 
@@ -19,16 +21,61 @@ const toolTimeout = 5 * time.Minute
 // sem limits concurrent pagination loops to 3.
 var sem = make(chan struct{}, 3)
 
-// redactMembershipEmails strips the email field from each membership's nested
-// user before returning to the LLM. Bulk membership listings can contain
-// hundreds of email addresses; persisting them to LLM context/transcripts is
-// PII over-exposure. Set list_members.include_emails=true to opt back in.
+// emailLikePattern matches anything that looks like an email address embedded
+// in a free-text field. Conservative: requires `@` followed by a domain-shaped
+// trailer. Matches inside surrounding text so "Jane Doe (jane@acme.com)" is
+// scrubbed.
+var emailLikePattern = regexp.MustCompile(`[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}`)
+
+// scrubEmailLike replaces email-shaped substrings inside a free-text field with
+// a redaction sentinel. Used to defend against users putting their email in
+// fields like ShortName or Account.Name. Returns the input unchanged if nothing
+// matches.
+func scrubEmailLike(s string) string {
+	if !strings.Contains(s, "@") {
+		return s
+	}
+	return emailLikePattern.ReplaceAllString(s, "[email redacted]")
+}
+
+// redactMembershipEmails strips/scrubs email-bearing fields on each membership
+// before returning to the LLM. Bulk membership listings can contain hundreds
+// of email addresses; persisting them to LLM context/transcripts is PII
+// over-exposure.
+//
+// Belt-and-braces:
+//   - User.Email is cleared outright (its semantic value is the email).
+//   - User.Name, User.ShortName, and Account.Name are scrubbed for email-shaped
+//     substrings. Users sometimes put emails in these (e.g. ShortName "jdoe@acme")
+//     and bypassing redaction by inspecting alternate fields is the obvious
+//     escape hatch a security review would test.
+//
+// Opt back in via list_members.include_emails=true (gated by the
+// HPPYMCP_ALLOW_EMAIL_DISCLOSURE env var on the server).
 func redactMembershipEmails(members []models.AccountMembership) {
 	for i := range members {
-		if members[i].User != nil {
-			members[i].User.Email = ""
+		if u := members[i].User; u != nil {
+			u.Email = ""
+			u.Name = scrubEmailLike(u.Name)
+			u.ShortName = scrubEmailLike(u.ShortName)
+		}
+		if a := members[i].Account; a != nil {
+			a.Name = scrubEmailLike(a.Name)
 		}
 	}
+}
+
+// emailDisclosureEnabled reports whether the operator has opted in to allow
+// list_members responses to include user emails. Env var is checked at request
+// time so tests can flip it; defaults to disabled.
+//
+// Why an env var: setting include_emails=true via the tool parameter alone is
+// prompt-injectable — attacker-controlled text (a property name, a webhook URL
+// description) can persuade an LLM to flip the flag. The env var moves the
+// decision out-of-band so a model can't override it. See README for setup.
+func emailDisclosureEnabled() bool {
+	v := strings.ToLower(strings.TrimSpace(os.Getenv("HPPYMCP_ALLOW_EMAIL_DISCLOSURE")))
+	return v == "1" || v == "true" || v == "yes"
 }
 
 // emailSem limits concurrent calls to mutations that send external emails
@@ -76,7 +123,7 @@ type ListWorkOrdersInput struct {
 type ListMembersInput struct {
 	Search          string `json:"search,omitempty" jsonschema:"Search by user name or email. Email match works regardless of include_emails."`
 	IncludeInactive bool   `json:"include_inactive,omitempty" jsonschema:"Include deactivated memberships. Default false (active only)."`
-	IncludeEmails   bool   `json:"include_emails,omitempty" jsonschema:"Include user email addresses in the response. Default false — emails are PII and persist in conversation logs. Set true only when the user has explicitly asked for them."`
+	IncludeEmails   bool   `json:"include_emails,omitempty" jsonschema:"Include user email addresses in the response. Default false. Operator must also set HPPYMCP_ALLOW_EMAIL_DISCLOSURE=1 in the server environment — emails are PII, persist in conversation logs, and the env var prevents prompt-injected toggles."`
 	Limit           int    `json:"limit,omitempty" jsonschema:"Maximum number of members to return."`
 }
 
@@ -381,6 +428,14 @@ func registerTools(server *mcp.Server, client apiClient, debug bool) {
 				Search:          input.Search,
 				IncludeInactive: input.IncludeInactive,
 			}
+			// include_emails alone is prompt-injectable (see emailDisclosureEnabled
+			// docstring). Reject the request unless the operator has explicitly
+			// enabled disclosure via env var. The redaction sweep below still
+			// runs as belt-and-braces even when disclosure IS enabled.
+			if input.IncludeEmails && !emailDisclosureEnabled() {
+				return toolInputError("email disclosure is disabled on this server; set HPPYMCP_ALLOW_EMAIL_DISCLOSURE=1 in the server environment to enable, then retry"), nil, nil
+			}
+
 			members, total, err := client.ListMembers(ctx, opts)
 			if err != nil {
 				return toolError(err), nil, nil
@@ -448,12 +503,13 @@ func toolError(err error) *mcp.CallToolResult {
 // avoiding leaking internal details (URLs, HTTP codes) to the MCP client.
 func sanitiseErrorCategory(msg string) string {
 	categories := map[string]string{
-		"auth_failed":     "auth_failed: Authentication failed — check credentials",
-		"not_found":       "not_found: The requested resource was not found",
-		"invalid_input":   "invalid_input: Invalid input parameters",
-		"rate_limited":    "rate_limited: API rate limit exceeded — try again later",
-		"api_error":       "api_error: An API error occurred — try again later",
-		"already_applied": "already_applied: The destructive operation likely succeeded on a prior attempt — verify resource state before retrying",
+		"auth_failed":        "auth_failed: Authentication failed — check credentials",
+		"not_found":          "not_found: The requested resource was not found",
+		"invalid_input":      "invalid_input: Invalid input parameters",
+		"rate_limited":       "rate_limited: API rate limit exceeded — try again later",
+		"api_error":          "api_error: An API error occurred — try again later",
+		"already_applied":    "already_applied: The destructive operation likely succeeded on a prior attempt — verify resource state before retrying",
+		"pagination_aborted": "pagination_aborted: Server returned more pages than the safety ceiling allows; retrying will not help — narrow the query or contact support",
 	}
 	for prefix, friendly := range categories {
 		if strings.HasPrefix(msg, prefix) {

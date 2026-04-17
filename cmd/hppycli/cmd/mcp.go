@@ -51,6 +51,11 @@ var mcpSetupCmd = &cobra.Command{
 
 // applyClaudeConfig executes the `claude mcp add` command directly so the user
 // doesn't have to copy-paste. Requires the `claude` CLI to be on PATH.
+//
+// Prints the resolved `claude` path BEFORE executing so the user can spot a
+// PATH-shadowing situation (a malicious `claude` binary earlier in PATH would
+// otherwise run silently with the absolute config path as an argument). If the
+// resolved path looks wrong, ctrl-C before it runs.
 func applyClaudeConfig(cmd *cobra.Command, binaryPath, configPath string) error {
 	claudePath, err := exec.LookPath("claude")
 	if err != nil {
@@ -60,7 +65,9 @@ func applyClaudeConfig(cmd *cobra.Command, binaryPath, configPath string) error 
 	c := exec.CommandContext(cmd.Context(), claudePath, args...)
 	c.Stdout = os.Stdout
 	c.Stderr = os.Stderr
-	fmt.Fprintf(os.Stdout, "Running: %s %s\n\n", claudePath, strings.Join(args, " "))
+	fmt.Fprintf(os.Stdout, "Resolved `claude` to: %s\n", claudePath)
+	fmt.Fprintln(os.Stdout, "(if that path looks wrong — e.g. a shim from a recently-installed npm package — ctrl-C now)")
+	fmt.Fprintf(os.Stdout, "\nRunning: %s %s\n\n", claudePath, strings.Join(args, " "))
 	return c.Run()
 }
 

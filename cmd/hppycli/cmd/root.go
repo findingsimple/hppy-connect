@@ -148,6 +148,12 @@ Run 'hppycli config init' to create a config file, or set environment variables:
 // Execute runs the root command.
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
+		// Cobra has already printed the error message to stderr. Append a
+		// hint for the most common recoverable case so users don't have to
+		// dig through docs to find the fix.
+		if strings.Contains(err.Error(), "auth_failed") || strings.Contains(strings.ToLower(err.Error()), "authentication failed") {
+			fmt.Fprintln(os.Stderr, "\nIf your credentials have changed, re-run `hppycli config init` to re-enter them.")
+		}
 		os.Exit(1)
 	}
 }
@@ -249,20 +255,32 @@ func atomicWriteConfig(configPath string, data []byte) error {
 	}
 	tmpPath := tmp.Name()
 
+	// Cleanup on every failure path, including os.Rename. Cross-device renames
+	// (configPath on a different filesystem than its parent dir) return EXDEV
+	// and would otherwise litter $HOME with .hppycli-*.yaml files containing
+	// the user's plaintext credentials.
+	renamed := false
+	defer func() {
+		if !renamed {
+			os.Remove(tmpPath)
+		}
+	}()
+
 	if _, err := tmp.Write(data); err != nil {
 		tmp.Close()
-		os.Remove(tmpPath)
 		return err
 	}
 	if err := tmp.Close(); err != nil {
-		os.Remove(tmpPath)
 		return err
 	}
 	if err := os.Chmod(tmpPath, 0600); err != nil {
-		os.Remove(tmpPath)
 		return err
 	}
-	return os.Rename(tmpPath, configPath)
+	if err := os.Rename(tmpPath, configPath); err != nil {
+		return err
+	}
+	renamed = true
+	return nil
 }
 
 func init() {

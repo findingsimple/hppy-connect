@@ -1897,7 +1897,14 @@ func registerProjectMutationTools(server *mcp.Server, client apiClient, debug bo
 			if errResult := requireID("project_id", input.ProjectID); errResult != nil {
 				return errResult, nil, nil
 			}
-			if input.AssigneeID != nil && *input.AssigneeID != "" {
+			// Coerce non-nil empty string to nil — semantically equivalent to
+			// "unassign", and avoids sending an unvalidated empty ID through
+			// to the API. Without this, an LLM passing assignee_id="" would
+			// bypass ValidateID entirely.
+			if input.AssigneeID != nil && *input.AssigneeID == "" {
+				input.AssigneeID = nil
+			}
+			if input.AssigneeID != nil {
 				if err := models.ValidateID("assignee_id", *input.AssigneeID); err != nil {
 					return toolInputError(err.Error()), nil, nil
 				}

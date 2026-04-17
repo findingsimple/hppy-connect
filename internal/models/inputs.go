@@ -351,41 +351,22 @@ type RoleSetPermissionsInput struct {
 // --- Webhook Inputs ---
 
 // WebhookCreateInput is the input for creating a new webhook.
+//
+// Note: the GraphQL schema also accepts headers/rateLimits/requestTimeout, but
+// neither CLI nor MCP currently expose those — re-add the fields here when a
+// handler grows support for them.
 type WebhookCreateInput struct {
-	SubscriberID   string                      `json:"subscriberId"`
-	SubscriberType string                      `json:"subscriberType"`
-	URL            string                      `json:"url"`
-	Subjects       []string                    `json:"subjects,omitempty"`
-	Status         string                      `json:"status,omitempty"`
-	Headers        []WebhookHeaderInput        `json:"headers,omitempty"`
-	RateLimits     []WebhookRateLimitInput     `json:"rateLimits,omitempty"`
-	RequestTimeout *WebhookRequestTimeoutInput `json:"requestTimeout,omitempty"`
+	SubscriberID   string   `json:"subscriberId"`
+	SubscriberType string   `json:"subscriberType"`
+	URL            string   `json:"url"`
+	Subjects       []string `json:"subjects,omitempty"`
+	Status         string   `json:"status,omitempty"`
 }
 
 // WebhookUpdateInput is the input for updating an existing webhook.
 type WebhookUpdateInput struct {
-	ID             string                      `json:"id"`
-	URL            string                      `json:"url,omitempty"`
-	Status         string                      `json:"status,omitempty"`
-	Subjects       []string                    `json:"subjects,omitempty"`
-	Headers        []WebhookHeaderInput        `json:"headers,omitempty"`
-	RateLimits     []WebhookRateLimitInput     `json:"rateLimits,omitempty"`
-	RequestTimeout *WebhookRequestTimeoutInput `json:"requestTimeout,omitempty"`
-}
-
-// WebhookHeaderInput represents a key-value header to include in webhook requests.
-type WebhookHeaderInput struct {
-	Name  string `json:"name"`
-	Value string `json:"value"`
-}
-
-// WebhookRateLimitInput configures a rate limit for the webhook.
-type WebhookRateLimitInput struct {
-	Period   string `json:"period"`
-	Requests int    `json:"requests"`
-}
-
-// WebhookRequestTimeoutInput configures the request timeout for the webhook.
-type WebhookRequestTimeoutInput struct {
-	Seconds int `json:"seconds"`
+	ID       string   `json:"id"`
+	URL      string   `json:"url,omitempty"`
+	Status   string   `json:"status,omitempty"`
+	Subjects []string `json:"subjects,omitempty"`
 }
