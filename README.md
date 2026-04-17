@@ -24,13 +24,103 @@ A full-featured CLI for managing your HappyCo account. Query properties and insp
 
 ### `hppymcp` — AI Assistant
 
-An MCP server that exposes the same capabilities to Claude Code, Cursor, and other AI clients. One command to connect, 76 tools across 8 domains. Your AI can read, create, and manage HappyCo data with built-in safety guards on destructive operations.
+An MCP server that exposes the same capabilities to Claude Code, Cursor, and other AI clients. One command to connect, 77 tools across 8 domains. Your AI can read, create, and manage HappyCo data with built-in safety guards on destructive operations.
 
 ```bash
 hppycli mcp setup --client claude
 ```
 
 Both binaries share the same internal Go API client and configuration — one codebase, two interfaces.
+
+## Possible Use Cases
+
+### Morning Maintenance Triage
+
+A maintenance lead reviews the day's queue, re-prioritises urgent items, and assigns work — all through conversation.
+
+> "Show me all open work orders for Sunset Apartments. Which ones are urgent? Reassign the water heater one to Maria and schedule it for today."
+
+Tools: `list_properties` → `list_work_orders` → `list_members` → `work_order_set_assignee` → `work_order_set_priority` → `work_order_set_scheduled_for` → `work_order_add_comment`
+
+### Emergency After-Hours Intake
+
+A resident calls about a burst pipe at 10pm. One prompt creates the work order, assigns the on-call vendor, sets entry permissions, and documents everything.
+
+> "Create an urgent work order at unit 4B in Sunset Apartments for a burst pipe under the kitchen sink. Assign it to PlumbFast, set permission to enter, and add entry notes that the resident gave verbal permission and the key is in lockbox #3."
+
+Tools: `list_properties` → `list_units` → `work_order_create` (with priority, assignee, entry permissions) → `work_order_add_comment`
+
+### Unit Turn / Make-Ready Coordination
+
+A resident is moving out. The coordinator sets up the full turnover workflow in a single conversation — inspection, project, and individual work orders.
+
+> "Unit 12A at Oakwood has a move-out on May 1st. Schedule a move-out inspection for May 2nd. Create a turn project due May 15th with availability target May 16th. Then create work orders for painting, carpet cleaning, and appliance inspection — all as TURN type, assigned to the maintenance lead."
+
+Tools: `list_units` → `inspection_create` → `project_create` → `project_set_availability_target_at` → `work_order_create` ×3 → `work_order_set_assignee` ×3 → `work_order_set_scheduled_for` ×3
+
+### New Employee Onboarding
+
+A new maintenance tech starts Monday. Create their account, assign the right role, and grant access to their properties.
+
+> "Create a user for Carlos Ramirez, email carlos@example.com. Give him the Maintenance Tech role and grant access to Sunset Apartments, Oakwood Terrace, and Riverside Commons."
+
+Tools: `user_create` → `membership_create` → `membership_set_roles` → `list_properties` → `user_grant_property_access` ×3
+
+### Inspection Compliance Check
+
+Company policy requires monthly inspections. Identify which properties are behind and bulk-schedule to close the gaps.
+
+> "List all inspections completed in the last 30 days for each property. Which properties are behind based on their unit count? Schedule inspections for the missing units across the next two weeks."
+
+Tools: `list_properties` → `list_units` (per property) → `list_inspections` (per property) → Claude calculates gaps → `inspection_create` ×N → `inspection_set_assignee` ×N
+
+### Weekly Portfolio Report
+
+Before the weekly ops meeting, get a cross-property snapshot of maintenance health.
+
+> "Give me a maintenance report for all properties covering the last 30 days. Include open work order counts, recently completed work, and inspection completion rates."
+
+Tools: `list_properties` → `list_work_orders` (per property) → `list_inspections` (per property) → Claude synthesizes report
+
+### Work Order Lifecycle with Time Tracking
+
+Track a complex repair from start to finish — timer, progress notes, parts hold, and completion.
+
+> "Start the timer on the HVAC work order. Add a comment that the compressor has been removed and the new part arrives tomorrow. Put it on hold."
+
+> *Next day:* "Take the HVAC work order off hold, stop the timer, log 4 hours 30 minutes, and mark it completed with a note that the compressor is replaced and tested."
+
+Tools: `work_order_start_timer` → `work_order_add_comment` → `work_order_set_status` (ON_HOLD) → `work_order_set_status` (OPEN) → `work_order_stop_timer` → `work_order_add_time` → `work_order_add_comment` → `work_order_set_status` (COMPLETED)
+
+### Integration Setup
+
+Connect HappyCo to your internal systems with webhook subscriptions.
+
+> "Set up a webhook that sends inspection and work order events to https://hooks.ourcompany.com/happyco."
+
+Tools: `get_account` → `webhook_create`
+
+---
+
+### Seed Test Data
+
+Want to try these workflows? The `seed` command populates your account with realistic test data — work orders, inspections, projects, and webhooks spread across your properties.
+
+```bash
+# Preview what will be created
+hppycli seed --dry-run
+
+# Create 10 entities of each type
+hppycli seed --count 10 --yes
+
+# With specific templates
+hppycli seed --inspection-template-id=tmpl123 --project-template-id=ptmpl456 --yes
+
+# Get created entity IDs as JSON (useful for scripting demos)
+hppycli seed --count 5 --output json --yes
+```
+
+Seeded entities are tagged with `[SEED <timestamp>]` in their descriptions for easy identification and cleanup.
 
 ## Architecture
 
