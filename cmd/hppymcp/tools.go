@@ -38,24 +38,27 @@ func scrubEmailLike(s string) string {
 	return emailLikePattern.ReplaceAllString(s, "[email redacted]")
 }
 
-// redactMembershipEmails strips/scrubs email-bearing fields on each membership
-// before returning to the LLM. Bulk membership listings can contain hundreds
-// of email addresses; persisting them to LLM context/transcripts is PII
-// over-exposure.
+// redactMembershipEmails strips/scrubs PII fields on each membership before
+// returning to the LLM. Bulk membership listings can contain hundreds of
+// emails and phone numbers; persisting either to LLM context/transcripts is
+// over-exposure. Both classes are regulated PII (GDPR Art. 4(1), CCPA).
 //
 // Belt-and-braces:
-//   - User.Email is cleared outright (its semantic value is the email).
-//   - User.Name, User.ShortName, and Account.Name are scrubbed for email-shaped
-//     substrings. Users sometimes put emails in these (e.g. ShortName "jdoe@acme")
-//     and bypassing redaction by inspecting alternate fields is the obvious
-//     escape hatch a security review would test.
+//   - User.Email and User.Phone are cleared outright (their semantic value
+//     is the PII itself; no point scrubbing a substring).
+//   - User.Name, User.ShortName, and Account.Name are scrubbed for
+//     email-shaped substrings. Users sometimes put emails in these
+//     (e.g. ShortName "jdoe@acme") and bypassing redaction by inspecting
+//     alternate fields is the obvious escape hatch a security review tests.
 //
 // Opt back in via list_members.include_emails=true (gated by the
-// HPPYMCP_ALLOW_EMAIL_DISCLOSURE env var on the server).
+// HPPYMCP_ALLOW_EMAIL_DISCLOSURE env var on the server). The env-var name
+// keeps "email" for back-compat — the gate now also controls phone.
 func redactMembershipEmails(members []models.AccountMembership) {
 	for i := range members {
 		if u := members[i].User; u != nil {
 			u.Email = ""
+			u.Phone = ""
 			u.Name = scrubEmailLike(u.Name)
 			u.ShortName = scrubEmailLike(u.ShortName)
 		}
@@ -123,7 +126,7 @@ type ListWorkOrdersInput struct {
 type ListMembersInput struct {
 	Search          string `json:"search,omitempty" jsonschema:"Search by user name or email. Email match works regardless of include_emails."`
 	IncludeInactive bool   `json:"include_inactive,omitempty" jsonschema:"Include deactivated memberships. Default false (active only)."`
-	IncludeEmails   bool   `json:"include_emails,omitempty" jsonschema:"Include user email addresses in the response. Default false. Operator must also set HPPYMCP_ALLOW_EMAIL_DISCLOSURE=1 in the server environment — emails are PII, persist in conversation logs, and the env var prevents prompt-injected toggles."`
+	IncludeEmails   bool   `json:"include_emails,omitempty" jsonschema:"Include user PII (email AND phone) in the response. Default false. Operator must also set HPPYMCP_ALLOW_EMAIL_DISCLOSURE=1 in the server environment — both are PII, persist in conversation logs, and the env var prevents prompt-injected toggles."`
 	Limit           int    `json:"limit,omitempty" jsonschema:"Maximum number of members to return."`
 }
 
@@ -350,17 +353,19 @@ func registerTools(server *mcp.Server, client apiClient, debug bool) {
 			Description: "List work orders for the authenticated HappyCo account. Can filter by property, unit, date range, and status",
 		},
 		wrapTool(debug, "list_work_orders", func(ctx context.Context, _ *mcp.CallToolRequest, input ListWorkOrdersInput) (*mcp.CallToolResult, any, error) {
+			// Validate before acquiring the pagination semaphore — invalid
+			// inputs shouldn't consume a concurrency slot. Matches list_units.
+			opts, err := buildListOpts(input.PropertyID, input.UnitID, input.Status, input.CreatedAfter, input.CreatedBefore, input.Limit, models.ValidWorkOrderStatuses)
+			if err != nil {
+				return toolInputError(err.Error()), nil, nil
+			}
+
 			ctx, cancel := context.WithTimeout(ctx, toolTimeout)
 			defer cancel()
 			if err := acquireSem(ctx, sem); err != nil {
 				return toolError(err), nil, nil
 			}
 			defer releaseSem(sem)
-
-			opts, err := buildListOpts(input.PropertyID, input.UnitID, input.Status, input.CreatedAfter, input.CreatedBefore, input.Limit, models.ValidWorkOrderStatuses)
-			if err != nil {
-				return toolInputError(err.Error()), nil, nil
-			}
 
 			workOrders, total, err := client.ListWorkOrders(ctx, opts)
 			if err != nil {
@@ -381,17 +386,18 @@ func registerTools(server *mcp.Server, client apiClient, debug bool) {
 			Description: "List inspections for the authenticated HappyCo account. Can filter by property, unit, date range, and status",
 		},
 		wrapTool(debug, "list_inspections", func(ctx context.Context, _ *mcp.CallToolRequest, input ListInspectionsInput) (*mcp.CallToolResult, any, error) {
+			// Validate before acquiring the pagination semaphore.
+			opts, err := buildListOpts(input.PropertyID, input.UnitID, input.Status, input.CreatedAfter, input.CreatedBefore, input.Limit, models.ValidInspectionStatuses)
+			if err != nil {
+				return toolInputError(err.Error()), nil, nil
+			}
+
 			ctx, cancel := context.WithTimeout(ctx, toolTimeout)
 			defer cancel()
 			if err := acquireSem(ctx, sem); err != nil {
 				return toolError(err), nil, nil
 			}
 			defer releaseSem(sem)
-
-			opts, err := buildListOpts(input.PropertyID, input.UnitID, input.Status, input.CreatedAfter, input.CreatedBefore, input.Limit, models.ValidInspectionStatuses)
-			if err != nil {
-				return toolInputError(err.Error()), nil, nil
-			}
 
 			inspections, total, err := client.ListInspections(ctx, opts)
 			if err != nil {
@@ -412,8 +418,18 @@ func registerTools(server *mcp.Server, client apiClient, debug bool) {
 			Description: "List account members (users with memberships). Can search by name or email and optionally include inactive members",
 		},
 		wrapTool(debug, "list_members", func(ctx context.Context, _ *mcp.CallToolRequest, input ListMembersInput) (*mcp.CallToolResult, any, error) {
+			// Validate inputs and check the disclosure env-var BEFORE acquiring
+			// the pagination semaphore — invalid/disallowed requests shouldn't
+			// consume a concurrency slot.
 			if err := models.ValidateFreeText("search", input.Search); err != nil {
 				return toolInputError(err.Error()), nil, nil
+			}
+			// include_emails alone is prompt-injectable (see emailDisclosureEnabled
+			// docstring). Reject the request unless the operator has explicitly
+			// enabled disclosure via env var. The redaction sweep below still
+			// runs as belt-and-braces even when disclosure IS enabled.
+			if input.IncludeEmails && !emailDisclosureEnabled() {
+				return toolInputError("email disclosure is disabled on this server; set HPPYMCP_ALLOW_EMAIL_DISCLOSURE=1 in the server environment to enable, then retry"), nil, nil
 			}
 
 			ctx, cancel := context.WithTimeout(ctx, toolTimeout)
@@ -427,13 +443,6 @@ func registerTools(server *mcp.Server, client apiClient, debug bool) {
 				Limit:           clampLimit(input.Limit),
 				Search:          input.Search,
 				IncludeInactive: input.IncludeInactive,
-			}
-			// include_emails alone is prompt-injectable (see emailDisclosureEnabled
-			// docstring). Reject the request unless the operator has explicitly
-			// enabled disclosure via env var. The redaction sweep below still
-			// runs as belt-and-braces even when disclosure IS enabled.
-			if input.IncludeEmails && !emailDisclosureEnabled() {
-				return toolInputError("email disclosure is disabled on this server; set HPPYMCP_ALLOW_EMAIL_DISCLOSURE=1 in the server environment to enable, then retry"), nil, nil
 			}
 
 			members, total, err := client.ListMembers(ctx, opts)

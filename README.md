@@ -529,7 +529,7 @@ Once connected, try asking your AI assistant:
 
 Date parameters use ISO 8601 format (e.g. `2026-01-15T00:00:00Z`). Status values are the same as the CLI (see [Status Values](#status-values)).
 
-> **Email disclosure on `list_members`:** by default, user emails are stripped from the response (and email-shaped substrings inside `name`, `shortName`, and `account.name` are scrubbed) to keep PII out of LLM conversation logs. To allow `include_emails: true` to actually return emails, set `HPPYMCP_ALLOW_EMAIL_DISCLOSURE=1` in the **server's** environment (Claude Desktop / Claude Code config — not just your shell). The env var prevents prompt-injection from flipping the flag via attacker-controlled text in property names, descriptions, etc.
+> **PII disclosure on `list_members`:** by default, user emails AND phone numbers are stripped from the response (and email-shaped substrings inside `name`, `shortName`, and `account.name` are scrubbed) to keep PII out of LLM conversation logs. To allow `include_emails: true` to actually return both, set `HPPYMCP_ALLOW_EMAIL_DISCLOSURE=1` in the **server's** environment (Claude Desktop / Claude Code config — not just your shell). The env var prevents prompt-injection from flipping the flag via attacker-controlled text in property names, descriptions, etc. (Env var name retains "EMAIL" for back-compat; the gate covers phone too.)
 
 #### Mutation Tools (71 total)
 

@@ -184,7 +184,9 @@ func printCursorConfig(w io.Writer, binaryPath, configPath string) error {
 
 func init() {
 	mcpSetupCmd.Flags().String("client", "claude", "AI client: claude (Claude Code CLI), claude-desktop, cursor")
-	mcpSetupCmd.Flags().Bool("apply", false, "for --client=claude only: actually run `claude mcp add` instead of printing it")
+	// No backticks in the description — Cobra parses backticked text as the
+	// flag's value-name and the rendering becomes "--apply claude mcp add ...".
+	mcpSetupCmd.Flags().Bool("apply", false, "for --client=claude only: run the printed claude-mcp-add command directly instead of just printing it")
 	mcpCmd.AddCommand(mcpSetupCmd)
 	rootCmd.AddCommand(mcpCmd)
 }

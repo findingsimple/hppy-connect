@@ -863,3 +863,57 @@ func TestSaveAccountToConfigEnforcesPermissions(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, os.FileMode(0600), info.Mode().Perm())
 }
+
+// TestAtomicWriteConfig_DefeatsSymlinkReplacement locks the security claim
+// behind atomicWriteConfig: a symlink at configPath must be REPLACED
+// (os.Rename swaps the symlink itself) — never FOLLOWED (which would write
+// to the symlink target, e.g. an attacker-controlled location).
+//
+// Threat model: a co-tenant on a shared dev box drops `~/.hppycli.yaml`
+// as a symlink to `/tmp/steal.yaml` between Stat and Write. Without
+// atomic temp+rename, os.WriteFile would follow the symlink and the
+// user's plaintext credentials would land in /tmp/steal.yaml.
+func TestAtomicWriteConfig_DefeatsSymlinkReplacement(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "config.yaml")
+	attackerTarget := filepath.Join(dir, "attacker.yaml")
+
+	// Pre-create the attacker target with sentinel content. If the symlink
+	// is followed, our write would overwrite this file.
+	const sentinel = "ATTACKER-OWNED — must not be overwritten\n"
+	require.NoError(t, os.WriteFile(attackerTarget, []byte(sentinel), 0600))
+
+	// Place a symlink at configPath pointing at the attacker target.
+	require.NoError(t, os.Symlink(attackerTarget, configPath))
+
+	// Sanity: configPath currently resolves to attackerTarget. EvalSymlinks
+	// canonicalises both sides (macOS rewrites /var → /private/var).
+	resolvedConfig, err := filepath.EvalSymlinks(configPath)
+	require.NoError(t, err)
+	resolvedTarget, err := filepath.EvalSymlinks(attackerTarget)
+	require.NoError(t, err)
+	require.Equal(t, resolvedTarget, resolvedConfig, "symlink setup failed")
+
+	// Write through atomicWriteConfig.
+	const newContent = "account_id: new-id\nemail: a@b.co\n"
+	require.NoError(t, atomicWriteConfig(configPath, []byte(newContent)))
+
+	// The attacker target must be UNTOUCHED.
+	got, err := os.ReadFile(attackerTarget)
+	require.NoError(t, err)
+	assert.Equal(t, sentinel, string(got),
+		"attacker target was overwritten — atomicWriteConfig followed the symlink")
+
+	// configPath must now be a regular file (the symlink was replaced).
+	info, err := os.Lstat(configPath)
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0), info.Mode()&os.ModeSymlink,
+		"configPath is still a symlink — Rename did not replace it")
+	assert.Equal(t, os.FileMode(0600), info.Mode().Perm(),
+		"replaced file must be 0600")
+
+	// And the new content must be at configPath.
+	got, err = os.ReadFile(configPath)
+	require.NoError(t, err)
+	assert.Equal(t, newContent, string(got))
+}

@@ -1398,6 +1398,39 @@ func TestToolListMembers(t *testing.T) {
 
 		assert.Contains(t, toolText(t, result), "alice@example.com")
 	})
+
+	t.Run("phone numbers redacted by default (same PII class as email)", func(t *testing.T) {
+		mock := &mockClient{
+			members: []models.AccountMembership{
+				{IsActive: true, User: &models.User{ID: "u1", Name: "Alice", Email: "alice@example.com", Phone: "+15551234567"}},
+				{IsActive: true, User: &models.User{ID: "u2", Name: "Bob", Email: "bob@example.com", Phone: "555-0100"}},
+			},
+			memberTotal: 2,
+		}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "list_members", nil)
+		require.False(t, result.IsError)
+
+		body := toolText(t, result)
+		assert.NotContains(t, body, "+15551234567", "phone number leaked")
+		assert.NotContains(t, body, "555-0100", "phone number leaked")
+	})
+
+	t.Run("phones included when include_emails=true and env var set", func(t *testing.T) {
+		t.Setenv("HPPYMCP_ALLOW_EMAIL_DISCLOSURE", "1")
+		mock := &mockClient{
+			members: []models.AccountMembership{
+				{IsActive: true, User: &models.User{ID: "u1", Name: "Alice", Phone: "+15551234567"}},
+			},
+			memberTotal: 1,
+		}
+		cs := newTestServer(t, mock)
+
+		result := callTool(t, cs, "list_members", map[string]any{"include_emails": true})
+		require.False(t, result.IsError)
+		assert.Contains(t, toolText(t, result), "+15551234567")
+	})
 }
 
 // ---------------------------------------------------------------------------
