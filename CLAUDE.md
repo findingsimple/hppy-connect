@@ -98,6 +98,20 @@ Both binaries are thin frontends over shared logic in `internal/`.
 ### Error Handling in MCP
 - `toolError()` logs full error details to stderr but only returns a sanitised category to the MCP client (e.g. "auth_failed: Authentication failed"). Internal details like URLs and HTTP status codes are never exposed.
 - `toolInputError()` returns validation errors with an `invalid_input:` prefix.
+- Categories are typed as `api.ErrorCategory` constants (`CategoryAuthFailed`, `CategoryAlreadyApplied`, etc.) — both the emitter (`internal/api/client.go`) and consumer (`cmd/hppymcp/tools.go`) reference them. Typo drift between the two is a compile-time error.
+
+### `*bool` for state-flip MCP inputs
+- Six MCP mutation inputs use `*bool` rather than plain `bool`: `permission_to_enter`, `resident_approved_entry`, `unit_entered`, `expires` (set_due_by), `on_hold`, `account_wide_access`.
+- Plain `bool` defaults to `false` silently when the field is omitted from the JSON-RPC request. For state-flip flags ("permission granted?", "account-wide access on?") that default has security/correctness consequences — silently denying access, silently revoking permission, etc. `*bool` makes omission detectable and the handler returns `invalid_input` rather than the wrong default.
+- Pattern when adding a new bool MCP input: if false-by-default would change observable state, use `*bool` and add an explicit nil-check. Otherwise plain `bool` is fine.
+
+### PII handling on `list_members`
+- Layered defence:
+  1. **Env-var gate** (`HPPYMCP_ALLOW_EMAIL_DISCLOSURE=1`) — operator-controlled, not LLM-controlled. Without it, `include_emails: true` is rejected. Env-var is read per-request via `emailDisclosureEnabled()`.
+  2. **Outright field clear** for `User.Email` and `User.Phone` when the env var is unset.
+  3. **Regex scrub** (`scrubEmailLike`) for email-shaped substrings in `User.Name`, `User.ShortName`, `Account.Name` — defends against users who type their email into display-name fields.
+- The env var IS the security boundary; the regex is best-effort hint-detection. Known regex bypasses are documented in `emailLikePattern`'s docstring (fullwidth `＠`, IDN, no-TLD, IPv4-domain, zero-width chars). Don't widen the regex without a real PII complaint that can't be solved by the env-var gate.
+- The env-var name keeps "EMAIL" for back-compat but the gate covers phone too. Schema description and README make this explicit.
 
 ### Mutation Retry Semantics
 - `doMutation` — single auth-retry on 401, no transient error retry. Used for non-idempotent operations (creates, adds) to prevent duplicates.
@@ -184,6 +198,35 @@ Full API reference is in `.scratch/API Runtime Findings.md`.
 - **Mutation client tests** use `httptest.Server` to verify GraphQL mutation strings, variable marshalling, and response unmarshalling.
 - **`confirmAction` tests** use `io.Reader` injection (matching the project's testable I/O pattern).
 - **Seed command tests** use `mockSeedClient` (implements `seedClient` interface) with `bytes.Buffer` for stdout/stderr. Tests cover plan building, discovery failures, partial failures, context cancellation, and JSON output.
+
+### CLI handler validation tests via Cobra wrapper
+- CLI mutation tests (`users_test.go`, `inspections_test.go`, `webhooks_test.go`, etc.) drive each command's `RunE` through a fresh `cobra.Command{RunE: prodCmd.RunE}` wrapper with the same flags re-declared. Lets validation paths be exercised without mocking `apiClient` — error returns happen before the API call, so a nil `apiClient` is fine.
+- Pattern shape (used in 8 test files):
+  ```go
+  func runFooCreate(args ...string) error {
+      wrapper := &cobra.Command{Use: "create-test", RunE: fooCreateCmd.RunE}
+      wrapper.Flags().String("flag-a", "", "")
+      // ... same flag set as production
+      wrapper.SetArgs(args)
+      return wrapper.Execute()
+  }
+  ```
+- **Don't** call `prodCmd.Execute()` directly — it includes Cobra's persistent pre-run hooks that need real config/auth.
+
+### Wire-key drift guards
+- `internal/models/inputs_wirekey_test.go` pins JSON tag casing for input structs that deviate from the project's lowercase-id convention (currently 4 named exceptions: `inspectionID`, `assignedToID`, PascalCase `Status`/`SubStatus`).
+- `TestNoUnintendedCapitalIDDrift` is an enumerated guard against new structs introducing capital-ID JSON tags accidentally. **When adding a new input struct, add it to the cases list** so the guard covers it.
+- The HappyCo schema is internally inconsistent about casing — silent failures (server drops the variable) are the burn pattern these tests defend against.
+
+### Sentinel errors via value type + `Is()` method
+- `api.ErrAlreadyApplied` is a zero-sized `alreadyAppliedError{}` value type with an `Is(target error) bool` method that matches by type. `errors.Is(err, api.ErrAlreadyApplied)` works regardless of value-vs-pointer copies.
+- The earlier shape (`var ErrX = &apiError{...}` with exported mutable fields) let any caller mutate the singleton's `Retryable` or `Message` and break global behaviour. Avoid that shape for new sentinels — use the value-type-with-`Is()` pattern.
+- `TestErrAlreadyAppliedIsImmutable` enforces the zero-field shape via `reflect.NumField() == 0`.
+
+### Concurrency-test mode in `mockClient`
+- `cmd/hppymcp/tools_test.go` `mockClient` has `inflightCount`/`inflightMax` fields. When set, mutation methods that opt in (`InspectionSendToGuest`, `UserCreate`) call `defer m.observeInflight()()` to track concurrent overlap.
+- The `if m.inflightCount == nil` guard in those methods skips the "last X" capture fields under concurrency mode (those fields aren't goroutine-safe; the concurrency test doesn't assert on them).
+- `TestEmailSemEnforcesCapacity` is the only consumer; pattern available for future capacity tests.
 
 ## Reference Documentation
 
